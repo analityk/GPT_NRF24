@@ -63,8 +63,9 @@ int main() {
     sample[3]=0x2A; sample[6]=0;
     expectError(sample,Error::BAD_ENDPOINT);
     std::memcpy(sample,hello,32);
-    sample[8]=0x03; // READY with HELLO length
-    expectError(sample,Error::BAD_SESSION); // cannot send READY with SID=0
+    sample[2]=0x01; // unicast first: broadcast READY would fail address validation
+    sample[8]=0x03; // READY while SID=0 (HELLO-only)
+    expectError(sample,Error::BAD_SESSION);
     std::memcpy(sample,ack,32);
     sample[6]=1;
     expectError(sample,Error::BAD_ENDPOINT);

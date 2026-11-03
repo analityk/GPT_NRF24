@@ -83,13 +83,14 @@ static const char* txName(Nrf24Phy<Nrf24<SpiMaster, GPIO>, AvrDelay>::TxStatus s
 
 static void reportCounters() {
     logLine.reset();
-    logLine.text("COUNT RX="); logLine.hex16(goodRx);
-    logLine.text(" BAD="); logLine.hex16(invalidRx);
-    logLine.text(" TX_ACK="); logLine.hex16(txAck);
-    logLine.text(" TX_FAIL="); logLine.hex16(txFail);
-    logLine.text(" REPLY_TO="); logLine.hex16(replyTimeout);
-    logLine.text(" RX_DR="); logLine.hex16(rxDrSeen);
-    logLine.text(" REJECT="); logLine.hex16(rejectedFrames);
+    // Short labels guarantee the whole line fits in the fixed 80 B buffer.
+    logLine.text("CNT R="); logLine.hex16(goodRx);
+    logLine.text(" B="); logLine.hex16(invalidRx);
+    logLine.text(" ACK="); logLine.hex16(txAck);
+    logLine.text(" F="); logLine.hex16(txFail);
+    logLine.text(" TO="); logLine.hex16(replyTimeout);
+    logLine.text(" RD="); logLine.hex16(rxDrSeen);
+    logLine.text(" REJ="); logLine.hex16(rejectedFrames);
     logLine.send();
 }
 
