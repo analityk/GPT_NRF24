@@ -168,3 +168,9 @@ Przyszłe wpisy powinny zawierać datę, zakres faktycznie wykonanej zmiany, com
 - Jeżeli przyszły transport zachowa 18 B netto danych UART na każdą wymianę i identyczne tempo, **hipotetyczny upper-bound** wyniesie 540×18=9720 B/s (9,72 kB/s) na kierunek, przed stratami, pustymi pakietami, kontrolą przepływu i dalszą logiką. Ten benchmark testuje surowe 32B, **nie osiągnięty end-to-end UART goodput**.
 - Stabilny obraz liczników bez retransmisji, błędów wzorca, dziur sekwencji, pustych ACK i pełnego FIFO to bardzo dobry wynik sprzętowy dla tego układu/warunków; nie dowodzi zerowego PER w każdych warunkach i nie wyznacza osiągalnego minimum czasu wymiany.
 - Zmieniono wyłącznie dokumentację, bez zmiany firmware; tryb testowy nadal wybrany `GPT_NRF24_ACK_BENCHMARK=1`. Zachowano F12, brak Post-Build.
+
+## 2026-11-03 — propozycja minimalnego nagłówka 4 B / 28 B danych
+
+- Użytkownik zaproponował specjalizowany dwuwęzłowy format 24–28 B danych, dwie niezależne ośmiobitowe sekwencje kierunków (TX i RX), skrócone liczniki strat w nibbles i pozostałe 4-bitowe pola sterujące. Celem jest maksymalna transparentność przy sprzętowym ACK Payload.
+- Spisano projekt `compact-pair-frame-proposal.md` z 4-bajtowym nagłówkiem: TX_SEQ, RX_LAST, MISS_AB/MISS_BA po 4 bity, RX_CREDIT 4 bity i typ/priorytet/resync w pozostałych 4 bitach; wykorzystuje sprzętową DPL, żeby nie przesyłać osobnego LEN. Zwrócono uwagę na problem utraty SID przy redukcji headera: możliwe uzgadnianie adresu radiowego na epokę sesji, lecz wymaga dodatkowego projektu i testu.
+- **To tylko projekt, nie zaimplementowany format.** Istniejący protokół v1 8+24, działający most UART i benchmark ACK Payload pozostają bez zmian. Arytmetyczna projekcja przy 540 wymianach/s: 15 120 B/s/kierunek dla 28 B użytecznych, 12 960 B/s dla 24 B — nie są to pomiary gotowego transportu.

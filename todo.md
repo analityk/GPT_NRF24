@@ -60,3 +60,9 @@ Szczegóły techniczne należą do kodu, testów i ewentualnej dokumentacji konk
 - [ ] Po sprzętowym wyniku porównać osobno prędkość surowych 32 B, ACK Payload, liczbę pustych ACK, retransmisje i zajętość FIFO. Dopiero wtedy zdecydować o STREAM/BURST.
 
 - [ ] Zmierzyć rzeczywistą latencję pojedynczej transakcji i rozkład czasów (min/średnia/p99), bez utożsamiania okresu 1,85 ms przy 540/s z latencją RF; następnie porównać potencjał z 18 B UART na segment i realnym end-to-end goodput.
+
+## Kompaktowa ramka 4+28 dla już sparowanej pary
+
+- [ ] Ocenić i zatwierdzić `compact-pair-frame-proposal.md`: nagłówek 4 B vs 8 B, DPL jako nośnik LEN, lokalne/echowane liczniki strat modulo16, kredyty 28B oraz semantykę RX_LAST.
+- [ ] Zweryfikować bezpieczne odseparowanie sesji po resecie bez SID w każdej ramce: negocjowany adres radiowy per epoch albo alternatywny identyfikator, z próbami resetów, FIFO flush i wykrywaniem starych ACK Payload.
+- [ ] Przed implementacją kompaktowego payloadu dodać wielokrotnego użytku obsługę DPL 4..32 B i jej testy na hostowych mockach, zachowując obecny pomiarowy rdzeń 32B.

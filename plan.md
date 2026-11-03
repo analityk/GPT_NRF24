@@ -85,3 +85,7 @@ Właściciel zaproponował zastąpienie wcześniejszych FAST/BULK/FLEX dwoma pro
 ## Eksperyment wyprzedzający implementację STREAM/BURST (2026-11-03)
 
 Pierwszym krokiem jest **praktyczny benchmark pełnych 32 B w zwykłym PTX i pełnych 32 B w sprzętowym ACK Payload PRX**, bez transportu UART. Oryginalny bridge jest zachowany (przełącznik aplikacji), a `ack-payload-benchmark.md` opisuje pomiar. Trzymajmy się pomiaru `TX_DS/s`, odebranych `ACK Payload/s`, `ARC`, `MAX_RT`, przerw w numeracji, `RX_FIFO` i `TX_FIFO`. Nie deklarować gotowego STREAM ani parametrów przepustowości bez F7/F12 i testu dwóch płyt.
+
+## Proponowana kompaktowa ramka dla sparowanej pary P2P (2026-11-03)
+
+Właściciel chce dla sprzętowego DATA↔ACK Payload uprościć 32B payload do **4B metadanych + do 28B transparentnego BODY**, z dwoma 8-bitowymi numerami TX/RX i dwiema 4-bitowymi informacjami o stratach A→B / B→A, a pozostałym nibble przeznaczonym na przepływ/sterowanie. `compact-pair-frame-proposal.md` zawiera projekt bitowy, wykorzystanie sprzętowego DPL do zewnętrznego określenia długości, ograniczenia nibbles, ACK pipeline, rozdzielenie raw vs RELIABLE, kredyty, pełniejsze raporty i potencjalną zmianę adresu radiowego per session jako substytut SID. **Nie aktualizować wire format v1 bez osobnego zatwierdzenia i testów kompatybilności.**
