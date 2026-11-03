@@ -187,6 +187,18 @@
     </ToolchainSettings>
   </PropertyGroup>
   <ItemGroup>
+    <Compile Include="boot_epoch.cpp">
+      <SubType>compile</SubType>
+    </Compile>
+    <None Include="boot_epoch.h">
+      <SubType>compile</SubType>
+    </None>
+    <None Include="epoch_journal.h">
+      <SubType>compile</SubType>
+    </None>
+    <None Include="paired_session.h">
+      <SubType>compile</SubType>
+    </None>
     <Compile Include="main.cpp">
       <SubType>compile</SubType>
     </Compile>

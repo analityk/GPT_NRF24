@@ -121,6 +121,32 @@ public:
                QueueCode::QUEUED:QueueCode::IO_ERROR;
     }
 
+    // Discard stale FIFO content on an epoch transition. The PTX keeps its
+    // role and oscillator running; there is no repeated power-up penalty.
+    bool resetPtxFifos() {
+        radio_.ceLow();
+        lastCompleted_=clock_.now();haveLast_=true;
+        return radio_.flushTx() && radio_.flushRx() &&
+               radio_.clearIrq(0x70);
+    }
+
+    // ACK Payload is prepared BEFORE the matching incoming packet. When
+    // changing the session or response opcode, a queued old ACK must NOT
+    // survive into the next epoch. Complete the possible 32B on-air ACK
+    // (130us turnaround + ~329us frame) before flushing in standby.
+    // The brief PRX blackout is permitted at a handshake boundary only.
+    bool replacePrxReply(const uint8_t (&data)[32],uint8_t width) {
+        if(width<8 || width>32)return false;
+        radio_.ceLow();
+        delay_.us(550);
+        const bool ok=radio_.flushTx() && radio_.flushRx() &&
+                      radio_.clearIrq(0x70) &&
+                      radio_.writeAckPayload(0,data,width);
+        radio_.ceHigh();
+        delay_.us(150);
+        return ok;
+    }
+
     bool clearPrxFlags() { return radio_.clearIrq(0x70); }
 
 private:
