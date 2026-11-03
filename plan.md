@@ -28,6 +28,8 @@ slot 3     B -> A : ramka 32 B [telemetria | dane B lub heartbeat]
 
 Po utracie ramki nie wolno zakładać, że obie strony nadal znają identyczną fazę harmonogramu. Recovery jest częścią M1, nie dodatkiem.
 
+Specyfikacja projektowa formatu, parsera i retransmisji: [`protocol-v1.md`](protocol-v1.md). Nie jest jeszcze zaimplementowana.
+
 ## 1. GPIO i projekt
 Dodać gpio.h/gpio.cpp do projektu. API: set, clear, flip, release, i2c_set, i2c_clr, read, readOpenDrain, readPullUp. Obsługiwać PORT/DDR/PIN bez niejawnej arytmetyki adresów; konstruktor jawnych rejestrów pozwala testować klasę. Dla open-drain najpierw wyzerować PORT przed ustawieniem DDR na wyjście, aby nigdy aktywnie nie wystawić HIGH. Testy rejestrów, nieprawidłowych pinów, domyślnego konstruktora. Bramka: kompilacja Debug/Release na AVR i test sprzętowy.
 

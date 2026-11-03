@@ -43,6 +43,7 @@ Kod ma używać jawnie tworzonych obiektów i statycznych buforów; nie wolno st
 - [AGENTS.md](AGENTS.md) — stałe instrukcje dla agenta.
 - [goal.md](goal.md) — cel i warunki odbioru.
 - [plan.md](plan.md) — etapy realizacji.
+- [protocol-v1.md](protocol-v1.md) — projekt formatu binarnego ramki v1 i testowe wektory 32 B.
 - [todo.md](todo.md) — bieżące zadania.
 - [history.md](history.md) — ukończone prace i potwierdzone wyniki.
 - [migracja.md](migracja.md) — samodzielna instrukcja kontynuacji.

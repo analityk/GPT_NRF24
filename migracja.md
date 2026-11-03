@@ -50,3 +50,7 @@ Dodano `gpio.h` i `gpio.cpp` do projektu; `plan.md` opisuje szczegółową kolej
 Po zestawieniu łącza urządzenia mają wymieniać na przemian ramki o **stałym payloadzie 32 B**, także gdy UART milczy. Każda ramka niesie telemetryczny nagłówek, a reszta jest dostępna dla danych UART; rozmiar danych użytkownika jest więc mniejszy niż 32 B. Najważniejsza jest wiarygodna, niezależna dla obu kierunków informacja o stratach i ponowieniach. Timeout i odzyskanie synchronizacji slotów są obowiązkowe. Szczegóły w `plan.md`.
 
 Właściciel potwierdził kompilację GPIO i miganie diod na obu fizycznych RF-Nano; aktualny `main.cpp` zawiera ten test (commit `9d251e1`). Programowanie zostało przeniesione na ręcznie wywoływane F12; Post-Build w projekcie jest pusty. UART, SPI i łącze radiowe nie zostały jeszcze wdrożone.
+
+## Specyfikacja protokołu v1 — 2026-11-03
+
+Nowy plik `protocol-v1.md` jest źródłem prawdy dla projektu binarnego 32 B: 8 B nagłówka, 24 B BODY, wersjonowanie, SID, TX_SEQ, RX_LAST, endpointy, discovery, transport RELIABLE i wektory testowe. M1 wymaga klas 0 i 1 zatrzaśniętych po starcie z ADC0 (adc10>>2, próg 128). Nie implementowano jeszcze specyfikacji ani nie testowano jej na sprzęcie. Przed implementacją zweryfikować nonce/SID, czas slotów i wektory na hoście.

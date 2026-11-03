@@ -5,6 +5,8 @@
 
 ## Zadania
 
+- [x] Spisać projekt formatu binarnego v1, parsera, telemetrii, retransmisji i wektorów testowych (`protocol-v1.md`); bez implementacji i testów sprzętowych.
+
 - [ ] Ustalić architekturę komunikacji dwóch równorzędnych urządzeń.
 - [ ] Zaimplementować podstawową obsługę nRF24L01+.
 - [ ] Zaimplementować przesyłanie danych UART ↔ radio.
