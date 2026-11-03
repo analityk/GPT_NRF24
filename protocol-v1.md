@@ -32,7 +32,7 @@ Podtypy CONTROL (wartości hex; LEN obejmuje podtyp):
 - 03 READY, LEN=10: local_nonce32, peer_nonce32, SID.
 - 04 READY_ACK, LEN=2: SID.
 - 10 TRANSPORT_ACK, LEN=5: DATA_SEQ, STATUS, RX_FREE16 LE. STATUS 0 ACCEPTED, 1 BUSY, 2 REJECTED.
-- 11 LINK_REPORT, LEN=9: BASE_SEQ, RX_BITMAP32 LE, HW_RETRY16 LE, MAX_RT16 LE. Bit i bitmapy odpowiada (BASE_SEQ+i) mod 256; 1 = odebrano co najmniej raz.
+- 11 LINK_REPORT, LEN=10: BASE_SEQ, RX_BITMAP32 LE, HW_RETRY16 LE, MAX_RT16 LE (1 B podtypu + 1+4+2+2 B danych). Bit i bitmapy odpowiada (BASE_SEQ+i) mod 256; 1 = odebrano co najmniej raz.
 - 7F EXT, LEN=3..24: namespace, subtype, dane.
 
 Nieznany endpoint lub podtyp nigdy nie kieruje danych do UART. Nieznana wersja nie jest interpretowana jako v1.

@@ -99,3 +99,7 @@ Przyszłe wpisy powinny zawierać datę, zakres faktycznie wykonanej zmiany, com
 - Dodano testy `tests/frame_v1_test.cpp` i `tests/v1_probe_pattern_test.cpp`; hostowy g++ C++11 z `-Wall -Wextra -Werror -pedantic` wykonał te przypadki pomyślnie (pięć wektorów, negatywne parsowanie, 256 numerów sekwencyjnych, obie klasy i różne długości). Wcześniejszy błąd w teście był skutkiem testowania READY z adresem broadcast, który parser poprawnie odrzucał przed kontrolą SID; skorygowano konstrukcję testową.
 - Skrócono etykiety linii liczników UART, aby nie przekroczyć istniejącego 80-bajtowego bufora diagnostycznego. Zachowano konfigurację SPI/nRF, pinów CE/CSN, C++11, F12 i wyłączenie pakowania struktur.
 - **Nie przeprowadzono jeszcze kompilacji AVR ani fizycznego testu nowej ramki v1**. Potwierdzone wcześniej testy RAW32 nie są dowodem działania nowej warstwy kodowania.
+
+### Korekta formatu LINK_REPORT przed implementacją transportu
+
+- Zauważono błąd w pierwotnym projekcie `protocol-v1.md`: `LINK_REPORT` zajmuje **10 bajtów BODY** (opcode 1 + base_seq 1 + bitmap32 4 + hw_retry16 2 + max_rt16 2), a nie 9. Skorygowano dokument i tabelę długości w `frame_v1.h` jednocześnie; dodano wektor i test negatywny dla długości 9. Zmiana nie wpływa na diagnostyczne ramki DATA o długościach 0/1/23/24.

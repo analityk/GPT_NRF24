@@ -43,6 +43,12 @@ int main() {
     roundTrip(heartbeat);
     roundTrip(reliable);
     roundTrip(ack);
+    // LINK_REPORT: 10 B total, including the one-byte control opcode.
+    const uint8_t linkReport[32]={
+        0x6A,0x00,0x01,0x2A,0x03,0x02,0x00,0x00,
+        0x11,0x00,0x01,0x00,0x00,0x00,0x03,0x00,0x00,0x00
+    };
+    roundTrip(linkReport);
 
     uint8_t sample[32]={};
     View view;
@@ -66,6 +72,9 @@ int main() {
     sample[2]=0x01; // unicast first: broadcast READY would fail address validation
     sample[8]=0x03; // READY while SID=0 (HELLO-only)
     expectError(sample,Error::BAD_SESSION);
+    std::memcpy(sample,linkReport,32);
+    sample[0]=0x69; // 9 B would omit one byte of MAX_RT16
+    expectError(sample,Error::BAD_CONTROL_LENGTH);
     std::memcpy(sample,ack,32);
     sample[6]=1;
     expectError(sample,Error::BAD_ENDPOINT);

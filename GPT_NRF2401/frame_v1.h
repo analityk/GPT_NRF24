@@ -41,7 +41,7 @@ namespace FrameV1 {
             case 0x03: return 10; // READY
             case 0x04: return 2;  // READY_ACK
             case 0x10: return 5;  // TRANSPORT_ACK
-            case 0x11: return 9;  // LINK_REPORT
+            case 0x11: return 10; // LINK_REPORT: opcode + 1 + 4 + 2 + 2 bytes
             case 0x7F: return 0;  // EXT: length >= 3
             default: return 0;    // unknown extension/control
         }
