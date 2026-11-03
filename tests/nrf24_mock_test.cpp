@@ -15,6 +15,10 @@ struct SpiMock {
     uint8_t rxAddress[5]={};
     uint8_t txAddress[5]={};
     uint8_t rxPayload[32]={};
+    uint8_t ackPayload[32]={};
+    uint8_t ackPipe=0xFF;
+    uint8_t rxWidth=32;
+    bool featureLocked=false;
     uint8_t txPayload[32]={};
     uint8_t txPayloadCount=0;
     unsigned flushCount=0;
@@ -36,7 +40,15 @@ struct SpiMock {
         }
         const uint8_t index=static_cast<uint8_t>(position-2);
         const uint8_t reg=static_cast<uint8_t>(command & 0x1F);
-        if (command==0xA0) {
+        if (command==0x50 && out==0x73) {
+            featureLocked=false; in=0;
+        } else if (command==0x60) {
+            in=rxWidth;
+        } else if ((command&0xF8U)==0xA8U) {
+            ackPipe=static_cast<uint8_t>(command&0x07U);
+            ackPayload[index]=out;
+            in=0;
+        } else if (command==0xA0) {
             txPayload[index]=out;
             ++txPayloadCount;
             in=0;
@@ -46,6 +58,7 @@ struct SpiMock {
             if (reg==0x0A && index<5) rxAddress[index]=out;
             else if (reg==0x10 && index<5) txAddress[index]=out;
             else if (reg==0x07) regs[reg] &= static_cast<uint8_t>(~(out & 0x70U));
+            else if (reg==0x1D && featureLocked) { /* ACTIVATE required */ }
             else if (reg!=0x05 || !stuckChannel) regs[reg]=out;
             in=0;
         } else if ((command & 0xE0U)==0U) {
@@ -97,6 +110,24 @@ int main() {
     assert(memcmp(values,hw.rxPayload,32)==0);
     assert(!radio.writePayload(nullptr));
     assert(!radio.readPayload(nullptr));
+    // Full 32-byte hardware ACK Payload and dynamic RX width are separate
+    // operations from the existing fixed-payload API.
+    assert(radio.enableAckPayload(0x23));
+    assert(hw.regs[0x1D]==0x06 && hw.regs[0x1C]==0x01 &&
+           hw.regs[0x04]==0x23);
+    assert(radio.writeAckPayload(0,hw.txPayload,32));
+    assert(hw.ackPipe==0 && memcmp(hw.ackPayload,hw.txPayload,32)==0);
+    assert(!radio.writeAckPayload(6,hw.txPayload,32));
+    assert(!radio.writeAckPayload(0,hw.txPayload,33));
+    uint8_t width=0;
+    assert(radio.readPayloadWidth(width) && width==32);
+    assert(radio.readDynamicPayload(values,width) && width==32);
+    assert(memcmp(values,hw.rxPayload,32)==0);
+    hw.rxWidth=33;
+    const unsigned beforeFlush=hw.flushCount;
+    assert(!radio.readDynamicPayload(values,width) &&
+           width==33 && hw.flushCount==beforeFlush+1);
+    hw.rxWidth=32;
     assert(!radio.readRegisters(0x05,values,0));
     assert(!radio.writeRegisters(0x05,values,6));
     uint8_t s=0;
@@ -113,6 +144,15 @@ int main() {
     assert(wrong.probeAndConfigure().result==Radio::Result::VERIFY_ERROR);
     assert(stuck.regs[0x05]==2); // original RF_CH preserved
     assert(!stuck.selected && sCsn.high);
+
+    // Some compatible devices require ACTIVATE 0x73 to unlock FEATURE.
+    SpiMock locked;
+    locked.featureLocked=true;
+    PinMock lCe(locked,false), lCsn(locked,true);
+    Nrf24<SpiMock,PinMock> lockedRadio(locked,lCe,lCsn);
+    assert(lockedRadio.probeAndConfigure().result==Radio::Result::OK);
+    assert(lockedRadio.enableAckPayload(0x23));
+    assert(!locked.featureLocked && locked.regs[0x1D]==0x06);
 
     SpiMock badSpi; badSpi.fail=true;
     PinMock bCe(badSpi,false), bCsn(badSpi,true);
