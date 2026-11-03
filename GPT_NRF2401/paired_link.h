@@ -60,11 +60,10 @@ public:
             ++counters_.foreign;
             return Receipt::WRONG_SESSION;
         }
-        // Loss field provenance: B owns A->B; A owns B->A.
-        remoteLoss_=isA_?f.header.lossAB:f.header.lossBA;
-        peerCredit_=f.header.rxCredit;
-        if(!isA_)arc_=f.header.arcLast; // echoed last known PTX ARC
+        // Duplicate and stale frames MUST NOT roll back advertised credit
+        // or the last acknowledged diagnostic snapshot.
         if(!peerSeen_){
+            acceptStatus(f);
             peerLast_=f.header.txSeq;
             peerSeen_=true;
             ++counters_.rxFrames;
@@ -78,11 +77,18 @@ public:
             counters_.gaps+=missing;
             localLoss_=static_cast<uint8_t>((localLoss_+missing)&15U);
         }
+        acceptStatus(f);
         peerLast_=f.header.txSeq;
         ++counters_.rxFrames;
         return Receipt::NEW_FRAME;
     }
 private:
+    void acceptStatus(const PairedFrame::View& f) {
+        // B owns A->B loss, A owns B->A loss; peer field is delayed echo.
+        remoteLoss_=isA_?f.header.lossAB:f.header.lossBA;
+        peerCredit_=f.header.rxCredit;
+        if(!isA_)arc_=f.header.arcLast;
+    }
     bool isA_;
     uint16_t sid_;
     uint8_t txSeq_,peerLast_;
