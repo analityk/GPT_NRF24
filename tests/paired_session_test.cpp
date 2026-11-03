@@ -91,12 +91,13 @@ int main() {
     // Malformed/foreign control never starts a session.
     S invalid(true,S::Identity(90,0));
     assert(invalid.prepare(raw,width));
-    raw[0]=1; // corrupt greeting type
+    raw[8]=0xFF; // unknown handshake opcode, not a valid HELLO
     assert(PairedFrame::decode(raw,width,v)==PairedFrame::Error::OK);
     assert(freshB.accept(v)==S::Event::NONE);
-    raw[0]=0;
+    raw[8]=static_cast<uint8_t>(S::Op::HELLO);
+    raw[6]=1; // CONTROL handshake always requires SID=0
     assert(PairedFrame::decode(raw,width,v)==PairedFrame::Error::OK);
-    assert(freshB.accept(v)==S::Event::NONE); // active freshB in WAIT_CONFIRM
+    assert(freshB.accept(v)==S::Event::NONE);
     // Session attempt cannot silently wrap.
     S exhausted(true,S::Identity(123,0xFFFF));
     assert(!exhausted.restart());
