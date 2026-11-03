@@ -52,3 +52,9 @@ Przyszłe wpisy powinny zawierać datę, zakres faktycznie wykonanej zmiany, com
 - Właściciel pokazał `Rebuild All: 1 succeeded, 0 failed, 0 skipped` oraz trzy ostrzeżenia `ignoring packed attribute` wskazujące na pola referencyjne `Spi&` i `Pin&` w `Nrf24`. Error List wyświetlał dodatkowo `required from here` jako 1 Error mimo poprawnego builda; nie jest to diagnostyka błędu kompilacji.
 - Przyczyną są cztery ustawienia `PackStructureMembers=True` w `.cppproj` (C i C++, Debug i Release). Ustawiono `False` w obu językach i konfiguracjach, bez zmieniania referencji i API radia. Protokoły bajtowe nie powinny polegać na globalnym `-fpack-struct`.
 - Nie zmieniono `-std=c++11`, integracji F12 ani Post-Build. Poprawka konfiguracyjna wymaga sprawdzenia w Microchip Studio po czystej przebudowie.
+
+## 2026-11-03 — decyzja właściciela: pozostawić wyłączone Pack Structure Members
+
+- Potwierdzono świadomą zmianę wprowadzoną przez asystenta w commicie `307e52b`: **jawnie wyłączono globalne `Pack Structure Members`** (`PackStructureMembers=False`) dla kompilatora C i C++ w obu konfiguracjach Debug i Release projektu ATmega328P.
+- Właściciel zgłosił wątpliwość dotyczącą wpływu na 2 KB SRAM, ale zdecydował **pozostawić aktualną konfigurację i kontynuować prace nad SPI/nRF24**, bez cofania zmiany na tym etapie.
+- Nie wykonano porównawczych pomiarów `sizeof`, Flash i SRAM przed/po zmianie; nie twierdzić, że wpływ na pamięć wynosi zero. Pokazana wcześniej kompilacja zakończyła się sukcesem, lecz zawierała ostrzeżenia. Sterownik nRF24 nadal wymaga potwierdzenia działania SPI na obu fizycznych płytkach.
