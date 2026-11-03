@@ -103,3 +103,10 @@ Przyszłe wpisy powinny zawierać datę, zakres faktycznie wykonanej zmiany, com
 ### Korekta formatu LINK_REPORT przed implementacją transportu
 
 - Zauważono błąd w pierwotnym projekcie `protocol-v1.md`: `LINK_REPORT` zajmuje **10 bajtów BODY** (opcode 1 + base_seq 1 + bitmap32 4 + hw_retry16 2 + max_rt16 2), a nie 9. Skorygowano dokument i tabelę długości w `frame_v1.h` jednocześnie; dodano wektor i test negatywny dla długości 9. Zmiana nie wpływa na diagnostyczne ramki DATA o długościach 0/1/23/24.
+
+## 2026-11-03 — test fizyczny payloadu v1 na obu RF-Nano zaliczony
+
+- Właściciel dostarczył zrzut dwóch jednocześnie działających terminali RealTerm: **COM11 = B, COM10 = A**. Pokazano zgodne numery `SEQ=45..53` oraz cykl `LEN=00,01,17,18` (hex: 0, 1, 23, 24 bajty znaczącego BODY). A raportuje `TX=ACK ARC=00 REPLY=OK` oraz `IN` odpowiadające `OUT` w B; B raportuje `RX=OK TX=ACK ARC=00`. Jest to **potwierdzenie działania nagłówka/payloadu v1 i jego kontroli w kodzie na obu fizycznych radiach**. Wymiana w obie strony pozostaje poprawna.
+- Właściciel dodatkowo potwierdził próby resetowania jednej lub obu ATmeg i automatyczne wznowienie wymiany bez trwałego zablokowania. Ten dowód dotyczy obecnego **testowego SID=0x2A**, nie właściwej negocjacji/odtwarzania sesji v1.
+- W części wierszy B występuje `RD=0` przy `RX=OK` i `TX=ACK`. Nie stanowi to sprzeczności: `RX=OK` pochodzi z odczytu i weryfikacji ramki w FIFO, natomiast `RD` oznacza zaobserwowaną w chwili próbkowania flagę przerwania `RX_DR`, która może być już skasowana. Flaga nie jest obowiązkowym niezależnym potwierdzeniem każdej ramki FIFO; nie interpretować `RD=0` jako utraty danych. Obecna obserwacja nie jest jeszcze diagnostyką przerwań nRF w warunkach przeciążenia.
+- Nie było radiowego wstrzykiwania uszkodzonych ramek, testu pełnego zerowania paddingu w odbiorniku z celowo błędnymi ramkami ani obciążenia losowymi danymi użytkownika; negatywne testy parsera wykonywano na hoście. **Most UART↔radio, negocjacja SID, transport RELIABLE, aplikacyjne ACK i retry nadal nie istnieją.**

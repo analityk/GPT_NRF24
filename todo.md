@@ -18,7 +18,9 @@
 - [x] Zweryfikować przytrzymanie RESET B, pojawienie się `MAX_RT ARC=0F REPLY=MISS` na A oraz samoczynny powrót do `TX=ACK REPLY=OK` po zwolnieniu RESET B, bez restartu A. Sprawdzono również restart A i wznowienie wymiany.
 - [ ] [ODROCZONE] Pełne odcięcie zasilania nRF24: obecny test wymaga odłączenia USB/CH340, co usuwa COM w RealTerm, a jego ponowne otwarcie resetuje ATmegę. Wykonać dopiero przy niezależnym zasilaniu lub aparaturze bez tego ograniczenia.
 - [x] Wdrożyć koder/dekoder v1 (8 B nagłówek, 24 B BODY, stałe 32 B w radiu), testowe payloady 0/1/23/24 B, RX_LAST i niezależny TX_SEQ; testy hosta PASS.
-- [ ] Zweryfikować v1 payload na dwóch fizycznych RF-Nano: F7, F12, odbiór wszystkich długości i odrzucanie uszkodzonych ramek.
+- [x] Zweryfikować fizycznie payload v1 na dwóch RF-Nano: cykl długości 0/1/23/24 B, zgodne SEQ 45..53, A `REPLY=OK`, B `RX=OK`, obie strony `TX=ACK ARC=00` (zrzut RealTerm, 2026-11-03).
+- [x] Potwierdzić samoczynne wznowienie testowego payloadu v1 po resetowaniu jednej lub obu ATmeg (informacja właściciela, 2026-11-03).
+- [ ] Dodatkowo sprawdzić fizyczne odrzucanie błędnych ramek/niezerowego paddingu i warunki graniczne RX FIFO; dotąd negatywne testy parsera tylko na hoście.
 - [ ] Zaimplementować przesyłanie danych UART ↔ radio.
 - [ ] Zapewnić komunikację w obu kierunkach przy identycznym firmware.
 - [ ] Utrzymywać naprzemienną wymianę 32-bajtowych ramek również bez danych UART.
