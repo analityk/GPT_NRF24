@@ -84,6 +84,12 @@ int main() {
     assert(hw.polls>=3 && hw.txPulse==1 && !hw.ce);
     assert(!std::memcmp(reply,hw.reply,32));
     assert(delay.micro==15);
+    // Physical >=130us gap is enforced between back-to-back PTX starts.
+    const uint32_t elapsed=clock.ticks;
+    hw.polls=0;hw.rxPending=false;
+    r=phy.transfer(data,reply);
+    assert(r.code==Phy::TxCode::ACK_EMPTY);
+    assert(clock.ticks-elapsed>=260);
 
     hw.polls=0;hw.txOutcome=0x20;hw.rxPending=false;
     r=phy.transfer(data,reply);

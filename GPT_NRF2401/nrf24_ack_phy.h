@@ -22,7 +22,7 @@ public:
     };
 
     NrfAckPayloadPhy(Radio& radio,Delay& delay,Clock& clock)
-        : radio_(radio),delay_(delay),clock_(clock) {}
+        : radio_(radio),delay_(delay),clock_(clock),lastCompleted_(0),haveLast_(false) {}
 
     // Power up exactly once. Subsequent TX operations remain in PTX and
     // incur no 1.5/2 ms oscillator start penalties.
@@ -47,6 +47,10 @@ public:
     TxResult transfer(const uint8_t (&out)[32],uint8_t (&reply)[32]) {
         TxResult result;
         if (!radio_.writePayload(out)) return result;
+        // Nordic timing diagram requires >=130us between PTX exchanges.
+        // Preserve this physical turnaround, not the old arbitrary 20/25ms.
+        if (haveLast_)
+            while (static_cast<uint32_t>(clock_.now()-lastCompleted_)<260UL) {}
         radio_.ceHigh();
         delay_.us(15); // CE pulse >=10us; standby -> TX takes ~130us
         radio_.ceLow();
@@ -61,6 +65,7 @@ public:
                 (void)radio_.flushTx();
                 (void)radio_.clearIrq(0x70);
                 result.code=TxCode::TIMEOUT;
+                lastCompleted_=clock_.now();haveLast_=true;
                 return result;
             }
         }
@@ -70,6 +75,7 @@ public:
         if (flags&0x10) {
             if (!radio_.flushTx() || !radio_.clearIrq(0x70)) return result;
             result.code=TxCode::MAX_RT;
+            lastCompleted_=clock_.now();haveLast_=true;
             return result;
         }
 
@@ -78,6 +84,7 @@ public:
         if (rx==RxCode::GOOD) result.code=TxCode::ACK_WITH_DATA;
         else if (rx==RxCode::EMPTY) result.code=TxCode::ACK_EMPTY;
         else if (rx==RxCode::BAD_SIZE) result.code=TxCode::BAD_REPLY_SIZE;
+        lastCompleted_=clock_.now();haveLast_=true;
         return result;
     }
 
@@ -88,7 +95,8 @@ public:
             return RxCode::IO_ERROR;
         if (fifo&0x01) return RxCode::EMPTY;
         uint8_t width=0;
-        if (!radio_.readDynamicPayload(data,width)) return RxCode::IO_ERROR;
+        if (!radio_.readDynamicPayload(data,width))
+            return (width==0 || width>32)?RxCode::BAD_SIZE:RxCode::IO_ERROR;
         return width==32?RxCode::GOOD:RxCode::BAD_SIZE;
     }
 
@@ -119,5 +127,7 @@ private:
     Radio& radio_;
     Delay& delay_;
     Clock& clock_;
+    uint32_t lastCompleted_;
+    bool haveLast_;
 };
 #endif
