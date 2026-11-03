@@ -8,6 +8,8 @@
 - [x] Spisać projekt formatu binarnego v1, parsera, telemetrii, retransmisji i wektorów testowych (`protocol-v1.md`); bez implementacji i testów sprzętowych.
 
 - [ ] Ustalić architekturę komunikacji dwóch równorzędnych urządzeń.
+- [x] Dodać nieblokujący sterownik USART0 z kolejkami RX/TX i programem echo; kompilacja AVR oraz test sprzętowy pozostają do potwierdzenia.
+- [ ] Przetestować UART 115200 8N1 na obu RF-Nano: pojedyncze bajty, dane binarne, długie serie, przepełnienia i błędy USART.
 - [ ] Zaimplementować podstawową obsługę nRF24L01+.
 - [ ] Zaimplementować przesyłanie danych UART ↔ radio.
 - [ ] Zapewnić komunikację w obu kierunkach przy identycznym firmware.

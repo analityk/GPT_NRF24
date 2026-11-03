@@ -17,6 +17,14 @@ Dwa urządzenia podłączone przez USB do osobnych terminali mają samodzielnie 
 
 Po nawiązaniu połączenia oba urządzenia mają naprzemiennie nadawać stałe ramki 32 B, także bez danych użytkownika. W każdej ramce mieści się telemetria łącza i — jeśli dostępne — dane z UART. Priorytetem M1 jest wiarygodny pomiar jakości osobno dla obu kierunków. Opis: [plan.md](plan.md).
 
+## UART — test peryferium
+
+`main.cpp` aktualnie uruchamia nieblokujący **lokalny echo-test USART0** przez USB/CH340. Otwórz każdy port z ustawieniami **115200, 8N1, bez kontroli przepływu**; terminal nie powinien mieć włączonego local echo (inaczej widoczne będą podwójne znaki). Wysłane bajty są odsyłane niezmienione, niezależnie od ich wartości. Testuj każdą płytkę osobno, F7 kompilacja, F12 ręczne programowanie. Włączenie terminala może powodować reset ATmegi przez DTR.
+
+Sterownik: `GPT_NRF2401/uart.h/.cpp`; statyczne kolejki `byte_ring.h`, RX/TX po 127 użytecznych bajtów. Przy długim napływie danych nieobsłużonych przez main RX overflow zwiększa licznik; przy pełnej TX queue `write` zwraca false. Liczniki błędów FE/DOR/UPE są dostępne przez `UART::counters()`; nie są wypisywane do terminala, aby nie zanieczyszczać danych. `tests/uart_ring_test.cpp` jest niezależnym od AVR testem struktury pierścienia.
+
+F_CPU musi odpowiadać 16 MHz: U2X0=1, UBRR0=16 daje ok. 117647 baud (+2,12% względem 115200). PD0=RXD oraz PD1=TXD są zarezerwowane dla USART; bieżący test LED na PD0 został zastąpiony testem UART. Programowanie F12 i konfiguracja Post-Build pozostają bez zmian.
+
 ## Stan
 
 **INITIAL — M1 nieukończony.** Komunikacja radiowa nie została jeszcze potwierdzona testem odbiorczym dwóch płytek dla docelowego firmware.

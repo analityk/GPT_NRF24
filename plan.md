@@ -34,6 +34,8 @@ Specyfikacja projektowa formatu, parsera i retransmisji: [`protocol-v1.md`](prot
 Dodać gpio.h/gpio.cpp do projektu. API: set, clear, flip, release, i2c_set, i2c_clr, read, readOpenDrain, readPullUp. Obsługiwać PORT/DDR/PIN bez niejawnej arytmetyki adresów; konstruktor jawnych rejestrów pozwala testować klasę. Dla open-drain najpierw wyzerować PORT przed ustawieniem DDR na wyjście, aby nigdy aktywnie nie wystawić HIGH. Testy rejestrów, nieprawidłowych pinów, domyślnego konstruktora. Bramka: kompilacja Debug/Release na AVR i test sprzętowy.
 
 ## 2. UART
+
+Sterownik i program echo zostały dodane jako etap uruchomienia. Wymagana jeszcze kompilacja w Microchip Studio i sprzętowy test na obu płytkach przed uznaniem tego kroku za zweryfikowany.
 Skonfigurować USART 8N1, początkowo 115200 przy potwierdzonym F_CPU. Obliczyć błąd generatora baud. ISR RX i UDRE oraz dwa statyczne bufory pierścieniowe; na początek 128 B każdy, po audycie 2 KB SRAM. Zasada pojedynczego producenta i konsumenta; atomowe indeksy 8-bitowe, jawna obsługa pełnego bufora i błędów USART. Nie blokować w ISR. Bramka: niezależne odbieranie i nadawanie na terminalu, także seriami i po ponownym otwarciu portu.
 
 ## 3. SPI i nRF24L01+

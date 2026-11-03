@@ -54,3 +54,7 @@ Właściciel potwierdził kompilację GPIO i miganie diod na obu fizycznych RF-N
 ## Specyfikacja protokołu v1 — 2026-11-03
 
 Nowy plik `protocol-v1.md` jest źródłem prawdy dla projektu binarnego 32 B: 8 B nagłówka, 24 B BODY, wersjonowanie, SID, TX_SEQ, RX_LAST, endpointy, discovery, transport RELIABLE i wektory testowe. M1 wymaga klas 0 i 1 zatrzaśniętych po starcie z ADC0 (adc10>>2, próg 128). Nie implementowano jeszcze specyfikacji ani nie testowano jej na sprzęcie. Przed implementacją zweryfikować nonce/SID, czas slotów i wektory na hoście.
+
+## UART0 — etap uruchomienia, 2026-11-03
+
+Kod UART0 w `GPT_NRF2401/uart.h/.cpp`, wielokrotnego użytku pierścień SPSC w `GPT_NRF2401/byte_ring.h`, host-test pierścienia `tests/uart_ring_test.cpp`. `main.cpp` aktualnie realizuje echo po CH340 (bez RF), 115200 8N1, U2X0=1, UBRR=16 przy zegarze 16 MHz, `sei()` w main. RX/TX: 128 slotów, pojemność użytkowa 127 bajtów każda. Bez dynamicznej alokacji. Błędy FE0, DOR0, UPE0 oraz overflow mają liczniki; TX nie blokuje. LED test na PD0 usunięty z bieżącego main, ponieważ PD0 jest RXD; zachowany w historii commit `9d251e1`. Następna czynność: F7 kompilacja w Microchip Studio, F12 programowanie obu płyt, echo na terminalach obu COM (115200 8N1), dane binarne i przeciążenie. Nie zgłoszono jeszcze wyników sprzętowych.
