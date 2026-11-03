@@ -40,6 +40,10 @@ public:
         spi_.begin();
     }
 
+    // Hardware CE belongs to this radio instance; PHY owns its transitions.
+    void ceHigh() { ce_.set(); }
+    void ceLow() { ce_.clear(); }
+
     bool status(uint8_t& value) { return transaction(0xFF, 0, 0, 0, &value); }
     bool readRegister(uint8_t reg, uint8_t& value) {
         if (reg > 0x1F) return false;

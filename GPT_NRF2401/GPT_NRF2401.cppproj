@@ -193,6 +193,18 @@
     <Compile Include="gpio.cpp">
       <SubType>compile</SubType>
     </Compile>
+    <Compile Include="adc0.cpp">
+      <SubType>compile</SubType>
+    </Compile>
+    <None Include="adc0.h">
+      <SubType>compile</SubType>
+    </None>
+    <None Include="avr_delay.h">
+      <SubType>compile</SubType>
+    </None>
+    <None Include="nrf24_phy.h">
+      <SubType>compile</SubType>
+    </None>
     <Compile Include="spi.cpp">
       <SubType>compile</SubType>
     </Compile>
