@@ -51,4 +51,11 @@ int main() {
   assert(wrapB.counters().gaps==0);
   assert(wrapA.make(PairedFrame::Kind::DATA,0,1,data,1,raw,width)==PairedFrame::Error::OK);
   assert(width==9);
+  // Reusing a single object for different hardware roles resets statistics,
+  // credit and the session epoch without carrying old RX metadata forward.
+  a.configure(false,0xABCD);
+  assert(a.sessionId()==0xABCD && a.peerCredit()==0 &&
+         a.counters().rxFrames==0 && a.localLoss()==0);
+  assert(a.make(PairedFrame::Kind::IDLE,0,1,0,0,raw,width)==PairedFrame::Error::OK);
+  assert(raw[6]==0xCD && raw[7]==0xAB && raw[0]==0);
 }

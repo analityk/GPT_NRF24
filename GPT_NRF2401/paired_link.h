@@ -17,6 +17,12 @@ public:
     explicit PairedLink(bool isA,uint16_t sid)
       : isA_(isA),sid_(sid),txSeq_(0),peerLast_(0),peerSeen_(false),
         localLoss_(0),remoteLoss_(0),localDrops_(0),arc_(0),peerCredit_(0) {}
+    // Configure the same link-state object for either board role.
+    // One instance per board suffices on the 2KB SRAM ATmega328P.
+    void configure(bool isA,uint16_t sid) {
+        isA_=isA;
+        resetSession(sid);
+    }
     void resetSession(uint16_t sid) {
         sid_=sid;txSeq_=0;peerLast_=0;peerSeen_=false;
         localLoss_=0;remoteLoss_=0;localDrops_=0;arc_=0;peerCredit_=0;

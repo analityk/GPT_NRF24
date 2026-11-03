@@ -34,7 +34,7 @@ static Radio radio(spi,ce,csn);
 static AvrDelay delay;
 static Timer1Clock ticks;
 static AckPhy phy(radio,delay,ticks);
-static PairedLink aLink(true,TEST_SESSION),bLink(false,TEST_SESSION);
+static PairedLink linkState(true,TEST_SESSION);
 static uint8_t packet[32],incoming[32],body[24];
 static uint8_t ackStaged[32],ackSize=0;
 static bool ackWaiting=false;
@@ -146,27 +146,27 @@ static void runA() {
     lastSecond=ticks.now();
     for(;;) {
         uint8_t width=0;
-        if(!makeDataOrIdle(aLink,0,packet,width))fatal("ENCODE");
+        if(!makeDataOrIdle(linkState,0,packet,width))fatal("ENCODE");
         uint8_t incomingWidth=0;
         const AckPhy::TxResult tx=phy.transfer(packet,width,incoming,incomingWidth);
-        aLink.notePtxRetries(tx.retries);
+        linkState.notePtxRetries(tx.retries);
         period.arc=static_cast<uint16_t>(period.arc+tx.retries);
         if(tx.code==AckPhy::TxCode::ACK_WITH_DATA ||
            tx.code==AckPhy::TxCode::ACK_EMPTY) ++period.tx;
         if(tx.code==AckPhy::TxCode::ACK_WITH_DATA)
-            processFrame(aLink,1,incomingWidth);
+            processFrame(linkState,1,incomingWidth);
         else if(tx.code==AckPhy::TxCode::ACK_EMPTY) ++period.empty;
         else if(tx.code==AckPhy::TxCode::MAX_RT) ++period.maxRt;
         else if(tx.code==AckPhy::TxCode::BAD_REPLY_SIZE) ++period.bad;
         else if(tx.code==AckPhy::TxCode::IO_ERROR ||
                 tx.code==AckPhy::TxCode::TIMEOUT) ++period.io;
-        report(true,aLink);
+        report(true,linkState);
     }
 }
 
 static bool queueB() {
     if(!ackWaiting) {
-        if(!makeDataOrIdle(bLink,1,ackStaged,ackSize))return false;
+        if(!makeDataOrIdle(linkState,1,ackStaged,ackSize))return false;
         ackWaiting=true;
     }
     const AckPhy::QueueCode q=phy.queueReply(ackStaged,ackSize);
@@ -189,7 +189,7 @@ static void runB() {
         uint8_t incomingWidth=0;
         const AckPhy::RxCode rx=phy.receive(incoming,incomingWidth);
         if(rx==AckPhy::RxCode::GOOD) {
-            processFrame(bLink,0,incomingWidth);
+            processFrame(linkState,0,incomingWidth);
             if(!phy.clearPrxFlags()) ++period.io;
             (void)queueB();
         } else if(rx==AckPhy::RxCode::BAD_SIZE) {
@@ -199,7 +199,7 @@ static void runB() {
             ++period.io;
             if(!phy.clearPrxFlags()) ++period.io;
         }
-        report(false,bLink);
+        report(false,linkState);
     }
 }
 int main() {
@@ -214,7 +214,9 @@ int main() {
     if(!radio.enableAckPayload(0x23))fatal("DPL");
     uint16_t adc=0;
     if(!Adc0::sample(adc))fatal("ADC");
-    if(Adc0::classForM1(adc)==0)runA();
+    const bool isA=(Adc0::classForM1(adc)==0);
+    linkState.configure(isA,TEST_SESSION);
+    if(isA)runA();
     else runB();
 }
 #endif // GPT_NRF24_APPLICATION == 2
