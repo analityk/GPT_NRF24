@@ -63,6 +63,7 @@ Szczegóły techniczne należą do kodu, testów i ewentualnej dokumentacji konk
 
 ## Kompaktowa ramka 4+28 dla już sparowanej pary
 
-- [ ] Ocenić i zatwierdzić `compact-pair-frame-proposal.md`: nagłówek 4 B vs 8 B, DPL jako nośnik LEN, lokalne/echowane liczniki strat modulo16, kredyty 28B oraz semantykę RX_LAST.
+- [x] Wybrać format **8 B metadanych + do 24 B przezroczystego BODY**, zamiast 4+28; priorytet: diagnostyka i sterowanie, bez interpretacji danych transportu (decyzja 2026-11-03).
+- [ ] Uzgodnić szczegółowy układ 8 B nagłówka szybkiego STREAM: TX_SEQ, RX_LAST, dwa wskaźniki strat po 4 bity, credits, typ/flags, epoka/kompatybilność; testy modulo i stare ACK Payload.
 - [ ] Zweryfikować bezpieczne odseparowanie sesji po resecie bez SID w każdej ramce: negocjowany adres radiowy per epoch albo alternatywny identyfikator, z próbami resetów, FIFO flush i wykrywaniem starych ACK Payload.
-- [ ] Przed implementacją kompaktowego payloadu dodać wielokrotnego użytku obsługę DPL 4..32 B i jej testy na hostowych mockach, zachowując obecny pomiarowy rdzeń 32B.
+- [ ] Przed implementacją szybkiego 8+24 B dodać wielokrotnego użytku obsługę DPL 8..32 B i jej testy na hostowych mockach, zachowując obecny pomiarowy rdzeń 32B.

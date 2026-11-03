@@ -89,3 +89,7 @@ Pierwszym krokiem jest **praktyczny benchmark pełnych 32 B w zwykłym PTX i pe�
 ## Proponowana kompaktowa ramka dla sparowanej pary P2P (2026-11-03)
 
 Właściciel chce dla sprzętowego DATA↔ACK Payload uprościć 32B payload do **4B metadanych + do 28B transparentnego BODY**, z dwoma 8-bitowymi numerami TX/RX i dwiema 4-bitowymi informacjami o stratach A→B / B→A, a pozostałym nibble przeznaczonym na przepływ/sterowanie. `compact-pair-frame-proposal.md` zawiera projekt bitowy, wykorzystanie sprzętowego DPL do zewnętrznego określenia długości, ograniczenia nibbles, ACK pipeline, rozdzielenie raw vs RELIABLE, kredyty, pełniejsze raporty i potencjalną zmianę adresu radiowego per session jako substytut SID. **Nie aktualizować wire format v1 bez osobnego zatwierdzenia i testów kompatybilności.**
+
+## Decyzja w sprawie payloadu rdzenia — 2026-11-03
+
+Właściciel wybrał **8 B header + do 24 B nieinterpretowanych danych**, aby zamiast oszczędności 2,16 kB/s/kierunek przy hipotetycznych 540/s uzyskać więcej miejsca na diagnostykę i sterowanie. Nie implementować teraz wyższych protokołów transferu, rozpoznawania typów aplikacyjnych ani szyfrowania; to niezależne warstwy ponad rdzeniem. Poprzednia propozycja 4+28 jest archiwalna. Szczegóły i nierozstrzygnięte pola w `compact-pair-frame-proposal.md`. Zbadana fizycznie 32+32 B wymiana ACK Payload pozostaje wzorcem prędkości. Nowa wersja stream musi zachować jawne uzgodnienie/wersjonowanie względem `frame_v1.h`.

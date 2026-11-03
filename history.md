@@ -174,3 +174,10 @@ Przyszłe wpisy powinny zawierać datę, zakres faktycznie wykonanej zmiany, com
 - Użytkownik zaproponował specjalizowany dwuwęzłowy format 24–28 B danych, dwie niezależne ośmiobitowe sekwencje kierunków (TX i RX), skrócone liczniki strat w nibbles i pozostałe 4-bitowe pola sterujące. Celem jest maksymalna transparentność przy sprzętowym ACK Payload.
 - Spisano projekt `compact-pair-frame-proposal.md` z 4-bajtowym nagłówkiem: TX_SEQ, RX_LAST, MISS_AB/MISS_BA po 4 bity, RX_CREDIT 4 bity i typ/priorytet/resync w pozostałych 4 bitach; wykorzystuje sprzętową DPL, żeby nie przesyłać osobnego LEN. Zwrócono uwagę na problem utraty SID przy redukcji headera: możliwe uzgadnianie adresu radiowego na epokę sesji, lecz wymaga dodatkowego projektu i testu.
 - **To tylko projekt, nie zaimplementowany format.** Istniejący protokół v1 8+24, działający most UART i benchmark ACK Payload pozostają bez zmian. Arytmetyczna projekcja przy 540 wymianach/s: 15 120 B/s/kierunek dla 28 B użytecznych, 12 960 B/s dla 24 B — nie są to pomiary gotowego transportu.
+
+## 2026-11-03 — wybór większego nagłówka 8 B i neutralnego transportu BODY
+
+- Po porównaniu 4+28 i 8+24 właściciel **wybrał 8 bajtów metadanych oraz do 24 bajtów nieinterpretowanych danych w payloadzie nRF24**. Priorytet: telemetria i diagnostyka, nie maksymalna liczba bajtów aplikacyjnych. Poprzednia propozycja 4+28 pozostała wariantem historycznym, nie aktualną rekomendacją.
+- Przy zmierzonych 540 transakcjach/s matematyczny pułap wynosi 12 960 B/s/kierunek dla BODY 24 B wobec 15 120 B/s dla 28 B — różnica 2160 B/s. To arytmetyka, nie pomiar nowego formatu. UART 115200 8N1 ogranicza pełny strumień do 11 520 B/s/kierunek.
+- Warstwa MAC/PHY nie powinna interpretować BODY: przyszły transfer plików, TCP-like, komendy, ewentualnie kryptografia należą do niezależnych wyższych warstw. Obecny `frame_v1.h` ma nagłówek 8 B, ale jego faktyczne pola nie gwarantują od razu rozbudowanej diagnostyki; konieczna jest osobna decyzja o rozmieszczeniu pól i kompatybilności.
+- Wyłącznie decyzja i dokumentacja: **brak zmian firmware**, konfiguracji ACK benchmarku, F7/F12 czy Post-Build.

@@ -1,5 +1,11 @@
 # Projekt minimalnej ramki P2P po sprzętowym ACK Payload — 2026-11-03
 
+> **Decyzja właściciela z 2026-11-03 (aktualna): 8 bajtów metadanych + do 24 bajtów danych użytkownika.** Poprzednia koncepcja 4+28 opisana poniżej pozostaje historycznym wariantem porównawczym i **nie jest wyborem docelowym**. Zmierzone 540 pełnych wymian/s daje arytmetyczne 12 960 B/s użytecznego BODY na kierunek dla 24 B, jeszcze bez transportu i rzeczywistych kosztów CPU. Przejście do 4+28 zwiększałoby teoretyczny limit o 2160 B/s, ale odbierałoby połowę miejsca na diagnostykę i kontrolę przepływu. Obecny UART 115200 8N1 ma limit 11 520 B/s na kierunek.
+
+> **Kontrakt warstw:** MAC/PHY transportuje nieinterpretowaną treść BODY oraz utrzymuje stan łącza. Nie wie, czy BODY zawiera komendy, dane pliku, rekordy transportu TCP-like, szyfrogram lub inny protokół. Tylko opcjonalne ramki CONTROL są interpretowane przez warstwę sterowania. Nie implementować teraz routingu, formatu pliku, szyfrowania ani niezawodnego transportu end-to-end; zachować możliwość ich późniejszego dołożenia jako usług ponad BODY.
+
+> **Nie utożsamiać 8 B miejsca z 8 B już użytecznych pól diagnostycznych.** Aktualne `frame_v1.h` ma 8 B nagłówka, lecz zajmuje je m.in. SRC, DST, SID i EP; przed budową nowego STREAM trzeba jawnie rozstrzygnąć, które pola są zbędne po sparowaniu, a które służą jakości łącza. Wymaga to wersjonowania/negocjacji, nie reinterpretacji ramek starej sesji bez uzgodnienia.
+
 **Status:** propozycja formatu do przetestowania; NIE zmienia istniejącego `protocol-v1.md`, nie jest bieżącym formatem benchmarku ani gotowym firmware. Punktem wyjścia jest fizycznie potwierdzony eksperyment pełnych 32 B DATA + 32 B ACK Payload przy 540 transakcjach/s i 0 widocznych błędów w zgłoszonym wycinku.
 
 ## Założenia
@@ -49,3 +55,11 @@ Surowa wydajność linku przewyższa więc przy obecnym pomiarze przepustowość
 **Następny krok:** przetestować na hoście dekodowanie/enkodowanie kompaktowej ramki, opóźnione ACK Payload i wrap 8/4 bit, a następnie eksperymentalnie porównać full 28 B DATA z krótkimi ramkami DPL i zbiorczym raportem błędów. Nie przepisywać istniejącego v1 bez odrębnej decyzji o wersjonowaniu.
 
 Źródło: Nordic nRF24L01+ Product Specification v1.0, sekcje 7.3.3, 7.4.1, 7.5, 8.3 (dynamiczny payload, ACK Payload, FIFO, SPI).
+
+## Kierunek aktywny: 8+24 B (decyzja 2026-11-03)
+
+Przykładowy, **niezamrożony** podział ośmiu bajtów może pozostawić: TX_SEQ (1 B), RX_LAST (1 B), dwa 4-bitowe wskaźniki braków (wspólnie 1 B), status FIFO/receiver credit (1 B), pole TYPE/FLAGS (1 B), identyfikator epoki lub wymiany (1 B) i 2 B na statystyki bądź przyszłe sterowanie. Konkretne offsety i semantyka byte 5..7 wymagają osobnego, testowalnego schematu. Nie zamieniać automatycznie `RX_LAST` w gwarancję dostarczenia aplikacyjnego.
+
+Dane użytkownika mają być **nieinterpretowane przez rdzeń**. Długość rzeczywiście odebranego radiowego payloadu udostępnia DPL; zwykła ramka DATA może mieć 8..32 B, więc 0..24 B BODY. Ramka z danymi szyfrowanymi kiedyś nadal pozostanie dla rdzenia zwykłymi bajtami. Jeśli wymagana będzie ochrona integralności/uwierzytelnianie end-to-end, narzut na nonce/tag i sposób negocjacji należą do wyższej warstwy, nie do obecnego projektu.
+
+Zachować testowany hardware ACK Payload i tempo 540/s jako **punkt odniesienia**, nie prognozę gwarantowanego end-to-end goodput. Dalsze badania: jakość niezależnych kierunków, rozróżnienie sprzętowych prób od aplikacyjnych braków, korekta po resetach, wersja 8+24 w RAM, zero/kilka/24 B BODY oraz praca z dwoma krótkimi strumieniami. Wszystkie nowe elementy bez alokacji dynamicznej, z testami hostowymi i sprzętowymi.
