@@ -205,6 +205,12 @@
     <None Include="avr_delay.h">
       <SubType>compile</SubType>
     </None>
+    <None Include="frame_v1.h">
+      <SubType>compile</SubType>
+    </None>
+    <None Include="v1_probe_pattern.h">
+      <SubType>compile</SubType>
+    </None>
     <None Include="rf_raw_pattern.h">
       <SubType>compile</SubType>
     </None>

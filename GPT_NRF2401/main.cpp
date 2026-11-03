@@ -1,12 +1,10 @@
 /*
- * RF-Nano raw 32-byte bidirectional radio hardware test.
- *
- * Same firmware on both boards. ADC0/GND => role 0 (initiator);
- * ADC0/3.3V => role 1 (responder), assuming AVCC of 3.3V or 5V.
- * No protocol-v1 headers, no UART-to-radio bridge, no routing.
- *
- * Board wiring verified during SPI test: PB2/D10 = CE, PB1/D9 = CSN.
- * nRF24 SPI command layer is reused unchanged.
+ * V1 payload bring-up: fixed 32 B over working bidirectional nRF24 PHY.
+ * Same binary on both boards: ADC0 to GND = class 0 (initiator),
+ * ADC0 to AVCC or 3.3V = class 1 (responder).
+ * Sends length 0/1/23/24 byte test frames. NO UART bridge yet.
+ * TEST_SID is a fixture, NOT session negotiation or reliable transport.
+ * RF pins: PB2/D10 CE, PB1/D9 CSN (verified on these RF-Nanos).
  */
 #include "board_clock.h"
 
@@ -19,7 +17,8 @@
 #include "nrf24_phy.h"
 #include "avr_delay.h"
 #include "adc0.h"
-#include "rf_raw_pattern.h"
+#include "frame_v1.h"
+#include "v1_probe_pattern.h"
 
 static UART uart;
 static SpiMaster spi;
@@ -62,13 +61,14 @@ private:
 };
 
 static LogLine logLine;
-static uint8_t payload[32]; // single reusable buffer
+static uint8_t payload[FrameV1::FRAME_SIZE]; // single reusable RF buffer
 static uint16_t goodRx=0;
 static uint16_t invalidRx=0;
 static uint16_t txAck=0;
 static uint16_t txFail=0;
 static uint16_t replyTimeout=0;
 static uint16_t rxDrSeen=0;
+static uint16_t rejectedFrames=0;
 static bool lastRxDr=false;
 
 static const char* txName(Nrf24Phy<Nrf24<SpiMaster, GPIO>, AvrDelay>::TxStatus s) {
@@ -89,6 +89,7 @@ static void reportCounters() {
     logLine.text(" TX_FAIL="); logLine.hex16(txFail);
     logLine.text(" REPLY_TO="); logLine.hex16(replyTimeout);
     logLine.text(" RX_DR="); logLine.hex16(rxDrSeen);
+    logLine.text(" REJECT="); logLine.hex16(rejectedFrames);
     logLine.send();
 }
 
@@ -115,16 +116,25 @@ static bool pollRx(bool& received) {
 }
 
 static void initiatorLoop() {
-    delay.ms(200); // allow later-powered peer to enter PRX; recovery is periodic
-    uint16_t nextSeq=0;
+    delay.ms(200); // responder may power up at a different time
+    uint8_t nextSeq=0;
+    uint8_t lastReplySeq=0xFF;
     for (;;) {
         commands();
-        RawRfPattern::make(payload,nextSeq);
+        const uint8_t wantedLength=V1ProbePattern::length(nextSeq,0);
+        if (V1ProbePattern::make(0,1,nextSeq,lastReplySeq,payload)
+                != FrameV1::Error::OK) {
+            logLine.reset(); logLine.text("V1 ENCODE ERROR A"); logLine.send();
+            delay.ms(100);
+            continue;
+        }
         const auto tx=phy.transmit(payload);
         if (tx.result==decltype(tx.result)::ACKED) ++txAck;
         else ++txFail;
 
         bool gotReply=false;
+        bool replyRxDr=false;
+        uint8_t receivedLength=0;
         if (!phy.listen()) {
             logLine.reset(); logLine.text("RADIO SPI ERROR ENTER_RX"); logLine.send();
         } else {
@@ -132,13 +142,20 @@ static void initiatorLoop() {
                 bool received=false;
                 if (!pollRx(received)) break;
                 if (received) {
-                    uint16_t actual=0;
-                    if (RawRfPattern::validate(payload,RawRfPattern::REPLY,actual) && actual==nextSeq) {
+                    FrameV1::View view;
+                    const FrameV1::Error parsed=FrameV1::decode(payload,view);
+                    if (parsed==FrameV1::Error::OK &&
+                        V1ProbePattern::inspect(view,1,0) &&
+                        view.header.rxLast==nextSeq) {
+                        lastReplySeq=view.header.txSeq;
+                        receivedLength=view.header.length;
+                        replyRxDr=lastRxDr;
                         ++goodRx;
                         gotReply=true;
                         break;
                     }
                     ++invalidRx;
+                    if (parsed!=FrameV1::Error::OK) ++rejectedFrames;
                 }
                 delay.ms(1);
             }
@@ -146,18 +163,21 @@ static void initiatorLoop() {
         phy.standby();
         if (!gotReply) ++replyTimeout;
         logLine.reset();
-        logLine.text("A SEQ="); logLine.hex16(nextSeq);
+        logLine.text("A SEQ="); logLine.hex8(nextSeq);
+        logLine.text(" LEN="); logLine.hex8(wantedLength);
         logLine.text(" TX="); logLine.text(txName(tx.result));
         logLine.text(" ARC="); logLine.hex8(tx.arc);
         logLine.text(" REPLY="); logLine.text(gotReply ? "OK" : "MISS");
-        logLine.text(" RD="); logLine.text((gotReply && lastRxDr) ? "1" : "0");
+        logLine.text(" IN="); logLine.hex8(receivedLength);
+        logLine.text(" RD="); logLine.text((gotReply && replyRxDr) ? "1" : "0");
         logLine.send();
-        ++nextSeq;
-        delay.ms(200); // responder has time to return to PRX
+        ++nextSeq; // v1 TX_SEQ wraps modulo 256
+        delay.ms(200); // diagnostic only, not the M1 slot scheduler
     }
 }
 
 static void responderLoop() {
+    uint8_t nextSeq=0; // own TX_SEQ is independent of initiator's
     if (!phy.listen()) {
         logLine.reset(); logLine.text("RADIO SPI ERROR ENTER_RX"); logLine.send();
     }
@@ -173,17 +193,31 @@ static void responderLoop() {
             delay.ms(1);
             continue;
         }
-        uint16_t seq=0;
-        if (!RawRfPattern::validate(payload,RawRfPattern::REQUEST,seq)) {
+        FrameV1::View view;
+        const FrameV1::Error parsed=FrameV1::decode(payload,view);
+        if (parsed!=FrameV1::Error::OK ||
+            !V1ProbePattern::inspect(view,0,1)) {
             ++invalidRx;
-            logLine.reset(); logLine.text("B BAD_FRAME"); logLine.send();
+            if (parsed!=FrameV1::Error::OK) ++rejectedFrames;
+            logLine.reset();
+            logLine.text("B BAD_FRAME E=");
+            logLine.hex8(static_cast<uint8_t>(parsed));
+            logLine.send();
             continue;
         }
         ++goodRx;
-        // RX_DR may be asserted before hardware ACK completes. The peer can
-        // still be retrying if an ACK was lost. Preserve a generous guard.
+        const uint8_t receivedSeq=view.header.txSeq;
+        const uint8_t receivedLength=view.header.length;
+        const bool observedRxDr=lastRxDr;
+        // nRF may assert RX_DR before hardware ACK exchange finishes.
         delay.ms(25);
-        RawRfPattern::markReply(payload); // return the same 31 bytes
+        const uint8_t responseLength=V1ProbePattern::length(nextSeq,1);
+        if (V1ProbePattern::make(1,0,nextSeq,receivedSeq,payload)
+                != FrameV1::Error::OK) {
+            logLine.reset(); logLine.text("V1 ENCODE ERROR B"); logLine.send();
+            (void)phy.listen();
+            continue;
+        }
         const auto tx=phy.transmit(payload);
         if (tx.result==decltype(tx.result)::ACKED) ++txAck;
         else ++txFail;
@@ -191,11 +225,14 @@ static void responderLoop() {
             logLine.reset(); logLine.text("RADIO SPI ERROR ENTER_RX"); logLine.send();
         }
         logLine.reset();
-        logLine.text("B SEQ="); logLine.hex16(seq);
+        logLine.text("B SEQ="); logLine.hex8(receivedSeq);
+        logLine.text(" LEN="); logLine.hex8(receivedLength);
         logLine.text(" RX=OK TX="); logLine.text(txName(tx.result));
         logLine.text(" ARC="); logLine.hex8(tx.arc);
-        logLine.text(" RD="); logLine.text(lastRxDr ? "1" : "0");
+        logLine.text(" OUT="); logLine.hex8(responseLength);
+        logLine.text(" RD="); logLine.text(observedRxDr ? "1" : "0");
         logLine.send();
+        ++nextSeq;
     }
 }
 
@@ -225,7 +262,7 @@ int main() {
     logLine.reset();
     logLine.text("NRF OK CLASS="); logLine.hex8(nodeClass);
     logLine.text(" ADC="); logLine.hex16(rawAdc);
-    logLine.text(" MODE=RAW32");
+    logLine.text(" MODE=V1PAYLOAD");
     logLine.send();
 
     if (nodeClass==0) initiatorLoop();
