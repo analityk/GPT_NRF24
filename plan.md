@@ -69,3 +69,11 @@ Kompilacja Debug/Release, kontrola Flash/SRAM i rezerwy stosu; jeden HEX wgrany 
 
 ## Dokumentacja
 Po każdym sprawdzonym etapie aktualizować todo.md, history.md i migracja.md. Szczegółowe parametry implementacyjne zapisywać przy kodzie, nie w TODO. Źródła: Nordic nRF24L01+ Product Specification; Microchip ATmega328P Datasheet.
+
+## Analiza opóźnień i przyspieszenie MAC/PHY — punkt odniesienia 2026-11-03
+
+Szacunek aktualnej przepustowości: **~18–20 cykli A→B→A/s** (około 36–40 ramek RF/s łącznie), **~324–360 B/s UART na kierunek przy 18 B/segment**; wyliczenie z ustawionych w firmware opóźnień, **nie pomiar**. Stałe czasy `delay.ms(25)` B, `delay.ms(20)` A, dwukrotny `delay.ms(2)` w PHY na każdy kierunek tworzą minimum 53 ms oczekiwania/cykl, bez radia i SPI. Pozostałe ograniczenia: SPI 1 MHz, polling TX z rozdzielczością 1 ms, stop-and-wait 18 B oraz 127 B RX UART bez flow control.
+
+Odpowiedzialność architektoniczna: **PHY nRF** odpowiada za dozwolone stany PWR_UP/PRIM_RX/CE, minimalne czasy przełączeń (~130 µs po PWR_UP), flagi STATUS, FIFO i błędy. **MAC** odpowiada za arbitraż faz A/B, bezpieczny termin odpowiedzi B po radio-ACK, retry/backoff/timeout, bez zbędnego 20 ms idle. **Transport** odpowiada za DATA_SEQ/ACK aplikacyjny, deduplikację i kontrolę kolejki UART. **UART** odpowiada za pomiar overflow/flow control. Nie naprawiać problemu poprzez samo usunięcie sleepów w scenariuszu testowym.
+
+Zanim porównamy warianty, dodać mikrosekundowy monotoniczny pomiar zdarzeń i liczniki ramki TX/RX, ARC, MAX_RT, błędów, wolnego miejsca FIFO i overflow UART bez drukowania do strumienia danych. Zidentyfikować połączenie IRQ z ATmegą; jeśli nie jest doprowadzony, stosować szybki polling `STATUS` przez SPI NOP. Podnieść SPI 1→8 MHz po weryfikacji elektrycznej. Warianty pomiarowe: (A) zdarzeniowy ping-pong z przełączaniem PRX/PTX, (B) PTX/PRX z `W_ACK_PAYLOAD` i potokowymi odpowiedziami. Zachować zgodność v1, niezawodność i testy resetów/duplikatów; **wyniki w ramkach/s dopiero z rzeczywistego pomiaru**.

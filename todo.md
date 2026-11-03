@@ -25,6 +25,9 @@
 - [x] Potwierdzić fizyczny dwukierunkowy most UART↔RF: COM10→COM11 `ala ma kota` oraz COM11→COM10 `kot ma ale`, identyczny firmware, zrzut RealTerm użytkownika (2026-11-03).
 - [x] Sprawdzić równoczesne nadawanie plików w obu kierunkach: RealTerm COM10/COM11, wielosegmentowe strumienie, ciągły odbiór bez widocznego zakleszczenia; zrzuty użytkownika (2026-11-03), Delays=5/3.
 - [ ] Potwierdzić integralność równoległych strumieni bajt po bajcie (capture, rozmiar, hash), retransmisje/duplikaty i zachowanie przy przeciążeniu; zrzuty terminali nie stanowią dowodu bezstratności.
+- [ ] Zmierzyć rzeczywistą przepustowość w ramkach/s i B/s w obu kierunkach; wartość 18–20 ramek/s na kierunek to **oszacowanie z kodu**, nie pomiar; rozdzielić opóźnienia protokołu, SPI, radia, MCU i UART.
+- [ ] Zastąpić sztuczne opóźnienia 20 ms oraz 2 ms przy aktywnym radiu obsługą zdarzeń i prawidłowych czasów ≥130 µs, z timeoutami; 25 ms B zastąpić bezpiecznym uzgodnieniem/oczekiwaniem uwzględniającym utracone ACK i ARC=15.
+- [ ] Zweryfikować połączenie pinu IRQ nRF24 z MCU na konkretnej RF-Nano; jeśli NC, użyć nieblokującego odczytu STATUS/FIFO po SPI. Rozważyć ACK payload i przyspieszenie SPI do 8 MHz dopiero wraz z pomiarami i testami regresyjnymi.
 - [ ] Zweryfikować bajty binarne (w tym 00/3F/FF), utratę ACK, reset podczas transmisji, przepełnienie RX UART i pacing w RealTerm; pełne pliki bez kontroli przepływu nie są gwarantowane.
 - [ ] Zapewnić komunikację w obu kierunkach przy identycznym firmware.
 - [ ] Utrzymywać naprzemienną wymianę 32-bajtowych ramek również bez danych UART.
