@@ -177,3 +177,7 @@ W tej wersji **nie ma żadnych komunikatów tekstowych ani statystyk wypisywanyc
 **Źródła kodu:** `frame_v1.h` (wire format), `uart_transport_v1.h` (stop-and-wait, DATA_ACK, deduplikacja, BUSY), `session_v1.h` (maszyna sesji), `boot_epoch.h/.cpp` (EEPROM wear-level), `uart.h/.cpp` (atomowy `writeAll`), `main.cpp` (testowy harmonogram A/B), `nrf24_phy.h` (sprawdzone TX/RX). `tests/run_host_tests.sh` wykonuje testy hostowe; opcjonalnie uruchamia je też workflow GitHub Actions. Nie zmienia to kompilatora ani procesu wgrywania firmware Microchip Studio.
 
 **Status:** kod w repozytorium, podstawowy test modelowy handshake i dwukierunkowego ACK oraz test 2×1000 bajtów ze stratami przeszły lokalnie na hostowym g++ C++11. **Brak jeszcze potwierdzenia kompilacji AVR i działania mostu na obu płytkach.** Pozostaje również walidacja dużych plików, restarów z aktywnymi danymi oraz granic buforów.
+
+### Most UART↔RF — pierwszy wynik sprzętowy (2026-11-03)
+
+Właściciel potwierdził na zrzucie RealTerm prawidłową dwukierunkową wymianę **rzeczywistych** wiadomości: COM10→COM11 `ala ma kota`, COM11→COM10 `kot ma ale`. Zapis jest widoczny bez dodatkowych znaków. **Podstawowy test funkcjonalny obu kierunków jest zaliczony.** Poprzednie wzmianki o oczekiwaniu na pierwszą próbę są historyczne. Nadal wymagane są testy jednoczesnego ruchu, wiadomości większych od segmentu, dowolnych bajtów binarnych, przepełnienia RX UART i restartów w trakcie transportu; M1 nie jest jeszcze odebrany.

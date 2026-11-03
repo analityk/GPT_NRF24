@@ -119,3 +119,10 @@ Przyszłe wpisy powinny zawierać datę, zakres faktycznie wykonanej zmiany, com
 - Dodano testy hostowe sesji, transportu, DATA_ACK i `tests/uart_transport_stress_test.cpp` (po 1000 bajtów binarnych w każdą stronę z symulowanymi stratami ramek/ACK, w lokalnym modelu g++ C++11 PASS). Dodatkowy hostowy test podstawowego handshake/DATA_ACK przeszedł. Dodano powtarzalny `tests/run_host_tests.sh` i opcjonalne uruchamianie GitHub Actions. **Nie ogłaszać całej serii CI jako PASS bez odczytu statusu workflow**; testy AVR nie zostały wykonane.
 - Przy braku akceptacji aplikacyjnej po 64 próbach uruchamiana jest renegocjacja sesji z zachowaniem porcji w pamięci RAM. Utrata ACK sprzętowego nie jest traktowana jako aplikacyjne potwierdzenie. Brak dokładnie-raz-po-resecie i brak RTS/CTS: pełny strumień 115200 może przepełnić wejściową kolejkę 127 B.
 - `F12`, Post-Build, piny, podstawowy sterownik nRF/SPI i `-std=c++11` pozostają bez zmian. Nowy program musi zostać jeszcze skompilowany i przetestowany na obu fizycznych RF-Nano.
+
+## 2026-11-03 — pierwszy dwukierunkowy most UART↔RF potwierdzony sprzętowo
+
+- Właściciel przesłał zrzut obu okien RealTerm z faktyczną wymianą krótkich tekstów: **COM10→COM11** wysłano `ala ma kota`, co jest widoczne w terminalu COM11; **COM11→COM10** wysłano `kot ma ale`, co jest widoczne w terminalu COM10. W obu kierunkach tekst dotarł bez widocznych dodatkowych znaków.
+- Dowód obejmuje realne dane UART przechodzące przez kod negocjacji sesji, koder v1 i nRF24 na dwóch RF-Nano z identycznym wsadem. Oznacza to **zaliczenie pierwszego fizycznego testu funkcjonalnego mostu dwukierunkowego**; poprzedni wpis o braku testu był aktualny przed dostarczeniem zrzutu.
+- Widoczny zrzut **nie dowodzi** dostarczenia przy utraconym ACK, pełnym buforze, resecie w trakcie segmentu, transmisji równoczesnej ani długim pliku; nie mierzy też rzeczywistego PER lub przepustowości. Brak RTS/CTS nadal ogranicza bezstratność ciągłego strumienia wejściowego UART 115200.
+- Firmware, F12, Post-Build, pinout i pliki protokołu pozostają w tym wpisie bez zmian — aktualizacja wyłącznie dokumentacyjna.

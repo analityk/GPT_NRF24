@@ -22,7 +22,8 @@
 - [x] Potwierdzić samoczynne wznowienie testowego payloadu v1 po resetowaniu jednej lub obu ATmeg (informacja właściciela, 2026-11-03).
 - [ ] Dodatkowo sprawdzić fizyczne odrzucanie błędnych ramek/niezerowego paddingu i warunki graniczne RX FIFO; dotąd negatywne testy parsera tylko na hoście.
 - [x] Zaimplementować pierwszy dwukierunkowy UART↔RF z sesją HELLO/READY, DATA_ACK, stop-and-wait, deduplikacją, atomowym przyjęciem segmentu i EEPROM epoch; kod i hostowy model gotowe, fizyczny test otwarty.
-- [ ] F7/F12: sprawdzić kompilację AVR nowego mostu i przesyłanie tekstu A→B, B→A oraz obu kierunków jednocześnie; dane powinny być przezroczyste, bez echa lokalnego i logów.
+- [x] Potwierdzić fizyczny dwukierunkowy most UART↔RF: COM10→COM11 `ala ma kota` oraz COM11→COM10 `kot ma ale`, identyczny firmware, zrzut RealTerm użytkownika (2026-11-03).
+- [ ] Przetestować jednoczesne nadawanie z obu terminali, napływ kolejnych segmentów, timeouty i długość wiadomości przekraczającą 18 B; dotychczasowe potwierdzenie dotyczy krótkich tekstów.
 - [ ] Zweryfikować bajty binarne (w tym 00/3F/FF), utratę ACK, reset podczas transmisji, przepełnienie RX UART i pacing w RealTerm; pełne pliki bez kontroli przepływu nie są gwarantowane.
 - [ ] Zapewnić komunikację w obu kierunkach przy identycznym firmware.
 - [ ] Utrzymywać naprzemienną wymianę 32-bajtowych ramek również bez danych UART.
