@@ -45,3 +45,9 @@ Tekst wpisany do dowolnej z dwóch konsol pojawia się na drugiej. Obie strony m
 **Status: M1 nieukończony.**
 
 Szczegóły techniczne należą do kodu, testów i ewentualnej dokumentacji konkretnych warstw, a nie do tej listy.
+
+## Koncepcja ACK Payload / STREAM / BURST
+
+- [ ] Przed wdrożeniem profili MAC przetestować sprzętowy ACK Payload w obu kierunkach (z włączeniem DPL), testować FIFO, CRC, IRQ/STATUS, ponowienia i utracone ACK; nie mylić sprzętowego ACK z aplikacyjnym.
+- [ ] Porównać zmierzone pakiety/s przy stałych rolach PTX/PRX z dotychczasowym ping-pongiem; zbudować konfigurowalną warstwę MAC korzystającą ze wspólnej warstwy PHY/formatu v1.
+- [ ] Zaprojektować bezpieczny REQUEST/GRANT/COMMIT zmiany właściciela PTX, ograniczony lease BURST do pomiaru (propozycja 20 ms), SACK/kredyty i limity pamięci na 2 kB SRAM; zgodnie z `mac-profiles-proposal.md`.
