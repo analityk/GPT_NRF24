@@ -20,6 +20,12 @@ public:
           ownNonce_(bootEpoch),peerNonce_(0),sid_(0),
           state_(State::DISCOVER),response_(0),generation_(0) {}
 
+    void configure(uint8_t local,uint8_t peer,uint32_t epoch) {
+        local_=local;peer_=peer;leader_=local<peer;
+        ownNonce_=epoch;peerNonce_=0;sid_=0;
+        state_=State::DISCOVER;response_=0;generation_=0;
+    }
+
     bool active() const { return state_==State::ACTIVE; }
     uint8_t sid() const { return sid_; }
     uint16_t generation() const { return generation_; }
@@ -92,7 +98,9 @@ public:
                 get32(frame.body+5)==ownNonce_ &&
                 (frame.body[9]&0x03)==0x03) {
                 peerNonce_=get32(frame.body+1);
-                sid_=derive(ownNonce_,peerNonce_);
+                sid_=derive(ownNonce_,peerNonce_,
+                            local_<peer_ ? local_:peer_,
+                            local_<peer_ ? peer_:local_);
                 state_=State::WAIT_READY_ACK;
                 return true;
             }
@@ -109,7 +117,9 @@ public:
                 const uint32_t nonce=get32(frame.body+1);
                 if (state_==State::ACTIVE && nonce==peerNonce_) return true;
                 peerNonce_=nonce;
-                sid_=derive(peerNonce_,ownNonce_);
+                sid_=derive(peerNonce_,ownNonce_,
+                            local_<peer_ ? local_:peer_,
+                            local_<peer_ ? peer_:local_);
                 state_=State::WAIT_READY;
                 response_=2;
                 return true;
