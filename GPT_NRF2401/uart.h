@@ -23,6 +23,7 @@ public:
     bool read(uint8_t& value);          // nonblocking
     bool write(uint8_t value);         // nonblocking; false => NOT queued
     uint8_t write(const uint8_t* bytes, uint8_t count); // prefix actually queued
+    bool writeAll(const uint8_t* bytes, uint8_t count); // atomic all-or-none TX enqueue
     uint8_t available() const;
     uint8_t freeSpace() const;         // TX queue free capacity
     Counters counters() const;         // atomic snapshot
