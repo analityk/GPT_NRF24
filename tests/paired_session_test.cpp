@@ -106,6 +106,10 @@ int main() {
     raw[6]=0;raw[5]=static_cast<uint8_t>(PairedFrame::Kind::CONTROL);
     assert(PairedFrame::decode(raw,width,v)==PairedFrame::Error::OK);
     assert(freshB.accept(v)==S::Event::NONE); // missing RESYNC flag
+    // Invalid zero epoch must never emit a plausible discovery packet.
+    S uninitialized(true,S::Identity());
+    assert(!uninitialized.prepare(raw,width));
+
     // Session attempt cannot silently wrap.
     S exhausted(true,S::Identity(123,0xFFFF));
     assert(!exhausted.restart());

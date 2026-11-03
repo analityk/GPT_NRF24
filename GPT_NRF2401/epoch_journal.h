@@ -8,6 +8,7 @@
 // No heap and no assumptions about AVR EEPROM representation.
 template<class Storage,uint8_t Slots=16>
 class EpochJournal {
+    static_assert(Slots>=2, "Crash-safe journal requires at least two slots");
 public:
     static bool advance(Storage& store,uint32_t& value) {
         bool found=false;

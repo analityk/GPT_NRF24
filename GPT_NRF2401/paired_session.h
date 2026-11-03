@@ -55,7 +55,7 @@ public:
     // Queued ACK payloads are prepared before processing the triggering TX.
     // The caller must arrange for the prepared packet to be queued verbatim.
     bool prepare(uint8_t* out,uint8_t& width) {
-        if(active() || !out)return false;
+        if(active() || !out || own_.boot==0)return false;
         const Op op=leader_?
             (phase_==Phase::WAIT_READY_ACK?Op::READY:Op::HELLO):
             (phase_==Phase::WAIT_READY?Op::WELCOME:
