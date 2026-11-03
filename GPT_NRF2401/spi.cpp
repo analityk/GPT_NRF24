@@ -1,4 +1,5 @@
 #include "spi.h"
+#include "board_clock.h"
 #include <avr/io.h>
 
 void SpiMaster::begin() {

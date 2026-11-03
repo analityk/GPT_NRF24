@@ -1,11 +1,6 @@
 #ifndef GPT_NRF24_AVR_DELAY_H
 #define GPT_NRF24_AVR_DELAY_H
-#ifndef F_CPU
-#define F_CPU 16000000UL
-#endif
-#if F_CPU != 16000000UL
-#error "RF-Nano test requires 16 MHz F_CPU"
-#endif
+#include "board_clock.h"
 #include <stdint.h>
 #include <util/delay.h>
 

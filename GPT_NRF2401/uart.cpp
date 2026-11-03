@@ -1,14 +1,11 @@
 #include "uart.h"
+#include "board_clock.h"
 #include <avr/io.h>
 #include <avr/interrupt.h>
 #include <util/atomic.h>
 
 // Board clock assumption. 16 MHz, U2X0=1, UBRR0=16:
 // baud = 16e6 / (8 * (16 + 1)) = 117647, +2.12% vs 115200.
-#if defined(F_CPU) && F_CPU != 16000000UL
-#error "UART configuration requires F_CPU=16000000UL"
-#endif
-
 UART* UART::active_ = 0;
 
 UART::UART()

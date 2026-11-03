@@ -1,4 +1,5 @@
 #include "adc0.h"
+#include "board_clock.h"
 #include <avr/io.h>
 #include <util/delay.h>
 

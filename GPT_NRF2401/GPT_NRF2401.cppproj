@@ -199,6 +199,9 @@
     <None Include="adc0.h">
       <SubType>compile</SubType>
     </None>
+    <None Include="board_clock.h">
+      <SubType>compile</SubType>
+    </None>
     <None Include="avr_delay.h">
       <SubType>compile</SubType>
     </None>
