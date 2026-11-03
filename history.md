@@ -126,3 +126,11 @@ Przyszłe wpisy powinny zawierać datę, zakres faktycznie wykonanej zmiany, com
 - Dowód obejmuje realne dane UART przechodzące przez kod negocjacji sesji, koder v1 i nRF24 na dwóch RF-Nano z identycznym wsadem. Oznacza to **zaliczenie pierwszego fizycznego testu funkcjonalnego mostu dwukierunkowego**; poprzedni wpis o braku testu był aktualny przed dostarczeniem zrzutu.
 - Widoczny zrzut **nie dowodzi** dostarczenia przy utraconym ACK, pełnym buforze, resecie w trakcie segmentu, transmisji równoczesnej ani długim pliku; nie mierzy też rzeczywistego PER lub przepustowości. Brak RTS/CTS nadal ogranicza bezstratność ciągłego strumienia wejściowego UART 115200.
 - Firmware, F12, Post-Build, pinout i pliki protokołu pozostają w tym wpisie bez zmian — aktualizacja wyłącznie dokumentacyjna.
+
+## 2026-11-03 — równoczesna transmisja UART w obu kierunkach pod obciążeniem
+
+- Właściciel przesłał dwa zrzuty z jednoczesnym wysyłaniem plików przez RealTerm w obu kierunkach mostu RF-Nano. Oba terminale nadal odbierają wiersze danych tekstowych; drugi zrzut pokazuje odpowiednio około **5236** i **4552** znaków naliczonych w terminalach. Brak widocznego zakleszczenia i utrzymuje się przepływ w obu kierunkach.
+- Na zrzutach przy opcji **Dump File to Port** pola `Delays` mają niezerowe wartości **5** i **3**. Jest to test z ustawionym opóźnieniem/dawkowaniem po stronie RealTerm, a nie zweryfikowany nieograniczony strumień UART 115200 baud.
+- **Równoczesny ruch dwukierunkowy i transmisja wielosegmentowa są fizycznie potwierdzone funkcjonalnie.** Zrzuty nie dostarczają jednak porównania bajt po bajcie, sum SHA-256 ani wiarygodnego bilansu danych wysłanych/odebranych; nie dowodzą zerowej liczby strat, braku duplikatów, osiągniętej przepustowości ani pracy przy pełnym obciążeniu 115200 bez opóźnień.
+- Następnym krokiem walidacyjnym jest przechwycenie pełnych strumieni obu kierunków i porównanie długości/hashów z plikami źródłowymi, wraz z odczytem liczników przepełnienia UART i retransmisji na poziomie warstw. Brak RTS/CTS nadal uniemożliwia gwarantowaną bezstratność przy wejściu szybszym niż rzeczywista przepustowość radiowa.
+- Zmiana wyłącznie dokumentacyjna; firmware i konfiguracja F7/F12 bez zmian.
