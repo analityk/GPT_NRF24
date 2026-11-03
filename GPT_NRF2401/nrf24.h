@@ -73,6 +73,53 @@ public:
         return src && transaction(0xA0, src, 0, 32, 0);
     }
 
+
+    // Enhanced ShockBurst ACK payload support (no change to the default
+    // fixed-payload configuration used by the UART bridge).
+    // Some devices lock FEATURE until ACTIVATE 0x73; probe before toggling,
+    // never blindly toggle a device where FEATURE already works.
+    bool enableAckPayload(uint8_t retries=0x23) {
+        uint8_t feature=0;
+        if (!writeRegister(FEATURE,0x06) ||
+            !readRegister(FEATURE,feature)) return false;
+        if (feature!=0x06) {
+            const uint8_t activate=0x73;
+            if (!transaction(0x50,&activate,0,1,0) ||
+                !writeRegister(FEATURE,0x06) ||
+                !readRegister(FEATURE,feature) || feature!=0x06)
+                return false;
+        }
+        uint8_t dynamic=0;
+        uint8_t retryRead=0;
+        if (!writeRegister(DYNPD,0x01) ||
+            !readRegister(DYNPD,dynamic) || dynamic!=0x01 ||
+            !writeRegister(SETUP_RETR,retries) ||
+            !readRegister(SETUP_RETR,retryRead) || retryRead!=retries)
+            return false;
+        return clearIrq(0x70) && flushRx() && flushTx();
+    }
+
+    bool readPayloadWidth(uint8_t& width) {
+        return transaction(0x60,0,&width,1,0);
+    }
+
+    // Dynamic payload width must be read from the chip's RX FIFO. A corrupt
+    // value is recovered by flushing RX, as required by the data sheet.
+    bool readDynamicPayload(uint8_t* dst,uint8_t& width) {
+        if (!dst || !readPayloadWidth(width)) return false;
+        if (width==0 || width>32) {
+            (void)flushRx();
+            return false;
+        }
+        return transaction(0x61,0,dst,width,0);
+    }
+
+    bool writeAckPayload(uint8_t pipe,const uint8_t* bytes,uint8_t count) {
+        if (pipe>5 || !bytes || count==0 || count>32) return false;
+        return transaction(static_cast<uint8_t>(0xA8U|pipe),
+                           bytes,0,count,0);
+    }
+
     // Safe bring-up: register read/write/restore test, then deterministic
     // RF settings, leaving PWR_UP=0 and CE LOW. No RF transmission occurs.
     Probe probeAndConfigure() {

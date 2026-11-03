@@ -12,6 +12,17 @@ void SpiMaster::begin() {
     SPSR = 0;                                  // SPI2X = 0
 }
 
+// Set speed only when no SPI transaction is active. Preserve master mode 0.
+void SpiMaster::setSpeed(Speed speed) {
+    if (speed==Speed::MHz8) {
+        SPCR = _BV(SPE) | _BV(MSTR); // F_CPU/4
+        SPSR = _BV(SPI2X);          // double speed = F_CPU/2
+    } else {
+        SPCR = _BV(SPE) | _BV(MSTR) | _BV(SPR0); // F_CPU/16
+        SPSR = 0;
+    }
+}
+
 bool SpiMaster::transfer(uint8_t outgoing, uint8_t& incoming) {
     if (!(SPCR & _BV(MSTR))) {
         ++timeouts_;

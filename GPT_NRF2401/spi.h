@@ -9,7 +9,9 @@
 class SpiMaster {
 public:
     SpiMaster() : timeouts_(0) {}
+    enum class Speed : uint8_t { MHz1=0, MHz8=1 };
     void begin();
+    void setSpeed(Speed speed);
     bool transfer(uint8_t outgoing, uint8_t& incoming);
     uint16_t timeouts() const { return timeouts_; }
 private:
