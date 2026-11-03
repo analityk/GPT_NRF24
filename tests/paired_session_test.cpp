@@ -3,13 +3,6 @@
 #include <cstdint>
 #include <cstring>
 
-static void exchange(PairedSession& tx,PairedSession& rx) {
-    uint8_t buffer[32]={},width=0;
-    assert(tx.prepare(buffer,width));
-    PairedFrame::View v;
-    assert(PairedFrame::decode(buffer,width,v)==PairedFrame::Error::OK);
-    (void)rx.accept(v);
-}
 static PairedSession::Event deliver(PairedSession& tx,PairedSession& rx) {
     uint8_t buffer[32]={},width=0;
     assert(tx.prepare(buffer,width));
