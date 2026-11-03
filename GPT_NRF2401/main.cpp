@@ -1,26 +1,24 @@
 /*
- * GPT_NRF2401.cpp
- *
- * Created: 02.11.2026 21:51:53
- * Author : Pc
- */ 
+ * UART bring-up: transparent, nonblocking local echo on USB/CH340.
+ * Each board runs the same binary. USART0 owns PD0/RXD and PD1/TXD.
+ * Previous GPIO LED test remains in Git history (commit 9d251e1).
+ */
+#include <avr/interrupt.h>
+#include "uart.h"
 
-#include <avr/io.h>
-#include "gpio.h"
+int main(void) {
+    UART uart;
+    uart.begin();
+    sei();
 
-void delay(uint32_t volatile t){
-	while(t--){};
-}
-
-
-int main(void)
-{
-	GPIO led1(&PORTD, PIND0);
-    /* Replace with your application code */
-    while (1) 
-    {
-		delay(0xFFFF);
-		led1.flip();
+    for (;;) {
+        // Do not consume RX unless there is TX queue space.
+        // Dropped RX bytes are counted by the driver if the producer outruns us.
+        if (uart.freeSpace() != 0) {
+            uint8_t byte;
+            if (uart.read(byte)) {
+                (void)uart.write(byte);
+            }
+        }
     }
 }
-

@@ -191,6 +191,15 @@
     <Compile Include="gpio.cpp">
       <SubType>compile</SubType>
     </Compile>
+    <Compile Include="uart.cpp">
+      <SubType>compile</SubType>
+    </Compile>
+    <None Include="uart.h">
+      <SubType>compile</SubType>
+    </None>
+    <None Include="byte_ring.h">
+      <SubType>compile</SubType>
+    </None>
     <None Include="gpio.h">
       <SubType>compile</SubType>
     </None>
