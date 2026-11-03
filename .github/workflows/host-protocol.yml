@@ -1,0 +1,13 @@
+name: C++11 protocol tests (host only)
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+jobs:
+  host-protocol:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile and run protocol state-machine tests
+        run: sh tests/run_host_tests.sh
