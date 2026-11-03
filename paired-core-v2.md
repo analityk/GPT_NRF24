@@ -65,3 +65,19 @@ Host C++11: `tests/paired_link_test.cpp` (codec, 8..32 DPL, IDLE, credit, nibble
 Najbliższe kolejne etapy: automatyczne wynegocjowanie SESSION_ID16 i reset recovery w warstwie sesji, wiarygodne `RX_CREDIT` z realnym odbiornikiem (UART/sink), pełna telemetria `ARC/MAX_RT` i diagnostyka przy pogorszonym sygnale, oraz test 24 B+8 B z rzeczywistym throughput. Wymagania aplikacyjne (TCP-like, pliki, szyfrowanie) pozostają poza zakresem rdzenia.
 
 **Źródło hardware:** Nordic nRF24L01+ Product Specification v1.0 (FEATURE/DYNPD, ACK payload, FIFOs, OBSERVE_TX, SPI), https://cdn.sparkfun.com/assets/3/d/8/5/1/nRF24L01P_Product_Specification_1_0.pdf
+
+## Wynik na dwóch fizycznych płytkach — 2026-11-03
+
+Zrzut RealTerm użytkownika potwierdza uruchomienie trybu 2 na obu RF-Nano:
+
+```text
+PAIR CORE A PTX 8+24B SID16 SPI8
+A TX/s=625 ACK/s=625 ARC=0 MAX=0 BAD=0 IO=0 GAB=0 GBA=0 DROP=0 FULL=0
+
+PAIR CORE B PRX 8+24B SID16 SPI8
+B RX/s=625 Q/s=625 ARC=0 MAX=0 BAD=0 IO=0 GAB=0 GBA=0 DROP=0 FULL=0
+```
+
+Wynik stabilny przez wiele kolejnych raportów; B chwilowo 626/s w osobnym oknie pomiarowym. A weryfikuje odebrane odpowiedzi B, B weryfikuje dane A. **625 wymian/s × 24 B testowego BODY = 15 000 B/s/kierunek** (30 000 B/s łącznie), przy średnim odstępie transakcji **1,6 ms**. Poprzedni pomiar surowego benchmarku 32B+32B: 540/s; wzrost ~15,7%, którego nie można przypisać mniejszej ramce RF (oba formaty w pełnym DATA mają 32B).
+
+Oznacza to pozytywny test fizyczny rdzenia 8+24, ale **nie test transferu użytkownika**. Nie zmierzono bezpośredniej latencji pojedynczej ramki ani niezawodności przy pogorszonych warunkach. Liczniki 4-bitowe modulo16 mogą nie ujawnić wszystkich zjawisk. `SESSION_ID=0x4E52` nie jest negocjowane; aktualne kredyty są wartościami testowymi, nie wolnym miejscem prawdziwego odbiornika. Nie deklarować gotowości do transportu plików/po resetach bez dalszej implementacji.

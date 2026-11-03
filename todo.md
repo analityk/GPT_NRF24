@@ -72,7 +72,9 @@ Szczegóły techniczne należą do kodu, testów i ewentualnej dokumentacji konk
 
 - [x] Kod codec/link/PHY i demonstrator `paired_core_main.cpp`, wybór 0/1/2, stałe bufory i oddzielenie aplikacyjnego BODY od diagnostyki.
 - [x] GitHub Actions: wszystkie testy hostowe i krzyżowa kompilacja AVR-GCC wariantów 0/1/2 zaliczone (2026-11-03).
-- [ ] Zbudować F7 w Microchip Studio i wgrać F12 na **obie** płytki: tryb 2. Zebrać RealTerm `A TX/s ACK/s` i `B RX/s Q/s` (po kilkanaście sekund), porównać z osobnym pomiarem starego 540/s. Potwierdzić prawidłowy BODY 24B i IDLE 8B, brak FULL/BAD/IO.
+- [x] Tryb 2 na obu fizycznych RF-Nano: stabilnie **~625 wymian/s**, A TX/s=ACK/s=625, B RX/s=Q/s=625 (czasem 626), widoczne ARC/MAX/BAD/IO/GAB/GBA/DROP/FULL=0; poprawny 24B wzorzec przy DATA. Zrzut RealTerm 2026-11-03.
+- [ ] Oddzielnie sprawdzić skrócone ramki IDLE 8B i ich pomiar; pokazany test po rozruchu dotyczy przede wszystkim pełnego DATA 8+24B.
+- [ ] Zmierzyć rozkład latencji pojedynczej transakcji oraz rzeczywisty end-to-end goodput z UART/sink, zamiast utożsamiać ~1,6 ms odstępu z opóźnieniem i 15 kB/s testowego BODY z transferem użytkownika.
 - [ ] Wynegocjować prawdziwy SESSION_ID16 przy parowaniu i automatyczny powrót po resetach obu stron — stałe `0x4E52` jest teraz WYŁĄCZNIE testowym ID, nie gwarancją rozdzielenia sesji.
 - [ ] Powiązać RX_CREDIT oraz RX_DROP z rzeczywistym sinkiem danych (UART lub inna usługa) i sprawdzić bezpieczeństwo pipeline ACK Payload, timeouty i wielokrotne przepełnienia.
 - [ ] Dodać później wyższe protokoły (file, TCP-like, szyfrowanie) poza tym rdzeniem dopiero na osobne zamówienie; obecnie DATA BODY jest transparentne.
