@@ -32,7 +32,8 @@ Podtypy CONTROL (wartości hex; LEN obejmuje podtyp):
 - 03 READY, LEN=10: local_nonce32, peer_nonce32, SID.
 - 04 READY_ACK, LEN=2: SID.
 - 10 TRANSPORT_ACK, LEN=5: DATA_SEQ, STATUS, RX_FREE16 LE. STATUS 0 ACCEPTED, 1 BUSY, 2 REJECTED.
-- 11 LINK_REPORT, LEN=10: BASE_SEQ, RX_BITMAP32 LE, HW_RETRY16 LE, MAX_RT16 LE (1 B podtypu + 1+4+2+2 B danych). Bit i bitmapy odpowiada (BASE_SEQ+i) mod 256; 1 = odebrano co najmniej raz.
+- 11 LINK_REPORT, LEN=10: BASE_SEQ, RX_BITMAP32 LE, HW_RETRY16 LE, MAX_RT16 LE (1 B podtypu + 1+4+2+2 B danych).
+- 12 DATA_ACK, LEN=7..24: ACK_DATA_SEQ (1 B), ACK_STATUS (1 B), RX_FREE16 LE (2 B), DATA_SEQ (1 B), DATA (1..18 B). Ramka CONTROL z EP=0/0 łączy aplikacyjny ACK z nowym segmentem UART endpointu 1. Jest obsługiwana wyłącznie po negocjacji capability DATA_ACK; nieznający jej odbiornik ignoruje cały podtyp, a nie przyjmuje danych częściowo. Bit i bitmapy odpowiada (BASE_SEQ+i) mod 256; 1 = odebrano co najmniej raz.
 - 7F EXT, LEN=3..24: namespace, subtype, dane.
 
 Nieznany endpoint lub podtyp nigdy nie kieruje danych do UART. Nieznana wersja nie jest interpretowana jako v1.
@@ -57,7 +58,7 @@ M1: po synchronizacji naprzemienne sloty TX/RX, nawet bez danych; heartbeat DATA
 
 ## 5. UART RELIABLE — stop-and-wait
 
-DATA EP 1→1: LEN=1..24; BODY[0] DATA_SEQ (mod 256), BODY[1..LEN-1] 0..23 bajtów UART. Jeden niepotwierdzony segment na kierunek i sesję. Nadawca przechowuje segment do TRANSPORT_ACK ACCEPTED. Timeout powoduje ponowienie **DATA_SEQ bez zmiany**, z nowym TX_SEQ. Limity timeout/retry są parametrami konfiguracji, nie polami ramki.
+DATA EP 1→1: LEN=1..24; BODY[0] DATA_SEQ (mod 256), BODY[1..LEN-1] 0..23 bajtów UART. Implementacja pierwszego mostu ogranicza aktualny segment do **18 B**, żeby zawsze móc łączyć retransmisję danych z ACK w ramce DATA_ACK i zapewnić postęp obu kierunkom. Jeden niepotwierdzony segment na kierunek i sesję. Nadawca przechowuje segment do TRANSPORT_ACK ACCEPTED. Timeout powoduje ponowienie **DATA_SEQ bez zmiany**, z nowym TX_SEQ. Limity timeout/retry są parametrami konfiguracji, nie polami ramki.
 
 Odbiorca akceptuje tylko oczekiwany DATA_SEQ i wyłącznie jeśli **cały** segment mieści się w TX ring UART. Atomowo dopisuje bajty, przesuwa oczekiwany DATA_SEQ i nadaje ACK ACCEPTED. Brak miejsca → BUSY, bez częściowego zapisu. Duplikat ostatnio przyjętego segmentu → ponowne ACCEPTED bez ponownego dopisywania. Inny numer → REJECTED. Po wyczerpaniu retry → jawny DELIVERY_FAILED; restart sesji unieważnia oczekujące potwierdzenia. Potwierdzenie oznacza przyjęcie do kolejki UART, nie fizyczne wysłanie z UART.
 
@@ -107,3 +108,14 @@ Testy negatywne: wersja 2, LEN 25..31, niezerowy padding, DATA SID=0, DATA EP=0 
 ## 8. Warunki odbioru i ograniczenia
 
 Koder/parser ma działać na jawnej tablicy 32 B bez dynamicznej alokacji i bez zależności od AVR; nie używać rzutowania packed struct. Testować round-trip i wszystkie wektory na hoście, następnie kompilację AVR, SRAM i dwa fizyczne radia. Parametry czasowe slotów, retry, nonce i okien telemetrii ustalić eksperymentalnie. Brak w v1: routing, enumeracja jednakowych klas, szyfrowanie, autoryzacja, gwarancja dostarczenia po wyczerpaniu retry oraz exactly-once przez restart.
+
+## 9. Pierwsza implementacja UART↔RF (2026-11-03)
+
+- Jeden firmware na obu RF-Nano. A0/GND daje klasę 0 (inicjator cyklu); A0/dodatnie zasilanie daje klasę 1 (odpowiadający). MAC w tym etapie steruje kolejnością A→B→A na dwóch węzłach, a nie arbitrażem wielowęzłowym.
+- Sesja jest uzgadniana przez HELLO, HELLO_REPLY, READY i READY_ACK. Maski możliwości `0x0003` oznaczają wsparcie RELIABLE i DATA_ACK; węzeł nieznający obu bitów nie jest przyjmowany do tej sesji.
+- `nonce32` używa licznika uruchomień z EEPROM (16-gniazdowy dziennik z markerem commit i CRC8; jeden zapis przy starcie, nie przy każdym radio retry). Przy nowym uzgadnianiu bez restartu inicjator zwiększa nonce w SRAM. Jest to rozróżnienie sesji, nie poufność ani uwierzytelnienie. **SID ma tylko 8 bitów**, więc wciąż może kolidować po restarcie.
+- Osobna numeracja `TX_SEQ` (każda nowa ramka ACTIVE) i `DATA_SEQ` (segment UART stop-and-wait). Od strony odbioru atomowy zapis do kolejki TX UART lub BUSY. ACK aplikacyjny oznacza **przyjęcie do tej kolejki**, nie transmisję bajtu na przewód USB. Po utracie ACK ponawiany jest ten sam DATA_SEQ. Duplikat nie jest ponownie zapisywany do TX UART.
+- W trybie jednoczesnego ruchu DATA_ACK umożliwia ACK i segment drugiego kierunku w jednej ramce. 18 B/segment jest świadomą decyzją implementacyjną; przyszła implementacja może negocjować większy rozmiar samodzielnego DATA, bez zmiany formatu bazowego.
+- 64 próby transportowe bez ACCEPTED lub REJECTED wywołuje renegocjację sesji przy zachowaniu oczekującej porcji RAM; nie jest to obietnica dostarczenia po resecie. Pełny bufor UART nie powoduje przyjęcia części segmentu.
+- **Ograniczenie gwarancji**: nie ma exactly-once przez reset/power loss, trwałego dziennika dostarczonych bajtów, sprzętowej kontroli przepływu UART ani gwarancji przy przesyłaniu danych do RX UART szybciej niż przepustowość RF. UART RX może się przepełnić; licznik overflow jest dostępny przez `UART::counters()`. Zdarzenia TX_DS/MAX_RT i podstawowe liczniki są w `LinkCounters` oraz `ReliableUartV1::stats()`, niewypisywane do przezroczystego strumienia danych.
+- Hostowe testy warstw sesji i transportu, w tym duplikaty, BUSY i dwukierunkowy strumień binarny, są w `tests/`. Warstwa ACK ma oddzielne testy od kodera ramki. Konfiguracja fizyczna SPI/nRF pozostaje bez zmian.

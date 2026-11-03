@@ -60,6 +60,8 @@ Po starcie oba urządzenia w RX i negocjują fazę naprzemiennych slotów; HELLO
 Zaprojektować nieblokującą maszynę stanów: DISCOVERY → SYNC → TX_SLOT/RX_SLOT → RECOVERY, z limitami czasów; lokalny sterownik radia używa TX_PREPARE → TX_WAIT → RX. Przy utracie slotu lub gdy obie strony nadają jednocześnie, obie mogą utracić ACK: obowiązkowe rozproszenie retry/backoff, przewaga czasu RX i ograniczenie serii TX. Identyczne timery na identycznym firmware mogą się synchronizować — sprawdzić źródło asymetrii/jitteru. Priorytety dla ACK/HELLO i sprawiedliwość kierunków. Symulować kolizje, opóźnienia, utratę ramek i jednoczesne restarty. Bramka: obie strony inicjują transfery niezależnie bez trwałego zakleszczenia.
 
 ## 8. Most UART ↔ radio
+
+Zaimplementowano pierwszy most stop-and-wait na dwóch węzłach z DATA_ACK i osobną sesją; hostowa próba wymiany binarnej 2×1000 B z symulowanymi stratami PASS, test na fizycznych płytkach dopiero przed nami. Maksymalny segment aktualnego mostu to 18 B, ponieważ ACK może być do niego dołączony; bez kontroli przepływu UART transmisja pełnego pliku 115200 bez pacingu pozostaje niedozwolona jako test bezstratności.
 Zbierać bajty UART do pełnej ramki lub timeoutu krótkiego wpisu. Przekazywać odebrane dane do kolejki UART TX; nie blokować pętli głównej. Payload jest przezroczysty dla CR/LF, komunikaty diagnostyczne nie mogą mieszać się z danymi. Raportować przepełnienie, MAX_RT, brak partnera. Uwzględnić reset przy otwieraniu COM przez DTR.
 
 ## 9. Odbiór M1

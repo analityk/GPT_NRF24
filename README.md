@@ -157,3 +157,23 @@ Odłączenie zasilania całej płytki RF-Nano nie jest obecnie dobrym testem sam
 ### Payload v1 — potwierdzony test sprzętowy 2026-11-03
 
 Właściciel wykonał na dwóch RF-Nano próby kodera/parsing 8+24 B (COM11/B i COM10/A), zrzut pokazuje `SEQ=45..53`, cykl `LEN=00/01/17/18`, poprawne `TX=ACK`, `REPLY=OK`, `RX=OK` i `ARC=00`. Reset jednej lub obu ATmeg nie blokuje wznowienia wymiany. **Etap diagnostycznego payloadu v1 jest fizycznie zweryfikowany.** Obserwowane `RD=0` przy poprawnym odbiorze po stronie B jest możliwe, ponieważ flaga `RX_DR` nie jest jedynym kryterium obecności poprawnej ramki w FIFO. Nadal nie wdrożono rzeczywistego mostu UART, aplikacyjnego ACK, retry ani negocjacji SID; poprzednie instrukcje dotyczące jeszcze niepotwierdzonego firmware są historyczne.
+
+## UART↔radio — pierwszy most dwukierunkowy (2026-11-03)
+
+Aktualny `main.cpp` przesyła **rzeczywiste bajty UART przez radio** z nagłówkiem v1, numerem segmentu, aplikacyjnym ACK i deduplikacją. Dane krążą w naprzemiennych slotach A→B i B→A przy identycznym firmware. Protokół wymienia HELLO, HELLO_REPLY, READY i READY_ACK zanim zacznie transport danych. Jedna fizyczna ramka to 32 B; aktualny most pobiera maksymalnie **18 bajtów UART na segment**. `CONTROL/DATA_ACK` pozwala połączyć potwierdzenie i dane drugiego kierunku. Program nadal nadaje puste ramki, gdy nie ma danych.
+
+### Próba z RealTerm
+
+1. A0 płytki **A** połączyć z jej **GND**, A0 płytki **B** z jej dodatnim zasilaniem (AVCC/3,3 V; zawsze w dopuszczalnym zakresie ADC). Na obu wgrać **ten sam HEX**: F7 build, F12 ręczne programowanie.
+2. Otworzyć oba porty (typowo COM10 i COM11) w RealTerm: **115200 baud, 8N1**, **local echo wyłączone**, brak flow control. DTR przy otwieraniu portu może resetować ATmegę; sesja powinna zostać automatycznie wznowiona.
+3. Poczekać na ustabilizowanie sesji i wysłać np. `Ala ma kota` na A. Tekst powinien pojawić się **wyłącznie na B**. Z B nadać `12345`; ciąg powinien pojawić się **wyłącznie na A**. Spróbować nadawania z obu terminali w podobnym czasie.
+4. Sprawdzić również CR/LF oraz bajty binarne `00`, `3F` (znak `?`) i `FF`: **wszystkie są danymi**, nie komendami. Lokalny echo w RealTerm musi być wyłączony, inaczej obraz będzie mylący.
+5. Powtórzyć test po resecie jednej ATmegi, najpierw bez danych oczekujących, a następnie z krótką niedostarczoną porcją. Z uwagi na brak trwałego dziennika, po resecie możliwe jest powtórne doręczenie ostatniego segmentu. Nie uznawać tego scenariusza za exactly-once.
+
+W tej wersji **nie ma żadnych komunikatów tekstowych ani statystyk wypisywanych do UART**. Inaczej zanieczyścilibyśmy dowolny plik binarny. Diagnostyka jest dostępna na razie w licznikach w RAM (`counters`, `bridge.stats()`, `uart.counters()`) podczas debugowania.
+
+**Przepustowość wejściowa jest ograniczona.** UART fizycznie przyjmuje ~115200 baud, podczas gdy stop-and-wait z czasami przełączania RF przekazuje znacznie mniej bajtów na sekundę. RX ma tylko 127 użytecznych bajtów. **Nie wysyłać jeszcze całego pliku z RealTerm bez pacingu** — może dojść do nieodwracalnego przepełnienia UART RX, mimo niezawodności ramek radiowych. Pierwsza próba to krótkie wiadomości, potem pliki z kontrolowanym odstępem między bajtami i porównaniem bajt po bajcie. Docelowe rozwiązanie wymaga sprzętowej lub hostowej kontroli przepływu.
+
+**Źródła kodu:** `frame_v1.h` (wire format), `uart_transport_v1.h` (stop-and-wait, DATA_ACK, deduplikacja, BUSY), `session_v1.h` (maszyna sesji), `boot_epoch.h/.cpp` (EEPROM wear-level), `uart.h/.cpp` (atomowy `writeAll`), `main.cpp` (testowy harmonogram A/B), `nrf24_phy.h` (sprawdzone TX/RX). `tests/run_host_tests.sh` wykonuje testy hostowe; opcjonalnie uruchamia je też workflow GitHub Actions. Nie zmienia to kompilatora ani procesu wgrywania firmware Microchip Studio.
+
+**Status:** kod w repozytorium, podstawowy test modelowy handshake i dwukierunkowego ACK oraz test 2×1000 bajtów ze stratami przeszły lokalnie na hostowym g++ C++11. **Brak jeszcze potwierdzenia kompilacji AVR i działania mostu na obu płytkach.** Pozostaje również walidacja dużych plików, restarów z aktywnymi danymi oraz granic buforów.
