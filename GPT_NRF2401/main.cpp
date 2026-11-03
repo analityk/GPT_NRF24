@@ -24,6 +24,7 @@
 #include "nrf24_phy.h"
 #include "avr_delay.h"
 #include "adc0.h"
+#include "rf_raw_pattern.h"
 
 static UART uart;
 static SpiMaster spi;
@@ -73,25 +74,6 @@ static uint16_t txAck=0;
 static uint16_t txFail=0;
 static uint16_t replyTimeout=0;
 
-static void buildRequest(uint16_t seq) {
-    payload[0]=0xA5;
-    payload[1]=static_cast<uint8_t>(seq);
-    payload[2]=static_cast<uint8_t>(seq >> 8);
-    for (uint8_t i=3; i<32; ++i) {
-        payload[i]=static_cast<uint8_t>(seq + (uint16_t)i * 17U);
-    }
-}
-
-static bool checkFrame(uint8_t marker, uint16_t& seq) {
-    if (payload[0]!=marker) return false;
-    seq=static_cast<uint16_t>(payload[1] | (static_cast<uint16_t>(payload[2])<<8));
-    for (uint8_t i=3; i<32; ++i) {
-        if (payload[i] != static_cast<uint8_t>(seq + (uint16_t)i * 17U))
-            return false;
-    }
-    return true;
-}
-
 static const char* txName(Nrf24Phy<Nrf24<SpiMaster, GPIO>, AvrDelay>::TxStatus s) {
     typedef Nrf24Phy<Nrf24<SpiMaster, GPIO>, AvrDelay> Phy;
     switch (s) {
@@ -134,7 +116,7 @@ static void initiatorLoop() {
     uint16_t nextSeq=0;
     for (;;) {
         commands();
-        buildRequest(nextSeq);
+        RawRfPattern::make(payload,nextSeq);
         const auto tx=phy.transmit(payload);
         if (tx.result==decltype(tx.result)::ACKED) ++txAck;
         else ++txFail;
@@ -148,7 +130,7 @@ static void initiatorLoop() {
                 if (!pollRx(received)) break;
                 if (received) {
                     uint16_t actual=0;
-                    if (checkFrame(0x5A,actual) && actual==nextSeq) {
+                    if (RawRfPattern::validate(payload,RawRfPattern::REPLY,actual) && actual==nextSeq) {
                         ++goodRx;
                         gotReply=true;
                         break;
@@ -188,7 +170,7 @@ static void responderLoop() {
             continue;
         }
         uint16_t seq=0;
-        if (!checkFrame(0xA5,seq)) {
+        if (!RawRfPattern::validate(payload,RawRfPattern::REQUEST,seq)) {
             ++invalidRx;
             logLine.reset(); logLine.text("B BAD_FRAME"); logLine.send();
             continue;
@@ -196,8 +178,8 @@ static void responderLoop() {
         ++goodRx;
         // RX_DR may be asserted before hardware ACK completes. The peer can
         // still be retrying if an ACK was lost. Preserve a generous guard.
-        delay.ms(20);
-        payload[0]=0x5A; // return the same verified 31 bytes, no protocol header
+        delay.ms(25);
+        RawRfPattern::markReply(payload); // return the same 31 bytes
         const auto tx=phy.transmit(payload);
         if (tx.result==decltype(tx.result)::ACKED) ++txAck;
         else ++txFail;
