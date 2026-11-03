@@ -51,6 +51,43 @@ int main() {
   assert(wrapB.counters().gaps==0);
   assert(wrapA.make(PairedFrame::Kind::DATA,0,1,data,1,raw,width)==PairedFrame::Error::OK);
   assert(width==9);
+  // Every dynamic payload body length 0..24 round-trips; RF DPL supplies LEN.
+  for(uint8_t len=0;len<=24;++len) {
+    PairedFrame::Header h;
+    h.sessionId=0xCAFE;h.flags=static_cast<uint8_t>(PairedFrame::Kind::DATA);
+    assert(PairedFrame::encode(h,data,len,raw,width)==PairedFrame::Error::OK);
+    assert(width==static_cast<uint8_t>(8U+len));
+    assert(PairedFrame::decode(raw,width,v)==PairedFrame::Error::OK);
+    assert(v.length==len && v.header.sessionId==0xCAFE);
+    assert(!std::memcmp(v.body,data,len));
+  }
+  // Delayed/duplicated ACK Payload must not roll back advertised credit.
+  PairedLink creditA(true,0x2727);
+  PairedFrame::Header creditH;
+  creditH.sessionId=0x2727;
+  creditH.txSeq=20;creditH.rxCredit=4;creditH.lossAB=2;
+  assert(PairedFrame::encode(creditH,0,0,raw,width)==PairedFrame::Error::OK);
+  assert(PairedFrame::decode(raw,width,v)==PairedFrame::Error::OK);
+  assert(creditA.receive(v)==PairedLink::Receipt::NEW_FRAME);
+  assert(creditA.peerCredit()==4 && creditA.remoteLoss()==2);
+  creditH.txSeq=21;creditH.rxCredit=1;creditH.lossAB=3;
+  assert(PairedFrame::encode(creditH,0,0,raw,width)==PairedFrame::Error::OK);
+  assert(PairedFrame::decode(raw,width,v)==PairedFrame::Error::OK);
+  assert(creditA.receive(v)==PairedLink::Receipt::NEW_FRAME);
+  assert(creditA.peerCredit()==1 && creditA.remoteLoss()==3);
+  creditH.txSeq=20;creditH.rxCredit=255;creditH.lossAB=0;
+  assert(PairedFrame::encode(creditH,0,0,raw,width)==PairedFrame::Error::OK);
+  assert(PairedFrame::decode(raw,width,v)==PairedFrame::Error::OK);
+  assert(creditA.receive(v)==PairedLink::Receipt::STALE);
+  assert(creditA.peerCredit()==1 && creditA.remoteLoss()==3);
+  creditH.txSeq=21;
+  assert(PairedFrame::encode(creditH,0,0,raw,width)==PairedFrame::Error::OK);
+  assert(PairedFrame::decode(raw,width,v)==PairedFrame::Error::OK);
+  assert(creditA.receive(v)==PairedLink::Receipt::DUPLICATE);
+  assert(creditA.peerCredit()==1 && creditA.remoteLoss()==3);
+  for(unsigned i=0;i<17;++i)creditA.noteLocalDrop();
+  assert(creditA.localDrops()==1 && creditA.counters().rxDrops==17);
+
   // Reusing a single object for different hardware roles resets statistics,
   // credit and the session epoch without carrying old RX metadata forward.
   a.configure(false,0xABCD);
