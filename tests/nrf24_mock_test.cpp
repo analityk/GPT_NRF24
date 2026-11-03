@@ -128,6 +128,10 @@ int main() {
     assert(!radio.readDynamicPayload(values,width) &&
            width==33 && hw.flushCount==beforeFlush+1);
     hw.rxWidth=32;
+    assert(radio.writeDynamicPayload(values,8));
+    assert(hw.txPayloadCount==40 && memcmp(hw.txPayload,values,8)==0);
+    assert(!radio.writeDynamicPayload(values,0));
+    assert(!radio.writeDynamicPayload(values,33));
     assert(!radio.readRegisters(0x05,values,0));
     assert(!radio.writeRegisters(0x05,values,6));
     uint8_t s=0;
