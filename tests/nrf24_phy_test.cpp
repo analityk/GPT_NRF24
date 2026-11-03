@@ -60,9 +60,11 @@ int main() {
     assert(!r.ce);
     bool received=true;
     assert(phy.receive(payload,received) && !received);
+    r.flags=0x40; // hardware RX_DR asserted by incoming payload
     r.rxEmpty=false;
     for (int i=0; i<32; ++i)r.rxFrame[i]=static_cast<uint8_t>(31-i);
-    assert(phy.receive(payload,received) && received);
+    bool sawRxDr=false;
+    assert(phy.receive(payload,received,&sawRxDr) && received && sawRxDr);
     assert(payload[0]==31 && payload[31]==0 && r.rxEmpty);
     r.flags=0x20;
     r.polls=0;

@@ -73,6 +73,8 @@ static uint16_t invalidRx=0;
 static uint16_t txAck=0;
 static uint16_t txFail=0;
 static uint16_t replyTimeout=0;
+static uint16_t rxDrSeen=0;
+static bool lastRxDr=false;
 
 static const char* txName(Nrf24Phy<Nrf24<SpiMaster, GPIO>, AvrDelay>::TxStatus s) {
     typedef Nrf24Phy<Nrf24<SpiMaster, GPIO>, AvrDelay> Phy;
@@ -91,6 +93,7 @@ static void reportCounters() {
     logLine.text(" TX_ACK="); logLine.hex16(txAck);
     logLine.text(" TX_FAIL="); logLine.hex16(txFail);
     logLine.text(" REPLY_TO="); logLine.hex16(replyTimeout);
+    logLine.text(" RX_DR="); logLine.hex16(rxDrSeen);
     logLine.send();
 }
 
@@ -102,11 +105,16 @@ static void commands() {
 }
 
 static bool pollRx(bool& received) {
-    if (!phy.receive(payload,received)) {
+    bool sawRxDr=false;
+    if (!phy.receive(payload,received,&sawRxDr)) {
         logLine.reset();
         logLine.text("RADIO SPI ERROR RX");
         logLine.send();
         return false;
+    }
+    if (received) {
+        lastRxDr=sawRxDr;
+        if (sawRxDr) ++rxDrSeen;
     }
     return true;
 }
@@ -147,6 +155,7 @@ static void initiatorLoop() {
         logLine.text(" TX="); logLine.text(txName(tx.result));
         logLine.text(" ARC="); logLine.hex8(tx.arc);
         logLine.text(" REPLY="); logLine.text(gotReply ? "OK" : "MISS");
+        logLine.text(" RD="); logLine.text((gotReply && lastRxDr) ? "1" : "0");
         logLine.send();
         ++nextSeq;
         delay.ms(200); // responder has time to return to PRX
@@ -190,6 +199,7 @@ static void responderLoop() {
         logLine.text("B SEQ="); logLine.hex16(seq);
         logLine.text(" RX=OK TX="); logLine.text(txName(tx.result));
         logLine.text(" ARC="); logLine.hex8(tx.arc);
+        logLine.text(" RD="); logLine.text(lastRxDr ? "1" : "0");
         logLine.send();
     }
 }

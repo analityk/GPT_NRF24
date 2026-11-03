@@ -80,13 +80,17 @@ public:
 
     // Poll RX FIFO, not just RX_DR: clearing one IRQ must not conceal
     // another already buffered packet. No dynamic payloads in this test.
-    bool receive(uint8_t* data, bool& received) {
+    bool receive(uint8_t* data, bool& received, bool* sawRxDr=0) {
         received=false;
+        if (sawRxDr) *sawRxDr=false;
         if (!data) return false;
+        uint8_t irqStatus=0;
         uint8_t fifo=0;
-        if (!radio_.readRegister(Radio::FIFO_STATUS, fifo)) return false;
+        if (!radio_.status(irqStatus) ||
+            !radio_.readRegister(Radio::FIFO_STATUS, fifo)) return false;
         if (fifo & 0x01U) return true; // RX_EMPTY
         if (!radio_.readPayload(data) || !radio_.clearIrq(0x40)) return false;
+        if (sawRxDr) *sawRxDr=(irqStatus & 0x40U)!=0;
         received=true;
         return true;
     }
