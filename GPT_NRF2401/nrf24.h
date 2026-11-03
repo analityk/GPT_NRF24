@@ -114,6 +114,13 @@ public:
         return transaction(0x61,0,dst,width,0);
     }
 
+    // W_TX_PAYLOAD with a variable 1..32B payload. DPL must already be
+    // enabled on the selected pipe. No fixed-width padding is transmitted.
+    bool writeDynamicPayload(const uint8_t* bytes,uint8_t count) {
+        return bytes && count>=1 && count<=32 &&
+               transaction(0xA0,bytes,0,count,0);
+    }
+
     bool writeAckPayload(uint8_t pipe,const uint8_t* bytes,uint8_t count) {
         if (pipe>5 || !bytes || count==0 || count>32) return false;
         return transaction(static_cast<uint8_t>(0xA8U|pipe),
