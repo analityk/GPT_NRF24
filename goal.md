@@ -1,41 +1,23 @@
-# Cel projektu GPT_NRF24
+# Cel GPT_NRF24 — pojedynczy dwuwęzłowy rdzeń radiowy
 
-## M1 — logiczny full duplex przez dwa nRF24L01+
+## Cel bieżącego etapu
 
-Dwie identyczne płytki RF-Nano z ATmega328P i wbudowanym nRF24L01+ mają automatycznie odnaleźć się i zestawić łączność radiową. Każda płytka jest podłączona przez USB do własnego terminala.
+Dwa identyczne RF-Nano (ATmega328P + nRF24L01+) wymieniają pakiety nRF24L01+ **DATA ↔ sprzętowy ACK Payload**, tworząc dwa logiczne kierunki komunikacji na fizycznie półdupleksowym radiu. Jeden firmware wybiera rolę lokalnie przez ADC0: A/PTX albo B/PRX. Ramka ma 8 B diagnostycznego nagłówka oraz 0–24 bajty **nieinterpretowanego BODY**.
 
-- To, co zostanie wysłane do konsoli urządzenia A, ma pojawić się na konsoli urządzenia B.
-- To, co zostanie wysłane do konsoli urządzenia B, ma pojawić się na konsoli urządzenia A.
-- Oba kierunki mają działać niezależnie z perspektywy użytkownika, również podczas nakładających się prób nadawania.
-- Obie płytki mają działać na identycznym firmware, bez stałego przypisania roli nadajnika/odbiornika.
-- Urządzenia mają samodzielnie odnajdywać partnera i odzyskiwać łączność po chwilowym zaniku.
+Rdzeń powinien poprawnie raportować sekwencje, braki, retransmisje sprzętowe, zapełnienie bufora i stan sesji, rozdzielając potwierdzenie sprzętowe od dostarczenia aplikacyjnego. Nie może uzależniać przepustowości od arbitralnych, wielomilisekundowych opóźnień. Musi działać przy ograniczeniach 2 KB SRAM, bez dynamicznej alokacji.
 
-### Kluczowe założenie fizyczne
+## Potwierdzone wyniki fizyczne
 
-**Pojedynczy nRF24L01+ jest półdupleksowy.** „Full duplex” jest tutaj celem **warstwy logicznej**, a nie cechą fizycznego radia. Rozwiązanie wymaga takiego sterowania TX/RX i rozstrzygania konfliktów, by użytkownicy obu konsol mogli przesyłać dane w obu kierunkach bez ręcznego przełączania ról.
+- Dwa RF-Nano, firmware 8+24 B: około **625 wymian DATA/ACK Payload na sekundę**, przy braku widocznych błędów w zarejestrowanym teście; 24 bajty testowego BODY w każdym kierunku = około **15 kB/s/kierunek**.
+- Niezależnie przetestowano wcześniej UART bridge starego formatu i benchmark 32+32 B (540 wymian/s). Oba programy są w gałęzi archiwalnej, nie w aktualnej kompilacji.
 
-To główne wyzwanie techniczne i centralny cel projektu.
+## Jeszcze nieukończone
 
-## Ciągła telemetria i wykorzystanie łącza
+- Negocjowanie i utrzymywanie prawdziwego identyfikatora sesji, odzyskiwanie synchronizacji po resecie i utracie łącza.
+- Udostępnianie odbiorcom z prawdziwą pamięcią właściwych `RX_CREDIT` i `RX_DROP`, diagnostyka utraty/zwłoki w obu kierunkach.
+- Test dynamicznych, krótkich IDLE i CONTROL w realnym radiu oraz dokładne pomiary latencji, jittera i obciążenia.
+- Możliwość podłączenia usług nad nieinterpretowanym BODY (np. UART, pliki, komunikaty, ewentualnie szyfrowane dane) przez osobne kontrakty. W tej fazie nie implementujemy ani nie definiujemy jeszcze szczegółów tych usług.
 
-Po nawiązaniu łączności radio stale wymienia **naprzemienne ramki o stałym payloadzie 32 bajtów**, nawet gdy oba terminale milczą. Każda ramka zawiera informacje potrzebne do oceny jakości łącza; wolną przestrzeń zajmują dane użytkownika. Oba kierunki muszą mieć osobne statystyki utraty ramek i retransmisji. Wymiana nie może trwale zablokować się po zgubieniu ramki lub restarcie urządzenia.
+**Warunek zaliczenia bieżącego rdzenia:** dwukierunkowe DATA↔ACK Payload, wiarygodne metadane i automatyczne odzyskiwanie sesji w rzeczywistym sprzęcie. Obecny test **potwierdza szybki transfer i podstawową diagnostykę**, nie potwierdza jeszcze pełnej odporności na restarty i przeciążenia.
 
-Liczba bajtów użytkownika w jednej ramce jest mniejsza niż 32, ponieważ część miejsca zajmują nagłówek i telemetria. Szczegóły: `plan.md`.
-
-## Kryterium odbioru M1
-
-Na dwóch fizycznych płytkach z identycznym wsadem:
-
-1. Oba urządzenia nawiązują łączność bez ręcznego wybierania nadajnika i odbiornika.
-2. Tekst wprowadzony do każdej konsoli pojawia się w konsoli drugiej płytki.
-3. Naprzemienne i niemal jednoczesne nadawanie z obu stron nie prowadzi do trwałego zakleszczenia.
-4. Po odłączeniu i ponownym podłączeniu partnera komunikacja wraca.
-5. Przy braku danych użytkownika utrzymywana jest cykliczna, naprzemienna wymiana ramek; obie strony raportują jakość obu kierunków i wykrywają brak partnera.
-6. Ruch UART korzysta z tych samych slotów co telemetria, a jego obciążenie nie uniemożliwia pomiaru jakości łącza.
-7. Implementacja nie używa alokacji dynamicznej.
-
-M1 uznajemy za zakończony dopiero po pozytywnych testach rzeczywistego sprzętu.
-
-## Obecny status
-
-**INITIAL.** Kamień milowy M1 nie został jeszcze odebrany. Dalsze funkcje pozostają poza zakresem obecnego etapu.
+Zachowujemy manualne F7/F12 w Microchip Studio oraz jeden aktualny program; historia wcześniejszych etapów znajduje się w `history.md`.

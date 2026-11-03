@@ -1,203 +1,61 @@
-# GPT_NRF24
+# GPT_NRF24 — dwuwęzłowy rdzeń 8+24 B z ACK Payload
 
-Projekt w C++ dla dwóch płytek **RF-Nano (ATmega328P + nRF24L01+)**, rozwijany wyłącznie w **Microchip Studio / Atmel Studio**.
+Projekt C++11 dla dwóch identycznych **RF-Nano (ATmega328P 16 MHz + nRF24L01+)**, kompilowany w **Microchip Studio / Atmel Studio**. W bieżącym drzewie jest **jeden aktywny firmware** i jeden format ramki. To świadomy punkt wyjścia do dalszych prac nad protokołem, nie gotowy transfer plików ani UART↔UART.
 
-## Cel
+## Aktualny stan sprzętowy
 
-Dwa urządzenia podłączone przez USB do osobnych terminali mają samodzielnie odnaleźć się i przesyłać informacje radiowo w obu kierunkach:
+- **Działa fizycznie na dwóch RF-Nano:** 8 B metadanych + 24 B danych binarnych, dwa kierunki w jednym cyklu DATA A→B / sprzętowy ACK Payload B→A.
+- **Pomiar z 2026-11-03:** stabilne około **625 potwierdzonych wymian na sekundę**, brak widocznych błędów w pokazanych oknach RealTerm. Pełne BODY testowe odpowiada **15 000 B/s na kierunek** (30 000 B/s łącznie). Średni odstęp wymian wynosi około 1,6 ms — **nie jest to osobny pomiar latencji pojedynczej wiadomości**.
+- Rola A = **PTX**, B = **PRX**. Fizycznie radio jest półdupleksowe; logiczne dwa kierunki realizuje sprzętowy ACK Payload. B wysyła odpowiedź wcześniej przygotowaną w FIFO.
+- **Jeszcze nie działa:** automatyczna negocjacja sesji i jej odzyskiwanie po restarcie, UART↔UART w tym nowym profilu, prawdziwy bufor odbiorcy dla `RX_CREDIT`, usługowy transport plików, szyfrowanie. `SESSION_ID=0x4E52` to wyłącznie wartość testowa.
 
-- tekst wpisany w terminalu A pojawia się w terminalu B;
-- tekst wpisany w terminalu B pojawia się w terminalu A;
-- obie płytki korzystają z tego samego firmware;
-- użytkownik nie przełącza ręcznie ról nadajnika i odbiornika.
+## Budowanie i sprawdzenie na płytkach
 
-**Centralne zagadnienie projektu:** nRF24L01+ pracuje fizycznie półdupleksowo. Projekt ma zapewnić logiczny full duplex przez odpowiednie sterowanie transmisją i odbiorem. Szczegóły i kryteria odbioru: [goal.md](goal.md).
+1. Otwórz `GPT_NRF2401.atsln` w Microchip Studio.
+2. Zbuduj **F7**, zaprogramuj ręcznie **F12**. **Nie włączać automatycznego programowania Post-Build**.
+3. Wgraj **ten sam HEX** na obie płytki. A0 do GND → A/PTX; A0 do dodatniego zasilania własnej płytki → B/PRX.
+4. RealTerm na dwóch portach USB/CH340, **115200, 8N1**. Port transmituje tutaj tylko diagnostykę; wpisywanie tekstu **nie wyśle** go do partnera.
+5. W stabilnym stanie powinieneś zobaczyć raporty:
+   - `A TX/s=625 ACK/s=625 ARC=0 MAX=0 BAD=0 IO=0 ...`
+   - `B RX/s=625 Q/s=625 ARC=0 MAX=0 BAD=0 IO=0 ...`
 
-## Telemetria łącza
+Liczba 625 jest wcześniej **zmierzonym punktem odniesienia**, nie gwarancją dla każdych warunków. Dane wysyłane na radiu to obecnie deterministyczny, 24-bajtowy wzorzec testowy sprawdzany przez aplikację diagnostyczną; sam rdzeń traktuje BODY jako nieprzezroczysty ciąg bajtów.
 
-Po nawiązaniu połączenia oba urządzenia mają naprzemiennie nadawać stałe ramki 32 B, także bez danych użytkownika. W każdej ramce mieści się telemetria łącza i — jeśli dostępne — dane z UART. Priorytetem M1 jest wiarygodny pomiar jakości osobno dla obu kierunków. Opis: [plan.md](plan.md).
+## Format radia
 
-## UART — test peryferium
+Sprzętowe DPL zapewnia długość pakietu **8–32 B**; nie wysyłamy redundantnego pola LENGTH. Format `paired_frame.h`:
 
-**Właściciel potwierdził echo bajtu na obu fizycznych RF-Nano (2026-11-03).** Nie przetestowano jeszcze długich serii, pełnego zakresu danych binarnych ani przepełnień. `main.cpp` aktualnie uruchamia nieblokujący **lokalny echo-test USART0** przez USB/CH340. Otwórz każdy port z ustawieniami **115200, 8N1, bez kontroli przepływu**; terminal nie powinien mieć włączonego local echo (inaczej widoczne będą podwójne znaki). Wysłane bajty są odsyłane niezmienione, niezależnie od ich wartości. Testuj każdą płytkę osobno, F7 kompilacja, F12 ręczne programowanie. Włączenie terminala może powodować reset ATmegi przez DTR.
+| Bajt | Pole |
+|---|---|
+| 0 | `TX_SEQ` — kolejna ramka lokalna (mod 256) |
+| 1 | `RX_LAST` — ostatnia widziana ramka drugiej strony |
+| 2 | `LOSS_AB / LOSS_BA` — dwa czterobitowe liczniki luk |
+| 3 | `ARC_LAST / RX_DROP` — czterobitowe metryki |
+| 4 | `RX_CREDIT` — liczba możliwych nowych segmentów 24 B |
+| 5 | `TYPE_FLAGS` — DATA / IDLE / CONTROL + flagi |
+| 6–7 | `SESSION_ID` — 16-bitowy, little-endian |
+| 8–31 | `BODY` — **0–24 bajty, bez interpretacji w rdzeniu** |
 
-Sterownik: `GPT_NRF2401/uart.h/.cpp`; pojedyncza instancja plikowa `static UART uart;` rezerwuje ok. 270 B statycznej pamięci SRAM poza stosem; statyczne kolejki `byte_ring.h`, RX/TX po 127 użytecznych bajtów. Przy długim napływie danych nieobsłużonych przez main RX overflow zwiększa licznik; przy pełnej TX queue `write` zwraca false. Liczniki błędów FE/DOR/UPE są dostępne przez `UART::counters()`; nie są wypisywane do terminala, aby nie zanieczyszczać danych. `tests/uart_ring_test.cpp` jest niezależnym od AVR testem struktury pierścienia.
+Szczegółowe reguły (liczniki modulo, opóźnienie ACK Payload, znaczenie kredytów i zakres gwarancji) znajdują się w [paired-core-v2.md](paired-core-v2.md). **Sprzętowy ACK nie oznacza przyjęcia danych przez aplikację.**
 
-Obie konfiguracje kompilacji (Debug i Release) wymagają i deklarują `-std=c++11`. F_CPU musi odpowiadać 16 MHz: U2X0=1, UBRR0=16 daje ok. 117647 baud (+2,12% względem 115200). PD0=RXD oraz PD1=TXD są zarezerwowane dla USART; bieżący test LED na PD0 został zastąpiony testem UART. Programowanie F12 i konfiguracja Post-Build pozostają bez zmian.
+## Struktura aktywnego kodu
 
-## Stan
+| Warstwa | Pliki | Odpowiedzialność |
+|---|---|---|
+| Aplikacja diagnostyczna | `GPT_NRF2401/main.cpp` | Jeden program A/B, binarny wzorzec BODY, liczniki po UART |
+| Kodek | `paired_frame.h` | Jawne bajtowe kodowanie/dekodowanie 8+24 |
+| Stan łącza | `paired_link.h` | TX/RX, luki, kredyty, sesja, duplikaty |
+| Radio/PHY | `nrf24.h`, `nrf24_ack_phy.h` | Rejestry, SPI, DPL, FIFO, DATA↔ACK Payload |
+| Sprzęt platformy | `spi.*`, `gpio.*`, `adc0.*`, `timer1_clock.*`, `uart.*`, `byte_ring.h`, `avr_delay.h` | Peryferia i diagnostyka, bez zależności protokołu od AVR |
 
-**INITIAL — M1 nieukończony.** Komunikacja radiowa nie została jeszcze potwierdzona testem odbiorczym dwóch płytek dla docelowego firmware.
+Brak `malloc/new`, kontenery statyczne, brak globalnego `-fpack-struct`.
 
-## Środowisko
+## Testy
 
-- Windows i Microchip Studio / Atmel Studio;
-- AVR-GCC C++, mikrokontroler ATmega328P;
-- dwie płytki RF-Nano z wbudowanym nRF24L01+;
-- programowanie bootloaderem USB i AVRDude.
+- `sh tests/run_host_tests.sh` — automatycznie znajduje i uruchamia aktywne testy C++11.
+- `sh tests/build_avr.sh` — kompiluje **jeden aktualny firmware** kompilatorem `avr-g++`, bez programowania płytki.
+- [GitHub Actions](https://github.com/analityk/GPT_NRF24/actions) uruchamia oba zestawy niezależnie.
 
-### Budowanie i programowanie
+## Dawne warianty i historia
 
-Otwórz `GPT_NRF2401.atsln` w Microchip Studio. Projekt wykorzystuje standardową kompilację AVR. Programowanie obu portów COM tym samym plikiem HEX jest wywoływane ręcznie skrótem F12, niezależnie od kompilacji; Post-Build nie uruchamia programatora.
-
-Porty COM i położenie AVRDude są zależne od stanowiska. Nie wpisujemy ich na stałe do protokołu ani aplikacji.
-
-## Zasady rozwoju
-
-Kod ma używać jawnie tworzonych obiektów i statycznych buforów; nie wolno stosować `new/delete` ani dynamicznej alokacji. Zmiany powinny zachowywać podział na obsługę sprzętu, komunikację i logikę użytkową.
-
-## Dokumentacja projektu
-
-- [AGENTS.md](AGENTS.md) — stałe instrukcje dla agenta.
-- [goal.md](goal.md) — cel i warunki odbioru.
-- [plan.md](plan.md) — etapy realizacji.
-- [protocol-v1.md](protocol-v1.md) — projekt formatu binarnego ramki v1 i testowe wektory 32 B.
-- [todo.md](todo.md) — bieżące zadania.
-- [history.md](history.md) — ukończone prace i potwierdzone wyniki.
-- [migracja.md](migracja.md) — samodzielna instrukcja kontynuacji.
-
-Szczegółowe instrukcje testowania komunikacji zostaną uzupełnione wraz z implementacją i weryfikacją M1.
-
-## GPIO
-
-Dodano `GPT_NRF2401/gpio.h` i `gpio.cpp`: statyczne obiekty do sterowania pinami bez Arduino i alokacji dynamicznej. Przykład: `GPIO led(&PORTB, PB5); led.set(); led.clear();`. Metody `i2c_set` i `i2c_clr` zapewniają wejście z pull-up lub aktywne LOW (nie kompletny kontroler I²C). Wymagana weryfikacja kompilacji AVR w Studio.
-
-## SPI + nRF24L01+ — etap testowania sprzętu
-
-Aktualny `main.cpp` po starcie konfiguruje sprzętowe SPI w trybie 0, MSB first, **1 MHz (16 MHz / 16)** i wykonuje test SPI z nRF24L01+. Test rozpoczyna się po 110 ms od ustawienia CE=0 i CSN=1, ponieważ POR radia może trwać do 100 ms. **Nie rozpoczyna transmisji RF** i pozostawia `CONFIG=0x0C` (POWER_DOWN, CRC16).
-
-Dla starszej wersji RF-Nano z ATmega328P zgodnie z dokumentacją producenta: **D9/PB1 = CSN, D10/PB2 = CE, D11/PB3 = MOSI, D12/PB4 = MISO, D13/PB5 = SCK**. W innych wersjach (np. V3) CE/CSN są inaczej podłączone: zmienić powiązania `radioCe` i `radioCsn` w `main.cpp`, nie sterownik nRF. **PB2 musi zawsze pozostać wyjściem sprzętowego SPI master (SS)**; nie wolno przypadkowo ustawić CE=HIGH podczas inicjalizacji magistrali.
-
-Przy otwarciu każdego portu RealTerm (115200 8N1) program wysyła jeden wiersz. Wzorcowy wynik po resecie:
-```text
-NRF24 OK S=0E CFG=0C CH=4C RF=06 FIFO=11
-```
-Wartości STATUS i FIFO mogą się różnić w zależności od stanu FIFO. Wiersz `NRF24 FAIL C=xx REG=xx EXP=xx GOT=xx S=xx CH=xx` informuje o błędzie inicjalizacji: C=01 brak zakończenia transferu SPI, C=02 brak wiarygodnej odpowiedzi radia, C=03 niezgodność odczytu zwrotnego. Znak **`?`** wysłany z terminala ponawia test i wypisuje kolejny wiersz; pozostałe bajty nadal są odsyłane jako echo (w tym trybie `?` jest komendą, nie danymi).
-
-Test sprawdza `STATUS`, zapis/odczyt dwóch różnych wartości `RF_CH` z odtworzeniem oryginalnej, konfigurację i odczyt zwrotny rejestrów nRF oraz 5-bajtowych adresów. Radio otrzymuje: kanał 76 (2476 MHz), 1 Mb/s, CRC16, Enhanced ShockBurst auto-ACK na pipe 0, szerokość 32 B, RF_SETUP=06, SETUP_RETR=3F, FEATURE/DYNPD=0. **Test SPI nie dowodzi jeszcze poprawnej transmisji radiowej ani połączenia między dwiema płytkami.**
-
-Klasy `SpiMaster` (`spi.h/.cpp`) i `Nrf24<Spi, Pin>` (`nrf24.h`) są odseparowane. Sterownik radia nie posiada na stałe przypisanych pinów i nie zależy od AVR; test modelowy `tests/nrf24_mock_test.cpp` symuluje magistralę i rejestry. Przykładowa komenda kompilacji na hoście: `g++ -std=c++11 -Wall -Wextra -Werror -pedantic tests/nrf24_mock_test.cpp -o nrf24_mock_test`. Test wymaga niezależnego uruchomienia na hoście; firmware wymaga kompilacji F7 oraz ręcznego wgrania F12 i sprawdzenia wyniku na obu portach COM.
-
-Źródła pinów i parametrów: [instrukcja RF-Nano V1.1](https://michiel.vanderwulp.be/domotica/Modules/RFNanoKeywish/RF-NANO-Operating-Instruction_V.1.1.pdf) oraz [nRF24L01+ Product Specification](https://www.sparkfun.com/datasheets/Wireless/Nordic/nRF24L01P_Product_Specification_1_0.pdf).
-
-### Ostrzeżenia kompilatora o `packed`
-
-Jeśli Microchip Studio pokazuje `ignoring packed attribute` dla pól referencyjnych sterownika radia, sprawdź ustawienie `Pack Structure Members` w opcjach **C i C++** dla **Debug oraz Release**. W tym projekcie ustawiono je na `False` — globalny `-fpack-struct` jest niepotrzebny i niebezpieczny dla struktur aplikacyjnych. Format radiowy serializuje się jawnie do 32-bajtowej tablicy, bez bezpośredniego mapowania na spakowane obiekty. O sukcesie builda rozstrzyga `Output > Build` i wynik `Rebuild All`, a nie wyłącznie `Error List`.
-
-## Test radiowy RAW32 — bez protokołu v1
-
-Aktualny wsad jest **etapem sprawdzenia sprzętu radiowego**, nie mostem UART↔RF ani implementacją `protocol-v1.md`. Obydwie płytki otrzymują **identyczny HEX**. Ich rolę w samym teście określa wyłącznie pomiar ADC0 po starcie:
-
-- **A / CLASS=00** — połączyć ADC0/A0 z **GND**. Płytka okresowo wysyła 32-bajtowy wzorzec, oczekuje sprzętowego ACK i potem 32-bajtowej odpowiedzi.
-- **B / CLASS=01** — połączyć ADC0/A0 z **3,3 V**. Płytka odbiera wzorzec w PRX, sprawdza każdy bajt, odczekuje na zakończenie sprzętowych ACK, przełącza się do PTX i odsyła odpowiedź; wraca do PRX.
-- W obu przypadkach masy i zasilanie muszą należeć do **własnej** płytki. Nie łączyć ze sobą pinów radiowych ani UART obu płytek. Dla AVCC 5 V, 3,3 V na ADC0 daje ok. 675/1023, czyli CLASS=01. Jeśli A0 pozostanie niepodłączony, klasa jest nieokreślona.
-- ADC0 używa odniesienia AVCC; wynik 10-bitowy jest uśredniany z ośmiu konwersji, zatrzaskiwany po uruchomieniu. Próg: `ADC < 512` → 0, `ADC >= 512` → 1. Nie ma tu enumeracji klas ani automatycznego discovery.
-
-**Po F7 (Microchip Studio) i F12 (ręczne programowanie) otworzyć dwa porty RealTerm 115200 8N1**. Przykładowe odpowiedzi:
-
-```text
-COM A: NRF OK CLASS=00 ADC=0000 MODE=RAW32
-COM A: A SEQ=0000 TX=ACK ARC=00 REPLY=OK RD=1
-COM A: A SEQ=0001 TX=ACK ARC=00 REPLY=OK RD=1
-
-COM B: NRF OK CLASS=01 ADC=02A3 MODE=RAW32
-COM B: B SEQ=0000 RX=OK TX=ACK ARC=00 RD=1
-COM B: B SEQ=0001 RX=OK TX=ACK ARC=00 RD=1
-```
-
-`TX=ACK` oznacza `TX_DS` (układ radiowy otrzymał sprzętowe ACK); `TX=MAX_RT` oznacza wyczerpanie retransmisji radia, `TX=TIMEOUT` lub `TX=SPI_ERR` wskazuje na niedomkniętą operację/błąd. `ARC` jest odczytem sprzętowego `ARC_CNT` dla ostatniej emisji, `RD=1` oznacza zaobserwowaną flagę `RX_DR` przy odbiorze. `REPLY=OK` po stronie A dodatkowo dowodzi, że w programie B przetworzono poprawny wzorzec i odesłano odpowiedź.
-
-Znak `?` odpyta lokalne liczniki: `RX`, `BAD`, `TX_ACK`, `TX_FAIL`, `REPLY_TO`, `RX_DR`. Pozostałe znaki wysyłane z terminala są na tym etapie ignorowane (brak mostu UART-RF). Numery i wzorzec danych są **wyłącznie diagnostyczne**: bajty 0..2 to znacznik i numer testu, pozostałe 29 bajtów mają obliczalną zawartość. Odpowiedź odwraca wyłącznie znacznik. To nie jest nagłówek protokołu v1.
-
-Scenariusze sprzętowe: uruchomić obie płytki, odłączyć zasilanie B (A powinno raportować MAX_RT/MISS), podłączyć ponownie (powinno samoczynnie wrócić ACK/REPLY=OK), powtórzyć reset A. Obecne stałe odstępy testowe służą tylko weryfikacji przełączania TX/RX; nie są docelowym harmonogramem slotów M1. Test nie zapewnia pełnej bezstratności, routingu, negocjacji ról ani logicznego full duplex dla dowolnych danych UART.
-
-**Warstwy kodu:** `nrf24.h` (polecenia SPI/rejestry), `nrf24_phy.h` (sterowanie CE, PRX/PTX, ograniczone operacje TX/RX, przerwania/status), `adc0.h/.cpp` (sprzęt ADC), `board_clock.h` (wspólne F_CPU dla sterowników i opóźnień), `avr_delay.h` (adapter czasów), `rf_raw_pattern.h` (wzorzec testowy), `main.cpp` (wyłącznie scenariusz RAW32). Podstawowa transmisja wymaga prawdziwego testu na obu fizycznych radiach.
-
-Na hoście dodano `tests/nrf24_phy_test.cpp` i `tests/rf_raw_pattern_test.cpp`; testy pomocnicze uruchomiono przez `g++ -std=c++11 -Wall -Wextra -Werror -pedantic` na odpowiednikach bieżącej logiki PHY i wzorca. Kompilacja AVR i fizyczny transfer RF nie zostały jeszcze zweryfikowane.
-
-
-### Potwierdzenie RAW32 na fizycznych płytkach (2026-11-03)
-
-Właściciel potwierdził działającą wymianę A→B→A na RF-Nano, COM10/COM11. Oba terminale pokazują zgodne kolejne `SEQ=000B..0019`, odpowiednio `A TX=ACK ARC=00 REPLY=OK RD=1` oraz `B RX=OK TX=ACK ARC=00 RD=1`. **Fizyczny test dwukierunkowych surowych 32-bajtowych pakietów jest zaliczony.** Opis wcześniejszego etapu wymagającego testu należy traktować jako instrukcję reprodukcji, nie aktualny brak potwierdzenia. Do przetestowania pozostają MAX_RT przy zaniku drugiego urządzenia, recovery, dalsze obciążenia oraz właściwy protokół i UART↔RF.
-
-## Test ramki v1 z payloadem 0/1/23/24 B — następny etap
-
-Od aktualnego `main.cpp` radio **nie wysyła już wzorca RAW32** z poprzedniej próby. Każdy pakiet nadal ma fizycznie **32 bajty**, ale teraz używa **8-bajtowego nagłówka v1** (`CTRL,SRC,DST,SID,TX_SEQ,RX_LAST,SRC_EP,DST_EP`) i **24-bajtowego obszaru BODY**. Parser i koder są odseparowane w `GPT_NRF2401/frame_v1.h` (bez AVR, bez alokacji i bez spakowanych struktur). Kompletna specyfikacja: `protocol-v1.md`.
-
-Do **celowego testu długości** wysyłamy kolejno `BODY LEN=0,1,23,24`; niewykorzystane bajty są zerowane i weryfikowane. `LEN=0` to heartbeat; przy `LEN>0` używany jest **diagnostyczny endpoint 2**, generujący znany deterministyczny wzorzec binarny. Każdy węzeł porównuje treść ze spodziewaną, nie tylko ufa sprzętowemu CRC. Węzeł A rozpoznaje odpowiedź B także przez `RX_LAST`, który musi wskazywać właśnie przesłany `TX_SEQ`; obie strony numerują własne ramki niezależnie w zakresie 0–255.
-
-**Ważne ograniczenie:** `SID=0x2A` jest w tym teście stałą, a nie wynikiem negocjacji `HELLO/READY`; endpoint 2 jest wyłącznie serwisem testowym, a nie gotowym transportem UART RELIABLE. Nie dodano jeszcze ACK aplikacyjnego, buforowania/ponawiania danych użytkownika ani UART↔radio. Ta wersja ma sprawdzić *format v1 i payload na prawdziwym radiu*, bez sugerowania gwarancji dostarczenia.
-
-**Uruchomienie:** na A połączyć A0 z GND, na B A0 z dodatnim zasilaniem **tej samej płytki**; wgrać jeden HEX na obie RF-Nano (F7 kompilacja, F12 ręczne programowanie), otworzyć dwa porty RealTerm 115200 8N1.
-
-Przykładowe oczekiwane linie pierwszych cykli:
-
-```text
-A: NRF OK CLASS=00 ADC=0000 MODE=V1PAYLOAD
-A: A SEQ=00 LEN=00 TX=ACK ARC=00 REPLY=OK IN=17 RD=1
-A: A SEQ=01 LEN=01 TX=ACK ARC=00 REPLY=OK IN=18 RD=1
-A: A SEQ=02 LEN=17 TX=ACK ARC=00 REPLY=OK IN=00 RD=1
-A: A SEQ=03 LEN=18 TX=ACK ARC=00 REPLY=OK IN=01 RD=1
-
-B: NRF OK CLASS=01 ADC=03FF MODE=V1PAYLOAD
-B: B SEQ=00 LEN=00 RX=OK TX=ACK ARC=00 OUT=17 RD=1
-B: B SEQ=01 LEN=01 RX=OK TX=ACK ARC=00 OUT=18 RD=1
-B: B SEQ=02 LEN=17 RX=OK TX=ACK ARC=00 OUT=00 RD=1
-B: B SEQ=03 LEN=18 RX=OK TX=ACK ARC=00 OUT=01 RD=1
-```
-
-Wartości `LEN` i `IN/OUT` zapisane są **szesnastkowo**: `17` oznacza 23 bajty, `18` oznacza 24 bajty. Sekwencje B są niezależne od A, więc po utracie pakietów `IN/OUT` mogą się przesunąć względem przykładu. Warunkiem zaliczenia jest poprawne parsowanie, odbiór długości 0/1/23/24 oraz `REPLY=OK` i `RX=OK` przy prawidłowych ramkach. `TX=MAX_RT`/brak odpowiedzi oznaczają brak potwierdzenia przez radio lub logikę testu. Przepełnienie UART może zgubić wiersz diagnostyczny, ale nie zatrzymuje testu.
-
-Znak `?` pokazuje liczniki z krótkimi etykietami `CNT R=` (poprawne RX), `B=` (błędne), `ACK=` (TX_DS), `F=` (błędy TX), `TO=` (brak odpowiedzi A), `RD=` (RX_DR), `REJ=` (odrzucone przez parser). Pozostałe znaki UART nie są w tej wersji transmitowane radiowo.
-
-**Hostowe testy kodera:** `tests/frame_v1_test.cpp` (pięć dokładnych wektorów 32 B ze specyfikacji, nieznane podtypy, błędne długości, adresy, padding, sesja, ACK) i `tests/v1_probe_pattern_test.cpp` (pełne zakresy 8-bitowego numeru ramki i obu klas, mutacje każdego znaczącego bajtu). Testy logiczne wykonano na komputerze przy użyciu `g++ -std=c++11 -Wall -Wextra -Werror -pedantic`, zakończone PASS. **Nowy wariant firmware nie został jeszcze skompilowany w Microchip Studio ani sprawdzony fizycznie.**
-
-Odłączenie zasilania całej płytki RF-Nano nie jest obecnie dobrym testem samodzielnej odporności radia: odcina również USB/CH340, RealTerm traci port COM, a jego ponowne otwarcie może resetować ATmegę. Właściciel potwierdził wcześniej reset A i przytrzymanie RESET B oraz powrót RAW32; pełny test odcięcia zasilania radia **odłożono do etapu z niezależnym zasilaniem i pomiarem**, nie jest warunkiem tej próby.
-
-### Payload v1 — potwierdzony test sprzętowy 2026-11-03
-
-Właściciel wykonał na dwóch RF-Nano próby kodera/parsing 8+24 B (COM11/B i COM10/A), zrzut pokazuje `SEQ=45..53`, cykl `LEN=00/01/17/18`, poprawne `TX=ACK`, `REPLY=OK`, `RX=OK` i `ARC=00`. Reset jednej lub obu ATmeg nie blokuje wznowienia wymiany. **Etap diagnostycznego payloadu v1 jest fizycznie zweryfikowany.** Obserwowane `RD=0` przy poprawnym odbiorze po stronie B jest możliwe, ponieważ flaga `RX_DR` nie jest jedynym kryterium obecności poprawnej ramki w FIFO. Nadal nie wdrożono rzeczywistego mostu UART, aplikacyjnego ACK, retry ani negocjacji SID; poprzednie instrukcje dotyczące jeszcze niepotwierdzonego firmware są historyczne.
-
-## UART↔radio — pierwszy most dwukierunkowy (2026-11-03)
-
-Aktualny `main.cpp` przesyła **rzeczywiste bajty UART przez radio** z nagłówkiem v1, numerem segmentu, aplikacyjnym ACK i deduplikacją. Dane krążą w naprzemiennych slotach A→B i B→A przy identycznym firmware. Protokół wymienia HELLO, HELLO_REPLY, READY i READY_ACK zanim zacznie transport danych. Jedna fizyczna ramka to 32 B; aktualny most pobiera maksymalnie **18 bajtów UART na segment**. `CONTROL/DATA_ACK` pozwala połączyć potwierdzenie i dane drugiego kierunku. Program nadal nadaje puste ramki, gdy nie ma danych.
-
-### Próba z RealTerm
-
-1. A0 płytki **A** połączyć z jej **GND**, A0 płytki **B** z jej dodatnim zasilaniem (AVCC/3,3 V; zawsze w dopuszczalnym zakresie ADC). Na obu wgrać **ten sam HEX**: F7 build, F12 ręczne programowanie.
-2. Otworzyć oba porty (typowo COM10 i COM11) w RealTerm: **115200 baud, 8N1**, **local echo wyłączone**, brak flow control. DTR przy otwieraniu portu może resetować ATmegę; sesja powinna zostać automatycznie wznowiona.
-3. Poczekać na ustabilizowanie sesji i wysłać np. `Ala ma kota` na A. Tekst powinien pojawić się **wyłącznie na B**. Z B nadać `12345`; ciąg powinien pojawić się **wyłącznie na A**. Spróbować nadawania z obu terminali w podobnym czasie.
-4. Sprawdzić również CR/LF oraz bajty binarne `00`, `3F` (znak `?`) i `FF`: **wszystkie są danymi**, nie komendami. Lokalny echo w RealTerm musi być wyłączony, inaczej obraz będzie mylący.
-5. Powtórzyć test po resecie jednej ATmegi, najpierw bez danych oczekujących, a następnie z krótką niedostarczoną porcją. Z uwagi na brak trwałego dziennika, po resecie możliwe jest powtórne doręczenie ostatniego segmentu. Nie uznawać tego scenariusza za exactly-once.
-
-W tej wersji **nie ma żadnych komunikatów tekstowych ani statystyk wypisywanych do UART**. Inaczej zanieczyścilibyśmy dowolny plik binarny. Diagnostyka jest dostępna na razie w licznikach w RAM (`counters`, `bridge.stats()`, `uart.counters()`) podczas debugowania.
-
-**Przepustowość wejściowa jest ograniczona.** UART fizycznie przyjmuje ~115200 baud, podczas gdy stop-and-wait z czasami przełączania RF przekazuje znacznie mniej bajtów na sekundę. RX ma tylko 127 użytecznych bajtów. **Nie wysyłać jeszcze całego pliku z RealTerm bez pacingu** — może dojść do nieodwracalnego przepełnienia UART RX, mimo niezawodności ramek radiowych. Pierwsza próba to krótkie wiadomości, potem pliki z kontrolowanym odstępem między bajtami i porównaniem bajt po bajcie. Docelowe rozwiązanie wymaga sprzętowej lub hostowej kontroli przepływu.
-
-**Źródła kodu:** `frame_v1.h` (wire format), `uart_transport_v1.h` (stop-and-wait, DATA_ACK, deduplikacja, BUSY), `session_v1.h` (maszyna sesji), `boot_epoch.h/.cpp` (EEPROM wear-level), `uart.h/.cpp` (atomowy `writeAll`), `main.cpp` (testowy harmonogram A/B), `nrf24_phy.h` (sprawdzone TX/RX). `tests/run_host_tests.sh` wykonuje testy hostowe; opcjonalnie uruchamia je też workflow GitHub Actions. Nie zmienia to kompilatora ani procesu wgrywania firmware Microchip Studio.
-
-**Status:** kod w repozytorium, podstawowy test modelowy handshake i dwukierunkowego ACK oraz test 2×1000 bajtów ze stratami przeszły lokalnie na hostowym g++ C++11. **Brak jeszcze potwierdzenia kompilacji AVR i działania mostu na obu płytkach.** Pozostaje również walidacja dużych plików, restarów z aktywnymi danymi oraz granic buforów.
-
-### Most UART↔RF — pierwszy wynik sprzętowy (2026-11-03)
-
-Właściciel potwierdził na zrzucie RealTerm prawidłową dwukierunkową wymianę **rzeczywistych** wiadomości: COM10→COM11 `ala ma kota`, COM11→COM10 `kot ma ale`. Zapis jest widoczny bez dodatkowych znaków. **Podstawowy test funkcjonalny obu kierunków jest zaliczony.** Poprzednie wzmianki o oczekiwaniu na pierwszą próbę są historyczne. Nadal wymagane są testy jednoczesnego ruchu, wiadomości większych od segmentu, dowolnych bajtów binarnych, przepełnienia RX UART i restartów w trakcie transportu; M1 nie jest jeszcze odebrany.
-
-## Szybki rdzeń sprzętowego ACK Payload — aktualny wybór aplikacji
-
-Obecnie `GPT_NRF2401/application_select.h` ma `GPT_NRF24_ACK_BENCHMARK=1`, co wybiera **odizolowany test 32 B A→B + 32 B B→A w sprzętowym ACK Payload**, z bieżącym pomiarem ramek/s na obu konsolach. Poprzedni most UART pozostaje w `main.cpp` i można go przywrócić przez zmianę tego makra na 0. Pełna instrukcja pomiaru i dokładna interpretacja pól: [`ack-payload-benchmark.md`](ack-payload-benchmark.md). **Brak jeszcze sprzętowego potwierdzenia wyników nowego rdzenia.**
-
-### Pierwszy wynik z rzeczywistego ACK Payload (2026-11-03)
-
-Na obu płytkach uzyskano stabilne **540 pełnych wymian/s**: A TX/s=540 i ACK/s=540, B RX/s=540 i Q/s=540, wszystkie liczniki EMPTY/MAX/ARC/BAD/IO/GAP/FULL równe zero w pokazanych oknach. Surowy payload 32 B w każdą stronę = **17 280 B/s na kierunek**, w sumie 34 560 B/s. Średni odstęp między transakcjami to **1,85 ms**. Nie jest to zmierzona latencja pojedynczej ramki ani przepustowość danych UART. Szczegóły: `history.md`, `ack-payload-benchmark.md`.
-
-## Nowy rdzeń z 8-bajtową diagnostyką i 24 B opaque DATA (2026-11-03)
-
-W aktualnym `application_select.h` domyślny `GPT_NRF24_APPLICATION=2` wybiera nowy rdzeń na sprzętowym ACK Payload: `paired_frame.h` (jawny wire format), `paired_link.h` (niezależna diagnostyka A→B i B→A), `paired_core_main.cpp` (weryfikacja binarnych 24B danych). Wspólny HEX, A0 GND→A/PTX, A0 własne VCC→B/PRX. DPL: 8..32B; typ IDLE zajmuje tylko 8B, pełne DATA 32B.
-
-W tym eksperymencie RealTerm służy **wyłącznie do odczytu liczników**, nie do przesyłania tekstu między portami: `PAIR CORE A/B...`, `TX/s`, `ACK/s`, `RX/s`, `Q/s`, `ARC`, `MAX`, `GAB/GBA`, `DROP`, `BAD`. BODY jest ignorowany przez rdzeń i wypełniany w aplikacji 24B wzorcem testowym. **SESSION_ID=0x4E52 jest stały tylko na potrzeby eksperymentu**; później potrzebny handshake i ochrona przed resetem. Nie jest to jeszcze gotowy transport aplikacyjny, sesja P2P ani szyfrowanie.
-
-Dostępne warianty: `0` = poprzedni, fizycznie sprawdzony UART bridge, `1` = benchmark 32+32B (540 wymian/s zmierzone sprzętowo), `2` = NOWY rdzeń 8+24B (wymaga testu fizycznego). Zmienia się jedno makro w `application_select.h`, projekt i programowanie F7/F12 pozostają bez zmian. Specyfikacja i instrukcja: [`paired-core-v2.md`](paired-core-v2.md). Testy hostowe i cross-build AVR wariantów 0/1/2 PASS w GitHub Actions; nowego wyniku sprzętowego jeszcze nie ma.
-
-### Potwierdzenie sprzętowe 8+24 B — 2026-11-03
-
-W dwóch RealTerm na fizycznych RF-Nano nowy `GPT_NRF24_APPLICATION=2` osiąga stabilne **~625 pełnych wymian/s**: A TX/s=ACK/s=625, B RX/s=Q/s=625 (czasem 626 z niezależnych okien); widoczne ARC/MAX/BAD/IO/GAB/GBA/DROP/FULL=0. Dane testowe 24 B × 625/s dają **~15 kB/s na kierunek** (łącznie 30 kB/s), a średnia repetycja wynosi **1,6 ms**. Jest to pomiar wzorca binarnego w rdzeniu DATA↔ACK Payload, **nie transfer UART ani pomiar indywidualnej latencji**. Wynik 540/s poprzedniego benchmarku pozostaje archiwalnym punktem odniesienia; tryby 0/1/2 dostępne. `SESSION_ID` nadal testowy.
+Starszy most UART, odrębny benchmark 32+32 B, stary format v1 oraz związane z nimi źródła i testy zostały **wycofane tylko z bieżącej gałęzi**, aby nie utrzymywać kilku równoległych aplikacji. Zachowano je w gałęzi [`archive/pre-paired-core-cleanup-2026-11-03`](https://github.com/analityk/GPT_NRF24/tree/archive/pre-paired-core-cleanup-2026-11-03), wskazującej commit [`d91630509ba3`](https://github.com/analityk/GPT_NRF24/commit/d91630509ba32fb62ab0437ff2d2b5770feae31c). Pełne wyniki eksperymentów pozostają w `history.md`. Odtwarzanie starszych testów wymaga świadomego przejścia do archiwalnej wersji, a nie przełączania makra w bieżącym firmware.

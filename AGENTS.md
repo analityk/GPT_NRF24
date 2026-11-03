@@ -28,9 +28,13 @@ Instrukcje muszą być samowystarczalne. Fakty wymagające zachowania należy za
 
 nRF24L01+ jest radiem **półdupleksowym**. Jednoczesne użytkowanie dwóch kierunków komunikacji ma zapewniać **logiczny full duplex**, realizowany przez sterowanie nadawaniem i odbiorem, koordynację transmisji i obsługę kolizji. Nie należy przedstawiać tego jako fizycznego jednoczesnego TX/RX.
 
-W M1 obowiązuje cykliczna, naprzemienna wymiana ramek o stałym payloadzie 32 B, nawet przy pustym UART. Nagłówek telemetrii zajmuje część ramki, a pozostałe bajty przenoszą dane użytkownika. Jakość obu kierunków mierzyć niezależnie; odróżniać luki sekwencji, retransmisje sprzętowe, błędy ACK i straty danych aplikacyjnych. Po utracie slotu protokół musi się sam resynchronizować.
+W aktualnym etapie **jedyny aktywny format** to sparowany rdzeń 8 B nagłówka + 0–24 B nieinterpretowanego BODY, DPL 8–32 B. A inicjuje transmisje jako PTX, B pozostaje PRX, a zwrotne dane podróżują w hardware ACK Payload. Jakość obu kierunków mierzyć niezależnie; odróżniać luki sekwencji, retransmisje sprzętowe, błędy ACK i odrzucenia danych aplikacyjnych. Po utracie łącza protokół ma docelowo sam się resynchronizować. **Obecne SESSION_ID=0x4E52 i RX_CREDIT=1 są tylko wartościami testowymi** — nie przypisywać im gwarancji parowania ani kontroli przepływu.
 
 Należy rozdzielać potwierdzenie sprzętowego odbioru ramki od faktycznego przekazania jej danych do aplikacji. Nie deklaruj bezstratności, odporności na kolizje czy czasu dostarczenia, jeśli nie potwierdzają tego testy.
+
+## Bieżąca struktura firmware
+
+W `main` utrzymujemy jeden program `GPT_NRF2401/main.cpp`. Kodek (`paired_frame.h`), stan łącza (`paired_link.h`) i sprzętowe PHY (`nrf24_ack_phy.h`) są oddzielne. Starsze eksperymenty znajdują się wyłącznie w archiwalnej gałęzi `archive/pre-paired-core-cleanup-2026-11-03`. Nowe zadania rozwijać w aktywnych, testowalnych warstwach, nie przywracać rozgałęzionej kompilacji `0/1/2` ani historycznych artefaktów bez wyraźnej potrzeby.
 
 ## Reguły implementacji i weryfikacji
 

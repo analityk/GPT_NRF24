@@ -1,83 +1,52 @@
-# Sparowana para P2P — rdzeń RF 8+24, profil diagnostyczny
+# Paired Core — format 8+24 B i sprzętowe ACK Payload
 
-**Wersja dokumentu:** 2026-11-03. **Status:** zaimplementowany i przetestowany na hoście oraz skompilowany krzyżowo AVR; **nieprzetestowany jeszcze fizycznie**. Oddzielny format od `protocol-v1.md`, który pozostaje formatem poprzedniego mostu UART.
+**Status 2026-11-03:** główny, jedyny format aktywnego firmware. Przetestowany na dwóch fizycznych RF-Nano: około 625 wymian/s. Pełny format jest częścią aktualnego `main`, a dawny `protocol-v1.md` dostępny jest tylko w gałęzi archiwalnej.
 
-## Cel i zakres
+## Warstwa fizyczna i podział odpowiedzialności
 
-Dwa urządzenia z jednym radiem nRF24L01+ każde: A utrzymuje PTX, B utrzymuje PRX. Pełny dupleks LOGICZNY realizują DATA A→B i wcześniej przygotowany sprzętowy ACK Payload B→A. Przebiegi radiowe nie zachodzą jednocześnie. Rdzeń przesyła **BODY jako nieprzezroczysty ciąg bajtów**; nie interpretuje terminala, pliku, TCP-like ani ewentualnego szyfrogramu. W szczególności nie zapewnia aplikacyjnego niezawodnego dostarczenia, ponieważ auto-ACK radia nie oznacza przyjęcia przez usługę.
+A (A0→GND) jest stale PTX; B (A0→plus) stale PRX. A wysyła DATA, B w tej samej operacji Enhanced ShockBurst odsyła wcześniej przygotowaną wiadomość przez **sprzętowy ACK Payload**. Radio jest półdupleksowe. PTX wyzwala każdą transakcję; odpowiedź PRX jest opóźniona względem świeżo odebranej ramki. SPI 8 MHz, radio 1 Mb/s, adres 5 B, sprzętowe CRC16, retry `SETUP_RETR=0x23`. `NrfAckPayloadPhy` używa minimalnego odstępu sprzętowego, flag `TX_DS/MAX_RT`, FIFO i timeoutu, a nie sztucznego slotu 20–25 ms.
 
-`FEATURE.EN_DPL` i `FEATURE.EN_ACK_PAY` aktywne, `DYNPD.DPL_P0` aktywny. DPL definiuje rzeczywistą szerokość odczytaną z radia przez R_RX_PL_WID. Payload ramki radiowej ma **8..32 B**; długość BODY = szerokość − 8, od 0 do 24 B. Dla IDLE długość BODY=0, czyli *8 B na radiu*; dla nasyconego DATA długość 32 B. Sprzętowe CRC16, adres 5B, kanał 76, 1Mb/s; dla benchmarku SPI8MHz.
+Sprzętowa DPL wyznacza rozmiar payloadu **8..32 B**. `BODY_LENGTH = DPL_WIDTH - 8`, czyli 0..24 B. Rozmiaru nie powtarzamy w nagłówku; 0-bajtowy BODY w ramce IDLE oznacza tylko 8 bajtów payloadu radiowego. Rdzeń nie interpretuje BODY; testowa aplikacja wypełnia je wzorcem, ale nie jest to format aplikacyjny.
 
-## Formalna mapa nagłówka — dokładnie 8 bajtów
+## Układ bajtów
 
-| Offset | Pole | Bity i znaczenie |
+| Offset | Pole | Semantyka |
 |---|---|---|
-| 0 | `TX_SEQ` | 8-bitowy numer **nowej** ramki własnego urządzenia, modulo 256; DATA, IDLE i CONTROL; wewnętrzne retransmisje nRF nie zmieniają numeru |
-| 1 | `RX_LAST` | Numer ostatniej **poprawnej ramki RF** partnera; przed pierwszym odbiorem `FF`; **nie jest** aplikacyjnym ACK ani potwierdzeniem odbioru przez UART |
-| 2 | `LOSS` | b3..0: licznik luk **A→B**, właściciel B; b7..4: licznik luk **B→A**, właściciel A; druga wartość jest echem ostatnio znanej partnerowi |
-| 3 | `QUALITY` | b3..0 `ARC_LAST`: ostatni odnotowany ARC_CNT strony PTX A; na PRX B pole jest echem ostatnio widzianej wartości A; b7..4 `RX_DROP`: lokalne odrzucenia poprawnych ramek z braku zasobów lub przez sink |
-| 4 | `RX_CREDIT` | Liczba dodatkowych pełnych segmentów BODY o długości **24 B**, które lokalny odbiornik może przyjąć; 0 = wstrzymaj nowe DATA; nie oznacza gotowości radia do wysyłania sprzętowego ACK |
-| 5 | `TYPE_FLAGS` | b1..0 TYPE, b2 URGENT, b3 PAUSE, b4 RESYNC, b5 WANT_PTX, b6 OVERFLOW, b7 REPORT |
-| 6 | `SESSION_ID_LO` | Młodszy bajt 16-bitowego ID aktywnej sesji |
-| 7 | `SESSION_ID_HI` | Starszy bajt ID sesji |
-| 8..(7+LEN) | `BODY` | **0–24 dowolnych bajtów**, bez interpretacji na poziomie PHY/MAC |
+| 0 | `TX_SEQ` | 8-bitowy numer kolejnej **nowej** ramki; moduł 256, nie zmienia się podczas retransmisji wykonanej wewnętrznie przez radio |
+| 1 | `RX_LAST` | Ostatni poprawny numer ramki partnera widziany przez rdzeń radiowy; `0xFF` przed pierwszym odbiorem. **Nie jest aplikacyjnym ACK** |
+| 2 | `LOSS` | b3..0: braki A→B, licznik właściciela B, modulo16; b7..4: braki B→A, licznik właściciela A, modulo16. Druga strona echuje ostatnią widzianą wartość |
+| 3 | `QUALITY` | b3..0 `ARC_LAST`: ostatni zmierzony sprzętowy `ARC_CNT` PTX; b7..4 `RX_DROP`: lokalne odrzucenia modulo16 |
+| 4 | `RX_CREDIT` | Liczba dostępnych miejsc na kolejne pełne segmenty 24 B u odbiorcy, 0 oznacza wstrzymanie nowych danych, nie ramek kontrolnych |
+| 5 | `TYPE_FLAGS` | b1..0: `TYPE`; b2 `URGENT`, b3 `PAUSE`, b4 `RESYNC`, b5 `WANT_PTX`, b6 `OVERFLOW`, b7 `REPORT` |
+| 6–7 | `SESSION_ID` | 16 bitów little-endian identyfikatora aktywnej sesji |
+| 8..31 | `BODY` | 0–24 bajty użytkownika lub informacji CONTROL, przezroczyste dla warstw PHY i `PairedFrame` |
 
-`TYPE=0` DATA, `1` IDLE (BODY=0), `2` CONTROL (co najmniej 1 bajt BODY), `3` EXT (zarezerwowane). Zapis wielobajtowy little-endian, brak C++ packed, brak kopii nagłówka jako struktury ABI. Nie używamy jeszcze większości flags w działającej aplikacji diagnostycznej; to przestrzeń zarezerwowana na późniejszy sterownik MAC.
+Typy: `DATA=0`, `IDLE=1` (BODY=0), `CONTROL=2` (BODY ≥1), `EXT=3` (zarezerwowany). Każda ramka jest kodowana bajt po bajcie; żadnych struktur `packed` i żadnego odwołania do AVR ABI.
 
-## Diagnostyka i reguły
+## Reguły interpretacji i bezpieczeństwo
 
-- **Braki nie są BER**. Licznik LOSS jest obserwacją luk w numerach nowo wysłanych ramek. Jeśli radio wykona retransmisję i ostatecznie doręczy pakiet, ARC może wzrosnąć bez luki. Jeśli całe łącze zamilknie, brak nowych numerów nie daje sam z siebie liczby brakujących ramek.
-- Dla 8-bitowej sekwencji różnice `1..127` są traktowane jako nowe numery, `0` jako duplikat, `128..255` jako stare/niejednoznaczne. Numeracja `255→0` jest prawidłowa. Liczniki nibbles narastają modulo 16 i **nie są pełną statystyką**; lokalne `PairedLink::Counters` utrzymują szersze podsumowania.
-- Wcześniejszy/stary pakiet **nie może cofnąć `RX_CREDIT` ani telemetrii**: aktualizacja odbywa się wyłącznie dla nowego numeru w tej samej sesji. Wyższa warstwa, która chce lepszej rozdzielczości, może później użyć pełnego raportu CONTROL.
-- W przypadku ACK Payload informacja `RX_LAST`, `RX_CREDIT` i `LOSS` jest **opóźniona o co najmniej jedną transakcję**, ponieważ PRX musi załadować ACK zanim nastąpi odbiór wyzwalającego DATA. Odbiornik musi odliczać kredyty również dla danych będących w locie; wysyłanie tylko na podstawie świeżo otrzymanego kredytu nie jest kompletne bez tej ostrożności.
-- `RX_DROP` to lokalne odrzucenie poprawnego pakietu **przez wyższą warstwę**, nie liczba fizycznie uszkodzonych ramek. Sygnał `MAX_RT` nadajnika nie dowodzi, że odbiorca nie widział danych. `ARC_LAST` pochodzi tylko z rejestru `OBSERVE_TX.ARC_CNT` PTX. PRX nie ma niezależnego ARC dla ACK Payload.
-- Kodek pozostawia bufor wyjściowy nietknięty przy błędzie, a `PairedLink` ma resetowalny, niezależny od MCU stan. `SESSION_ID` sprawdzany jest przed zmianą liczników i kredytów. 16 bitów **nie zapewnia bezpieczeństwa kryptograficznego ani bezkolizyjności po resetach**.
+- `RX_LAST` dotyczy poprawnie dekodowanej ramki radiowej; jego wartość nie dowodzi jeszcze przyjęcia do kolejki UART lub zapisania pliku.
+- Braki nie są `BER`. `LOSS` pokazuje luki w kolejności nowych ramek; `ARC_LAST` pokazuje retransmisje sprzętowe nawet przy zerowych lukach. `MAX_RT` należy monitorować osobno. Brak nowych ramek sam w sobie nie podaje liczby błędnych bitów.
+- `TX_SEQ` i `RX_LAST` zawijają się modulo256. W `PairedLink` różnica 0 to duplikat, 1..127 — nowa ramka, 128..255 — stara/niejednoznaczna. Po dużej przerwie lub resecie wymagana jest nowa sesja, nie interpretacja starej epoki jako ciąg dalszy.
+- Czterobitowe LOSS i DROP zawijają się modulo16, więc **nie są pełnymi, długoterminowymi licznikami błędów**. Lokalny stan utrzymuje szersze liczniki diagnostyczne.
+- Metadane ACK Payload są przygotowywane **przed** odebraniem następnej ramki. `RX_LAST` i `RX_CREDIT` raportowane przez B są więc opóźnione. Program wyższej warstwy musi uwzględniać już wysłane segmenty w locie. Duplikaty i stare ramki nie mogą cofnąć peer credits.
+- `SESSION_ID` jest sprawdzany przed modyfikacją diagnostyki. **W obecnym programie jest testową stałą `0x4E52`**, a nie wynikiem negocjacji; nie daje odporności na restarty, uwierzytelnienia ani gwarantowanej unikalności.
+- `RX_CREDIT=1` w obecnym generowanym wzorcu jest **symulacją miejsca w odbiorniku**. Nie używać tej wartości jako dowodu gotowości prawdziwego sinku.
 
-## Implementacja i przełączanie aplikacji
+## Źródła i weryfikacja
 
-`GPT_NRF2401/application_select.h` definiuje `GPT_NRF24_APPLICATION`:
+- `paired_frame.h`: niezależny od MCU koder/dekoder 8 B + BODY.
+- `paired_link.h`: stan kierunków, sekwencje, luki, RX_CREDIT, deduplikacja, sesja.
+- `nrf24.h`, `nrf24_ack_phy.h`: rejestry DPL, FIFO, SPI i sprzętowy DATA/ACK Payload.
+- `main.cpp`: pojedyncza diagnostyczna aplikacja fizyczna, A/PTX i B/PRX z tego samego HEX.
+- `tests/*_test.cpp`, `tests/run_host_tests.sh`, `tests/build_avr.sh`: testy hostowe i build AVR, **bez programowania płytki**.
 
-- `0` — wcześniejszy most UART, protokół `frame_v1.h`, osobna sesja v1 i programowanie F12 bez zmian;
-- `1` — zmierzony sprzętowo benchmark **surowych 32+32 B**, wcześniej 540 wymian/s;
-- `2` — NOWY test tego nagłówka: ramki IDLE 8 B i DATA 32 B (8+24), wielokrotnego użytku kodek `paired_frame.h`, stan `paired_link.h`, szybki `nrf24_ack_phy.h`.
+**Zmierzony wynik:** A TX/s=ACK/s około 625, B RX/s=Q/s około 625 (czasami 626 w niezależnych oknach); zgłoszone ARC, MAX, BAD, IO, GAB, GBA, DROP, FULL = 0 w widocznym teście. 24 B × 625/s = **15 000 B/s wzorca testowego na kierunek**, 30 000 B/s łącznie; to nie pomiar transferu UART. Średnia repetycja 1,6 ms nie jest zmierzoną latencją pojedynczej ramki.
 
-W obecnej aplikacji `2` **obie strony używają testowego, sztywnego SESSION_ID=0x4E52**. To *fixture*, a nie sesja naprawdę uzgodniona. Po rzeczywistym parowaniu trzeba przekazać ID z niezależnego mechanizmu handshake i odświeżać je po resetach. Program nie wdraża jeszcze automatycznego parowania, wymiany kluczy, nowego transferu plikowego ani gwarancji dostarczenia po restarcie. Wybór 2 nie unieważnia fizycznego potwierdzenia 0/1, ale **nowy wariant wymaga odrębnego testu na płytkach**.
+**Test sprzętowy:** ten sam firmware, A0 GND na A, A0 plus na B; F7 build i F12 manualne programowanie; RealTerm 115200 8N1 do odczytu diagnostyki. Docelowy kod transportu nie jest jeszcze częścią tego rdzenia.
 
-A0 do GND → A/PTX, A0 do własnego plusa → B/PRX; wspólny HEX. F7 buduj, F12 programuj ręcznie. RealTerm 115200 8N1 wyświetla **diagnostykę raz/s**, nie strumień przesyłany między terminalami. Nie wpisuj tekstu, aby go przesłać: dane użytkownika obecnie są deterministycznym, **binarnym wzorcem 24 B**, który aplikacja tylko tworzy/sprawdza, a sam kodek i PHY go nie interpretują. To fizyczny eksperyment rdzenia, nie docelowy transport UART.
+Referencja radiowa: Nordic nRF24L01+ Product Specification v1.0 — [plik PDF produktu](https://cdn.sparkfun.com/assets/3/d/8/5/1/nRF24L01P_Product_Specification_1_0.pdf).
 
-Oczekiwany układ raportów:
+## Archiwalne eksperymenty
 
-```text
-PAIR CORE A PTX 8+24B SID16 SPI8
-A TX/s=... ACK/s=... ARC=... MAX=... BAD=... IO=... GAB=... GBA=... DROP=... FULL=...
-PAIR CORE B PRX 8+24B SID16 SPI8
-B RX/s=... Q/s=... ARC=... MAX=... BAD=... IO=... GAB=... GBA=... DROP=... FULL=...
-```
-
-`TX/s` liczy operacje potwierdzone przez radio, `ACK/s`/B `RX/s` liczy nowe, poprawne ramki pasującej sesji (włącznie z krótkim IDLE). `Q/s` B oznacza **umieszczenie** pakietu odpowiedzi w kolejce ACK, a nie dowód jego dostarczenia do A. `ARC` w raporcie A sumuje sprzętowe powtórzenia, na PRX B jest 0 (nie ma tam lokalnej obserwacji PTX). `GAB/GBA` i `DROP` są wartościami nibbles modulo16; `BAD` obejmuje błędną treść wzorca, ramkę lub SID. `FULL` liczy zatkanie kolejki ACK.
-
-Zerowe błędy testu wzorca 24 B oznaczają integralność danych w obserwowanym eksperymencie, ale **nie dowodzą niezawodnego transportu użytkowego**. W stanie ciągłego DATA i przy tym samym tempie 540/s hipotetycznie: **540×24 = 12 960 B/s/kierunek**, niezmierzone na nowym kodzie. Aktualny limit UART 115200 8N1 = 11 520 B/s.
-
-## Weryfikacja
-
-Host C++11: `tests/paired_link_test.cpp` (codec, 8..32 DPL, IDLE, credit, nibbles, session, duplikaty, rollover), `tests/nrf24_paired_phy_test.cpp` (DPL 8/32, ACK empty/variable, MAX_RT, timeout, pełna kolejka), `tests/nrf24_mock_test.cpp` (nRF SPI W_TX_PAYLOAD o zmiennej długości). Skrypt `tests/run_host_tests.sh`, CI GitHub Actions. AVR-GCC: `tests/build_avr.sh` buduje bez flashowania **wszystkie tryby 0/1/2** (nie zmienia Microchip Studio). Wyniki sprzętowe dla nowej ramki: **jeszcze niepotwierdzone**.
-
-Najbliższe kolejne etapy: automatyczne wynegocjowanie SESSION_ID16 i reset recovery w warstwie sesji, wiarygodne `RX_CREDIT` z realnym odbiornikiem (UART/sink), pełna telemetria `ARC/MAX_RT` i diagnostyka przy pogorszonym sygnale, oraz test 24 B+8 B z rzeczywistym throughput. Wymagania aplikacyjne (TCP-like, pliki, szyfrowanie) pozostają poza zakresem rdzenia.
-
-**Źródło hardware:** Nordic nRF24L01+ Product Specification v1.0 (FEATURE/DYNPD, ACK payload, FIFOs, OBSERVE_TX, SPI), https://cdn.sparkfun.com/assets/3/d/8/5/1/nRF24L01P_Product_Specification_1_0.pdf
-
-## Wynik na dwóch fizycznych płytkach — 2026-11-03
-
-Zrzut RealTerm użytkownika potwierdza uruchomienie trybu 2 na obu RF-Nano:
-
-```text
-PAIR CORE A PTX 8+24B SID16 SPI8
-A TX/s=625 ACK/s=625 ARC=0 MAX=0 BAD=0 IO=0 GAB=0 GBA=0 DROP=0 FULL=0
-
-PAIR CORE B PRX 8+24B SID16 SPI8
-B RX/s=625 Q/s=625 ARC=0 MAX=0 BAD=0 IO=0 GAB=0 GBA=0 DROP=0 FULL=0
-```
-
-Wynik stabilny przez wiele kolejnych raportów; B chwilowo 626/s w osobnym oknie pomiarowym. A weryfikuje odebrane odpowiedzi B, B weryfikuje dane A. **625 wymian/s × 24 B testowego BODY = 15 000 B/s/kierunek** (30 000 B/s łącznie), przy średnim odstępie transakcji **1,6 ms**. Poprzedni pomiar surowego benchmarku 32B+32B: 540/s; wzrost ~15,7%, którego nie można przypisać mniejszej ramce RF (oba formaty w pełnym DATA mają 32B).
-
-Oznacza to pozytywny test fizyczny rdzenia 8+24, ale **nie test transferu użytkownika**. Nie zmierzono bezpośredniej latencji pojedynczej ramki ani niezawodności przy pogorszonych warunkach. Liczniki 4-bitowe modulo16 mogą nie ujawnić wszystkich zjawisk. `SESSION_ID=0x4E52` nie jest negocjowane; aktualne kredyty są wartościami testowymi, nie wolnym miejscem prawdziwego odbiornika. Nie deklarować gotowości do transportu plików/po resetach bez dalszej implementacji.
+Poprzedni most UART (stary format v1), benchmark 32+32 B, koncepcje nagłówka 4 B i eksperymentalny wybór aplikacji `0/1/2` pozostają w historii Git i w [gałęzi archiwalnej](https://github.com/analityk/GPT_NRF24/tree/archive/pre-paired-core-cleanup-2026-11-03). Nie należą do bieżącego builda.
