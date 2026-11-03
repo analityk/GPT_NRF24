@@ -27,6 +27,8 @@ Instrukcje muszą być samowystarczalne. Fakty wymagające zachowania należy za
 
 nRF24L01+ jest radiem **półdupleksowym**. Jednoczesne użytkowanie dwóch kierunków komunikacji ma zapewniać **logiczny full duplex**, realizowany przez sterowanie nadawaniem i odbiorem, koordynację transmisji i obsługę kolizji. Nie należy przedstawiać tego jako fizycznego jednoczesnego TX/RX.
 
+W M1 obowiązuje cykliczna, naprzemienna wymiana ramek o stałym payloadzie 32 B, nawet przy pustym UART. Nagłówek telemetrii zajmuje część ramki, a pozostałe bajty przenoszą dane użytkownika. Jakość obu kierunków mierzyć niezależnie; odróżniać luki sekwencji, retransmisje sprzętowe, błędy ACK i straty danych aplikacyjnych. Po utracie slotu protokół musi się sam resynchronizować.
+
 Należy rozdzielać potwierdzenie sprzętowego odbioru ramki od faktycznego przekazania jej danych do aplikacji. Nie deklaruj bezstratności, odporności na kolizje czy czasu dostarczenia, jeśli nie potwierdzają tego testy.
 
 ## Reguły implementacji i weryfikacji

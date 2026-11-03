@@ -44,3 +44,9 @@ Po zmianach aktualizować dokumentację i wskazywać wyniki sprawdzeń; niezale�
 ## Checkpoint 2026-11-03
 
 Dodano `gpio.h` i `gpio.cpp` do projektu; `plan.md` opisuje szczegółową kolejność UART → SPI/nRF24 → transfer → protokół → discovery → arbitraż full duplex → testy. Następny krok: kompilacja GPIO w Microchip Studio, potem UART. Nie ma jeszcze potwierdzonego testu sprzętowego GPIO ani RF.
+
+## Decyzja o ciągłym pomiarze łącza — 2026-11-03
+
+Po zestawieniu łącza urządzenia mają wymieniać na przemian ramki o **stałym payloadzie 32 B**, także gdy UART milczy. Każda ramka niesie telemetryczny nagłówek, a reszta jest dostępna dla danych UART; rozmiar danych użytkownika jest więc mniejszy niż 32 B. Najważniejsza jest wiarygodna, niezależna dla obu kierunków informacja o stratach i ponowieniach. Timeout i odzyskanie synchronizacji slotów są obowiązkowe. Szczegóły w `plan.md`.
+
+Właściciel potwierdził kompilację GPIO i miganie diod na obu fizycznych RF-Nano; aktualny `main.cpp` zawiera ten test (commit `9d251e1`). Programowanie zostało przeniesione na ręcznie wywoływane F12; Post-Build w projekcie jest pusty. UART, SPI i łącze radiowe nie zostały jeszcze wdrożone.

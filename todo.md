@@ -9,6 +9,9 @@
 - [ ] Zaimplementować podstawową obsługę nRF24L01+.
 - [ ] Zaimplementować przesyłanie danych UART ↔ radio.
 - [ ] Zapewnić komunikację w obu kierunkach przy identycznym firmware.
+- [ ] Utrzymywać naprzemienną wymianę 32-bajtowych ramek również bez danych UART.
+- [ ] Wprowadzić wiarygodne, oddzielne statystyki jakości A→B i B→A, z rozróżnieniem strat i retransmisji.
+- [ ] Współdzielić miejsce w ramce pomiędzy telemetrią i danymi użytkownika bez blokowania pomiarów.
 - [ ] Zaimplementować automatyczne wykrywanie partnera.
 - [ ] Obsłużyć jednoczesne próby nadawania bez trwałego zakleszczenia.
 - [ ] Obsłużyć utratę i odzyskanie połączenia.

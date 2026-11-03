@@ -16,6 +16,12 @@ Dwie identyczne płytki RF-Nano z ATmega328P i wbudowanym nRF24L01+ mają automa
 
 To główne wyzwanie techniczne i centralny cel projektu.
 
+## Ciągła telemetria i wykorzystanie łącza
+
+Po nawiązaniu łączności radio stale wymienia **naprzemienne ramki o stałym payloadzie 32 bajtów**, nawet gdy oba terminale milczą. Każda ramka zawiera informacje potrzebne do oceny jakości łącza; wolną przestrzeń zajmują dane użytkownika. Oba kierunki muszą mieć osobne statystyki utraty ramek i retransmisji. Wymiana nie może trwale zablokować się po zgubieniu ramki lub restarcie urządzenia.
+
+Liczba bajtów użytkownika w jednej ramce jest mniejsza niż 32, ponieważ część miejsca zajmują nagłówek i telemetria. Szczegóły: `plan.md`.
+
 ## Kryterium odbioru M1
 
 Na dwóch fizycznych płytkach z identycznym wsadem:
@@ -24,7 +30,9 @@ Na dwóch fizycznych płytkach z identycznym wsadem:
 2. Tekst wprowadzony do każdej konsoli pojawia się w konsoli drugiej płytki.
 3. Naprzemienne i niemal jednoczesne nadawanie z obu stron nie prowadzi do trwałego zakleszczenia.
 4. Po odłączeniu i ponownym podłączeniu partnera komunikacja wraca.
-5. Implementacja nie używa alokacji dynamicznej.
+5. Przy braku danych użytkownika utrzymywana jest cykliczna, naprzemienna wymiana ramek; obie strony raportują jakość obu kierunków i wykrywają brak partnera.
+6. Ruch UART korzysta z tych samych slotów co telemetria, a jego obciążenie nie uniemożliwia pomiaru jakości łącza.
+7. Implementacja nie używa alokacji dynamicznej.
 
 M1 uznajemy za zakończony dopiero po pozytywnych testach rzeczywistego sprzętu.
 
