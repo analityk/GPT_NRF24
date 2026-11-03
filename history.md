@@ -31,3 +31,10 @@ Przyszłe wpisy powinny zawierać datę, zakres faktycznie wykonanej zmiany, com
 - Dodano `GPT_NRF2401/byte_ring.h` (SPSC, stałe 128 slotów, 127 efektywnych), `uart.h/.cpp` (RX i UDRE ISR, 115200 8N1, U2X0=1, UBRR0=16, liczniki błędów i przepełnień), integrację z `.cppproj` oraz test pierścienia na hoście.
 - `main.cpp` przełączono z testu LED na lokalne nieblokujące echo USB UART. Poprzedni test GPIO pozostaje w historii Git, a PD0/PD1 są zwolnione na potrzeby USART.
 - Nie zmieniono F12, Post-Build, środowiska i programowania; brak niezależnej kompilacji AVR i testów na RF-Nano.
+
+## 2026-11-03 — potwierdzenie UART na dwóch urządzeniach i pamięć statyczna
+
+- Właściciel potwierdził, że **obie fizyczne ATmegi** zwracają bajty wysyłane do ich portów USB/CH340. Kompilacja w Microchip Studio działa po ustawieniu standardu C++11. Nie potwierdzono jeszcze długich serii, danych binarnych i testów przepełnienia.
+- Właściciel zapisał w repo commit `4b300e2` dodający `-std=c++11` w konfiguracji Release. Uzupełniono tę samą flagę dla Debug, aby konfiguracje nie różniły się językiem.
+- Przeniesiono jedyną instancję `UART` w `main.cpp` do statycznego SRAM. Poprzednia lokalna instancja zajmowała stos, **nie stertę dynamiczną**; rozmiar obiektu to około 270 B (2 kolejki po 128 + indeksy i liczniki). Sterownik i ISR bez zmian.
+- Nie wykonywano niezależnej kompilacji AVR ani ponownego testu na sprzęcie po tej korekcie.

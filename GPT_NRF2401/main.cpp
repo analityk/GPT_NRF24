@@ -6,8 +6,10 @@
 #include <avr/interrupt.h>
 #include "uart.h"
 
+// Explicit singleton: buffers live in static SRAM, never on the call stack or heap.
+static UART uart;
+
 int main(void) {
-    UART uart;
     uart.begin();
     sei();
 

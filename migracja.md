@@ -58,3 +58,7 @@ Nowy plik `protocol-v1.md` jest źródłem prawdy dla projektu binarnego 32 B: 8
 ## UART0 — etap uruchomienia, 2026-11-03
 
 Kod UART0 w `GPT_NRF2401/uart.h/.cpp`, wielokrotnego użytku pierścień SPSC w `GPT_NRF2401/byte_ring.h`, host-test pierścienia `tests/uart_ring_test.cpp`. `main.cpp` aktualnie realizuje echo po CH340 (bez RF), 115200 8N1, U2X0=1, UBRR=16 przy zegarze 16 MHz, `sei()` w main. RX/TX: 128 slotów, pojemność użytkowa 127 bajtów każda. Bez dynamicznej alokacji. Błędy FE0, DOR0, UPE0 oraz overflow mają liczniki; TX nie blokuje. LED test na PD0 usunięty z bieżącego main, ponieważ PD0 jest RXD; zachowany w historii commit `9d251e1`. Następna czynność: F7 kompilacja w Microchip Studio, F12 programowanie obu płyt, echo na terminalach obu COM (115200 8N1), dane binarne i przeciążenie. Nie zgłoszono jeszcze wyników sprzętowych.
+
+## Potwierdzenie UART i korekta rozmieszczenia pamięci — 2026-11-03
+
+Właściciel potwierdził na **obu fizycznych płytkach** echo wysyłanych bajtów UART. Dodał `-std=c++11` do konfiguracji Release w commicie `4b300e2`; dodano tę samą flagę dla Debug. `main.cpp` tworzy teraz jawny obiekt plikowy `static UART uart;` (około 270 B statycznego SRAM). Poprzednia zmienna automatyczna zajmowała stos, nie heap. Testy długich serii, danych binarnych i przepełnień nie są potwierdzone; nowy układ pamięci oraz konfiguracja Debug wymagają weryfikacji w Microchip Studio. GPIO, F12 i Post-Build nietknięte.
