@@ -193,6 +193,15 @@
     <Compile Include="gpio.cpp">
       <SubType>compile</SubType>
     </Compile>
+    <Compile Include="spi.cpp">
+      <SubType>compile</SubType>
+    </Compile>
+    <None Include="spi.h">
+      <SubType>compile</SubType>
+    </None>
+    <None Include="nrf24.h">
+      <SubType>compile</SubType>
+    </None>
     <Compile Include="uart.cpp">
       <SubType>compile</SubType>
     </Compile>
