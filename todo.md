@@ -56,5 +56,7 @@ Szczegóły techniczne należą do kodu, testów i ewentualnej dokumentacji konk
 
 - [x] Dodać odizolowaną aplikację 32 B DATA / 32 B ACK Payload z jednym wsadem na A i B, SPI 8 MHz, Timer1, polling TX_DS/MAX_RT i licznikami/s, z łatwym powrotem do mostu UART.
 - [x] Dodać testy hostowe wzorca i szybkiego PHY (lokalne g++ C++11, PASS) oraz mock SPI z DPL/ACK Payload, podłączyć je do powtarzalnego skryptu testowego.
-- [ ] F7 i ręczne F12 na obu RF-Nano; przesłać zrzut raportów `A TX/s ACK/s ...` oraz `B RX/s Q/s ...`, sprawdzić FEATURE/DPL i stabilność. To ma zmierzyć **faktyczne** ramki/s, nie weryfikować ponownie starego mostu.
+- [x] Uruchomiono F7/F12 i fizyczny ACK Payload 32B↔32B na obu RF-Nano: stabilnie **540 transakcji/s**, A TX/s=ACK/s=540, B RX/s=Q/s=540, EMPTY/MAX/ARC/BAD/IO/GAP/FULL=0 (zrzut RealTerm 2026-11-03).
 - [ ] Po sprzętowym wyniku porównać osobno prędkość surowych 32 B, ACK Payload, liczbę pustych ACK, retransmisje i zajętość FIFO. Dopiero wtedy zdecydować o STREAM/BURST.
+
+- [ ] Zmierzyć rzeczywistą latencję pojedynczej transakcji i rozkład czasów (min/średnia/p99), bez utożsamiania okresu 1,85 ms przy 540/s z latencją RF; następnie porównać potencjał z 18 B UART na segment i realnym end-to-end goodput.

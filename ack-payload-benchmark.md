@@ -41,3 +41,9 @@ B RX/s=... Q/s=... FULL=... BAD=... IO=... GAP=...
 Nie implementowano UART RELIABLE, prawdziwego rozmiaru pliku, SACK ani przekazywania roli PTX. Ten benchmark mierzy rdzeń fizyczny ACK Payload, nie deklaruje bezstratności lub użytecznej przepustowości końcowej. Nie używa sztucznych opóźnień 20/25 ms. Wyniki na hostowych atrapach potwierdzają logikę, lecz **kompilacja AVR i działanie na dwóch płytkach wymagają sprawdzenia przez użytkownika**.
 
 Podstawowe źródło hardware: Nordic nRF24L01+ Product Specification v1.0, rys. 21–24, tabela SPI: https://cdn.sparkfun.com/assets/3/d/8/5/1/nRF24L01P_Product_Specification_1_0.pdf
+
+## Wynik sprzętowy — 2026-11-03
+
+Fizyczny test dwóch płytek RF-Nano potwierdzony zrzutem obu RealTerm: A `TX/s=540 ACK/s=540 EMPTY=0 MAX=0 ARC=0 BAD=0 IO=0 GAP=0`, B `RX/s=540 Q/s=540 FULL=0 BAD=0 IO=0 GAP=0`. Wartości są stabilne przez wiele kolejnych sekund na zrzucie. Podstawowy eksperyment uznano za **zaliczony**.
+
+Przepustowość **surowego payloadu** to 540×32 = **17 280 B/s per direction**, 34 560 B/s łącznie; bez potrącenia aplikacyjnego 8-bajtowego nagłówka v1 ani kosztu innych protokołów. `540/s` oznacza średni okres 1,85185 ms na potwierdzoną pełną wymianę, **nie** 600 µs end-to-end latency. Minimalny budżet w eterze 32B DATA + 32B ACK Payload + przełączenie ~130us to około 788us przy 1Mb/s, ale do pełnego czasu dochodzą m.in. obsługa SPI/MCU. Opóźnienie pojedynczej ramki i percentyle wymagają osobnego pomiaru. W hipotetycznej wersji z 18 B użytecznego UART per kierunek przy identycznym tempie maksimum byłoby 9 720 B/s/kierunek, niepotwierdzone end-to-end. Zrzuty nie dowodzą zerowego PER ani braku strat przy zakłóceniach.

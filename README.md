@@ -185,3 +185,7 @@ Właściciel potwierdził na zrzucie RealTerm prawidłową dwukierunkową wymian
 ## Szybki rdzeń sprzętowego ACK Payload — aktualny wybór aplikacji
 
 Obecnie `GPT_NRF2401/application_select.h` ma `GPT_NRF24_ACK_BENCHMARK=1`, co wybiera **odizolowany test 32 B A→B + 32 B B→A w sprzętowym ACK Payload**, z bieżącym pomiarem ramek/s na obu konsolach. Poprzedni most UART pozostaje w `main.cpp` i można go przywrócić przez zmianę tego makra na 0. Pełna instrukcja pomiaru i dokładna interpretacja pól: [`ack-payload-benchmark.md`](ack-payload-benchmark.md). **Brak jeszcze sprzętowego potwierdzenia wyników nowego rdzenia.**
+
+### Pierwszy wynik z rzeczywistego ACK Payload (2026-11-03)
+
+Na obu płytkach uzyskano stabilne **540 pełnych wymian/s**: A TX/s=540 i ACK/s=540, B RX/s=540 i Q/s=540, wszystkie liczniki EMPTY/MAX/ARC/BAD/IO/GAP/FULL równe zero w pokazanych oknach. Surowy payload 32 B w każdą stronę = **17 280 B/s na kierunek**, w sumie 34 560 B/s. Średni odstęp między transakcjami to **1,85 ms**. Nie jest to zmierzona latencja pojedynczej ramki ani przepustowość danych UART. Szczegóły: `history.md`, `ack-payload-benchmark.md`.
