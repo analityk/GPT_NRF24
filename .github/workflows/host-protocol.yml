@@ -1,4 +1,4 @@
-name: C++11 protocol tests (host only)
+name: C++11 host and AVR firmware regressions
 on:
   push:
     branches: [main]
@@ -11,3 +11,13 @@ jobs:
       - uses: actions/checkout@v4
       - name: Compile and run protocol state-machine tests
         run: sh tests/run_host_tests.sh
+  avr-firmware:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install AVR-GCC and AVR libc
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq gcc-avr avr-libc binutils-avr
+      - name: Cross-compile firmware mode 0, 1 and 2
+        run: sh tests/build_avr.sh

@@ -6,6 +6,12 @@
 // 1 = previously verified raw full 32B ACK Payload benchmark
 // 2 = paired diagnostic core, 8B header + 0..24B opaque data (experimental)
 // Manual F7 build / F12 program unchanged; NO Post-Build flash.
+// An external AVR cross-build may override the default via -D.
+#ifndef GPT_NRF24_APPLICATION
 #define GPT_NRF24_APPLICATION 2
+#endif
+#if GPT_NRF24_APPLICATION < 0 || GPT_NRF24_APPLICATION > 2
+#error "GPT_NRF24_APPLICATION must be 0, 1 or 2"
+#endif
 
 #endif
