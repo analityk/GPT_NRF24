@@ -70,12 +70,14 @@ struct PinMock {
         if (csn) spi.selected=false;
     }
 };
+typedef Nrf24<SpiMock, PinMock> Radio;
+
 int main() {
     SpiMock hw;
     PinMock ce(hw,false), csn(hw,true);
     Nrf24<SpiMock,PinMock> radio(hw,ce,csn);
     const auto result=radio.probeAndConfigure();
-    assert(result.result==Nrf24<SpiMock,PinMock>::Result::OK);
+    assert(result.result==Radio::Result::OK);
     assert(hw.initialized && !hw.selected && csn.high && !ce.high);
     assert(hw.regs[0x00]==0x0C && hw.regs[0x01]==1 &&
            hw.regs[0x02]==1 && hw.regs[0x03]==3);
@@ -103,18 +105,18 @@ int main() {
     SpiMock missing; missing.disconnected=true;
     PinMock mCe(missing,false), mCsn(missing,true);
     Nrf24<SpiMock,PinMock> absent(missing,mCe,mCsn);
-    assert(absent.probeAndConfigure().result==Nrf24<SpiMock,PinMock>::Result::NO_RADIO);
+    assert(absent.probeAndConfigure().result==Radio::Result::NO_RADIO);
 
     SpiMock stuck; stuck.stuckChannel=true;
     PinMock sCe(stuck,false), sCsn(stuck,true);
     Nrf24<SpiMock,PinMock> wrong(stuck,sCe,sCsn);
-    assert(wrong.probeAndConfigure().result==Nrf24<SpiMock,PinMock>::Result::VERIFY_ERROR);
+    assert(wrong.probeAndConfigure().result==Radio::Result::VERIFY_ERROR);
     assert(stuck.regs[0x05]==2); // original RF_CH preserved
     assert(!stuck.selected && sCsn.high);
 
     SpiMock badSpi; badSpi.fail=true;
     PinMock bCe(badSpi,false), bCsn(badSpi,true);
     Nrf24<SpiMock,PinMock> failed(badSpi,bCe,bCsn);
-    assert(failed.probeAndConfigure().result==Nrf24<SpiMock,PinMock>::Result::SPI_ERROR);
+    assert(failed.probeAndConfigure().result==Radio::Result::SPI_ERROR);
     assert(!badSpi.selected && bCsn.high);
 }

@@ -61,3 +61,21 @@ Szczegółowe instrukcje testowania komunikacji zostaną uzupełnione wraz z imp
 ## GPIO
 
 Dodano `GPT_NRF2401/gpio.h` i `gpio.cpp`: statyczne obiekty do sterowania pinami bez Arduino i alokacji dynamicznej. Przykład: `GPIO led(&PORTB, PB5); led.set(); led.clear();`. Metody `i2c_set` i `i2c_clr` zapewniają wejście z pull-up lub aktywne LOW (nie kompletny kontroler I²C). Wymagana weryfikacja kompilacji AVR w Studio.
+
+## SPI + nRF24L01+ — etap testowania sprzętu
+
+Aktualny `main.cpp` po starcie konfiguruje sprzętowe SPI w trybie 0, MSB first, **1 MHz (16 MHz / 16)** i wykonuje test SPI z nRF24L01+. Test rozpoczyna się po 110 ms od ustawienia CE=0 i CSN=1, ponieważ POR radia może trwać do 100 ms. **Nie rozpoczyna transmisji RF** i pozostawia `CONFIG=0x0C` (POWER_DOWN, CRC16).
+
+Dla starszej wersji RF-Nano z ATmega328P zgodnie z dokumentacją producenta: **D9/PB1 = CSN, D10/PB2 = CE, D11/PB3 = MOSI, D12/PB4 = MISO, D13/PB5 = SCK**. W innych wersjach (np. V3) CE/CSN są inaczej podłączone: zmienić powiązania `radioCe` i `radioCsn` w `main.cpp`, nie sterownik nRF. **PB2 musi zawsze pozostać wyjściem sprzętowego SPI master (SS)**; nie wolno przypadkowo ustawić CE=HIGH podczas inicjalizacji magistrali.
+
+Przy otwarciu każdego portu RealTerm (115200 8N1) program wysyła jeden wiersz. Wzorcowy wynik po resecie:
+```text
+NRF24 OK S=0E CFG=0C CH=4C RF=06 FIFO=11
+```
+Wartości STATUS i FIFO mogą się różnić w zależności od stanu FIFO. Wiersz `NRF24 FAIL C=xx REG=xx EXP=xx GOT=xx S=xx CH=xx` informuje o błędzie inicjalizacji: C=01 brak zakończenia transferu SPI, C=02 brak wiarygodnej odpowiedzi radia, C=03 niezgodność odczytu zwrotnego. Znak **`?`** wysłany z terminala ponawia test i wypisuje kolejny wiersz; pozostałe bajty nadal są odsyłane jako echo (w tym trybie `?` jest komendą, nie danymi).
+
+Test sprawdza `STATUS`, zapis/odczyt dwóch różnych wartości `RF_CH` z odtworzeniem oryginalnej, konfigurację i odczyt zwrotny rejestrów nRF oraz 5-bajtowych adresów. Radio otrzymuje: kanał 76 (2476 MHz), 1 Mb/s, CRC16, Enhanced ShockBurst auto-ACK na pipe 0, szerokość 32 B, RF_SETUP=06, SETUP_RETR=3F, FEATURE/DYNPD=0. **Test SPI nie dowodzi jeszcze poprawnej transmisji radiowej ani połączenia między dwiema płytkami.**
+
+Klasy `SpiMaster` (`spi.h/.cpp`) i `Nrf24<Spi, Pin>` (`nrf24.h`) są odseparowane. Sterownik radia nie posiada na stałe przypisanych pinów i nie zależy od AVR; test modelowy `tests/nrf24_mock_test.cpp` symuluje magistralę i rejestry. Przykładowa komenda kompilacji na hoście: `g++ -std=c++11 -Wall -Wextra -Werror -pedantic tests/nrf24_mock_test.cpp -o nrf24_mock_test`. Test wymaga niezależnego uruchomienia na hoście; firmware wymaga kompilacji F7 oraz ręcznego wgrania F12 i sprawdzenia wyniku na obu portach COM.
+
+Źródła pinów i parametrów: [instrukcja RF-Nano V1.1](https://michiel.vanderwulp.be/domotica/Modules/RFNanoKeywish/RF-NANO-Operating-Instruction_V.1.1.pdf) oraz [nRF24L01+ Product Specification](https://www.sparkfun.com/datasheets/Wireless/Nordic/nRF24L01P_Product_Specification_1_0.pdf).

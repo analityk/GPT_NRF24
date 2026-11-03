@@ -39,6 +39,8 @@ Sterownik i program echo zostały dodane jako etap uruchomienia. Wymagana jeszcz
 Skonfigurować USART 8N1, początkowo 115200 przy potwierdzonym F_CPU. Obliczyć błąd generatora baud. ISR RX i UDRE oraz dwa statyczne bufory pierścieniowe; na początek 128 B każdy, po audycie 2 KB SRAM. Zasada pojedynczego producenta i konsumenta; atomowe indeksy 8-bitowe, jawna obsługa pełnego bufora i błędów USART. Nie blokować w ISR. Bramka: niezależne odbieranie i nadawanie na terminalu, także seriami i po ponownym otwarciu portu.
 
 ## 3. SPI i nRF24L01+
+
+Warstwa SPI, rejestrowy sterownik nRF i UART diagnostyczny zostały dodane. Do zaliczenia tego etapu potrzebny jest test na obu fizycznych RF-Nano. Sterowanie TX/RX z czasami przejść należy do późniejszej maszyny stanów MAC.
 Uruchomić sprzętowe SPI mode 0, bezpieczny zegar, GPIO dla CE/CSN. Udostępnić read/write register, read/write buffer i command. Potwierdzić odczyt/zapis rejestrów. Ustalić wspólny kanał, adres, CRC, 1 Mb/s, Enhanced ShockBurst i stały payload 32 B. Obsłużyć CONFIG, STATUS, FIFO_STATUS, RX_DR, TX_DS, MAX_RT, flush FIFO, czasy CE i przejścia RX/TX. Jeśli IRQ nie jest podłączone, odpytywać status bez nieograniczonego czekania. Bramka: obie płytki raportują sprawne SPI i radio.
 
 ## 4. Test jednostronny

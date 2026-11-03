@@ -46,7 +46,7 @@ public:
         return transaction(reg, 0, &value, 1, 0);
     }
     bool writeRegister(uint8_t reg, uint8_t value) {
-        if (reg > 0x1F) return false;
+        if (reg > 0x1D || (reg >= 0x18 && reg <= 0x1B)) return false;
         return transaction(static_cast<uint8_t>(0x20U | reg), &value, 0, 1, 0);
     }
     bool readRegisters(uint8_t reg, uint8_t* dst, uint8_t count) {
@@ -54,7 +54,7 @@ public:
         return transaction(reg, 0, dst, count, 0);
     }
     bool writeRegisters(uint8_t reg, const uint8_t* src, uint8_t count) {
-        if (reg > 0x1F || !src || count == 0 || count > 5) return false;
+        if (reg > 0x1D || (reg >= 0x18 && reg <= 0x1B) || !src || count == 0 || count > 5) return false;
         return transaction(static_cast<uint8_t>(0x20U | reg), src, 0, count, 0);
     }
     bool flushRx() { return transaction(0xE2, 0, 0, 0, 0); }

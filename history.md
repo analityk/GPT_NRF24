@@ -38,3 +38,11 @@ Przyszłe wpisy powinny zawierać datę, zakres faktycznie wykonanej zmiany, com
 - Właściciel zapisał w repo commit `4b300e2` dodający `-std=c++11` w konfiguracji Release. Uzupełniono tę samą flagę dla Debug, aby konfiguracje nie różniły się językiem.
 - Przeniesiono jedyną instancję `UART` w `main.cpp` do statycznego SRAM. Poprzednia lokalna instancja zajmowała stos, **nie stertę dynamiczną**; rozmiar obiektu to około 270 B (2 kolejki po 128 + indeksy i liczniki). Sterownik i ISR bez zmian.
 - Nie wykonywano niezależnej kompilacji AVR ani ponownego testu na sprzęcie po tej korekcie.
+
+## 2026-11-03 — test UART plikiem i dodanie SPI/nRF24L01+
+
+- Właściciel potwierdził **stabilny** UART na obu ATmegach, także przy przesyłaniu pełnego pliku przez RealTerm bez sztucznych opóźnień. Nie odnotował błędów w tej próbie; nie ma jeszcze niezależnego pomiaru liczników błędów.
+- Dodano sprzętowy SPI master 1 MHz, mode 0, MSB first, z ograniczeniem czasu transferu oraz niezależny od MCU sterownik poleceń/rejestrów/FIFO nRF24L01+.
+- Program `main.cpp` realizuje read/write/restore probe, konfigurację i odczyt zwrotny, wynik ASCII na UART, ponowienie znakiem `?`. W RF ustawiono 32 B, 1 Mb/s, CRC16, pipe 0 auto-ACK; radio pozostaje POWER_DOWN, bez transmisji między węzłami.
+- Pinout starszego RF-Nano z ATmega328P: D9 CSN, D10 CE (odwrotność typowego modułu zewnętrznego); źródło: RF-Nano V1.1 producenta. Piny nie są zaszyte w sterowniku radiowym, tylko w `main.cpp`.
+- Dodano `tests/nrf24_mock_test.cpp` (mock SPI i rejestrów, testy inicjalizacji, FIFO, braku radia, błędnego readbacku i awarii SPI). W tym środowisku nie wykonano kompilacji AVR ani testu na RF-Nano; wyniki z obu płytek oczekiwane od właściciela.

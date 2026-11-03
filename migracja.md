@@ -62,3 +62,7 @@ Kod UART0 w `GPT_NRF2401/uart.h/.cpp`, wielokrotnego użytku pierścień SPSC w 
 ## Potwierdzenie UART i korekta rozmieszczenia pamięci — 2026-11-03
 
 Właściciel potwierdził na **obu fizycznych płytkach** echo wysyłanych bajtów UART. Dodał `-std=c++11` do konfiguracji Release w commicie `4b300e2`; dodano tę samą flagę dla Debug. `main.cpp` tworzy teraz jawny obiekt plikowy `static UART uart;` (około 270 B statycznego SRAM). Poprzednia zmienna automatyczna zajmowała stos, nie heap. Testy długich serii, danych binarnych i przepełnień nie są potwierdzone; nowy układ pamięci oraz konfiguracja Debug wymagają weryfikacji w Microchip Studio. GPIO, F12 i Post-Build nietknięte.
+
+## Uruchomienie SPI i nRF24L01+ — 2026-11-03
+
+Właściciel potwierdził stabilny UART po wysłaniu całego pliku RealTerm bez delayów. Aktualny `main.cpp` zastąpiono testem diagnostycznym SPI/nRF (status startowy na obu UART, powtórzenie przez `?`; zwykłe bajty nadal są echem). Kod: `spi.h/.cpp`, szablon `nrf24.h`, test modelowy `tests/nrf24_mock_test.cpp`, połączenie w `.cppproj`. Na starszym RF-Nano ATmega328P obowiązuje CSN D9/PB1, CE D10/PB2, MOSI D11, MISO D12, SCK D13; w innych rewizjach może być inaczej. Po 110 ms od inicjalizacji pinów: test RF_CH, konfiguracja i readback, POWER_DOWN. Spodziewany zapis: `NRF24 OK S=0E CFG=0C CH=4C RF=06 FIFO=11`. Przyszła obsługa RX/TX i slotów nie została jeszcze zaimplementowana. **Nie potwierdzono kompilacji AVR ani testów rzeczywistego SPI.** F7 kompiluje, F12 programuje ręcznie (nie zmieniać).
