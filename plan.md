@@ -81,3 +81,7 @@ Zanim porównamy warianty, dodać mikrosekundowy monotoniczny pomiar zdarzeń i 
 ## Koncepcja dwóch profili MAC: STREAM + BURST (2026-11-03)
 
 Właściciel zaproponował zastąpienie wcześniejszych FAST/BULK/FLEX dwoma profilami opartymi o sprzętowy ACK Payload: STREAM = dwukierunkowe transakcje PTX DATA ↔ PRX ACK Payload z małą latencją; BURST = szybka, ograniczona w czasie seria nadawcy (wstępnie do 20 ms), sterowanie w ACK Payload i opcjonalne żądanie/przekazanie prawa PTX. Przewidziano 1–2 zapytania/20 ms w stanie spoczynku i separację usług TCP-like/file transfer od MAC. **To projekt, nie zaimplementowana ani ostatecznie zweryfikowana architektura.** Szczegóły, kryteria i pułapki: `mac-profiles-proposal.md`. Pierwszy eksperyment: sprzętowy ACK Payload z prawdziwymi danymi obu stron.
+
+## Eksperyment wyprzedzający implementację STREAM/BURST (2026-11-03)
+
+Pierwszym krokiem jest **praktyczny benchmark pełnych 32 B w zwykłym PTX i pełnych 32 B w sprzętowym ACK Payload PRX**, bez transportu UART. Oryginalny bridge jest zachowany (przełącznik aplikacji), a `ack-payload-benchmark.md` opisuje pomiar. Trzymajmy się pomiaru `TX_DS/s`, odebranych `ACK Payload/s`, `ARC`, `MAX_RT`, przerw w numeracji, `RX_FIFO` i `TX_FIFO`. Nie deklarować gotowego STREAM ani parametrów przepustowości bez F7/F12 i testu dwóch płyt.

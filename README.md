@@ -181,3 +181,7 @@ W tej wersji **nie ma żadnych komunikatów tekstowych ani statystyk wypisywanyc
 ### Most UART↔RF — pierwszy wynik sprzętowy (2026-11-03)
 
 Właściciel potwierdził na zrzucie RealTerm prawidłową dwukierunkową wymianę **rzeczywistych** wiadomości: COM10→COM11 `ala ma kota`, COM11→COM10 `kot ma ale`. Zapis jest widoczny bez dodatkowych znaków. **Podstawowy test funkcjonalny obu kierunków jest zaliczony.** Poprzednie wzmianki o oczekiwaniu na pierwszą próbę są historyczne. Nadal wymagane są testy jednoczesnego ruchu, wiadomości większych od segmentu, dowolnych bajtów binarnych, przepełnienia RX UART i restartów w trakcie transportu; M1 nie jest jeszcze odebrany.
+
+## Szybki rdzeń sprzętowego ACK Payload — aktualny wybór aplikacji
+
+Obecnie `GPT_NRF2401/application_select.h` ma `GPT_NRF24_ACK_BENCHMARK=1`, co wybiera **odizolowany test 32 B A→B + 32 B B→A w sprzętowym ACK Payload**, z bieżącym pomiarem ramek/s na obu konsolach. Poprzedni most UART pozostaje w `main.cpp` i można go przywrócić przez zmianę tego makra na 0. Pełna instrukcja pomiaru i dokładna interpretacja pól: [`ack-payload-benchmark.md`](ack-payload-benchmark.md). **Brak jeszcze sprzętowego potwierdzenia wyników nowego rdzenia.**

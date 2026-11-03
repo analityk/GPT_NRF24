@@ -51,3 +51,10 @@ Szczegóły techniczne należą do kodu, testów i ewentualnej dokumentacji konk
 - [ ] Przed wdrożeniem profili MAC przetestować sprzętowy ACK Payload w obu kierunkach (z włączeniem DPL), testować FIFO, CRC, IRQ/STATUS, ponowienia i utracone ACK; nie mylić sprzętowego ACK z aplikacyjnym.
 - [ ] Porównać zmierzone pakiety/s przy stałych rolach PTX/PRX z dotychczasowym ping-pongiem; zbudować konfigurowalną warstwę MAC korzystającą ze wspólnej warstwy PHY/formatu v1.
 - [ ] Zaprojektować bezpieczny REQUEST/GRANT/COMMIT zmiany właściciela PTX, ograniczony lease BURST do pomiaru (propozycja 20 ms), SACK/kredyty i limity pamięci na 2 kB SRAM; zgodnie z `mac-profiles-proposal.md`.
+
+## ACK Payload — konkretny eksperyment sprzętowy
+
+- [x] Dodać odizolowaną aplikację 32 B DATA / 32 B ACK Payload z jednym wsadem na A i B, SPI 8 MHz, Timer1, polling TX_DS/MAX_RT i licznikami/s, z łatwym powrotem do mostu UART.
+- [x] Dodać testy hostowe wzorca i szybkiego PHY (lokalne g++ C++11, PASS) oraz mock SPI z DPL/ACK Payload, podłączyć je do powtarzalnego skryptu testowego.
+- [ ] F7 i ręczne F12 na obu RF-Nano; przesłać zrzut raportów `A TX/s ACK/s ...` oraz `B RX/s Q/s ...`, sprawdzić FEATURE/DPL i stabilność. To ma zmierzyć **faktyczne** ramki/s, nie weryfikować ponownie starego mostu.
+- [ ] Po sprzętowym wyniku porównać osobno prędkość surowych 32 B, ACK Payload, liczbę pustych ACK, retransmisje i zajętość FIFO. Dopiero wtedy zdecydować o STREAM/BURST.
