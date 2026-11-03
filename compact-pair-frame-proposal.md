@@ -1,5 +1,7 @@
 # Projekt minimalnej ramki P2P po sprzętowym ACK Payload — 2026-11-03
 
+> **Wdrożenie po decyzji:** zaakceptowane 8 B diagnostyki + 24 B opaque danych jest już w `paired_frame.h` i `paired_link.h`. **Aktualną specyfikacją techniczną** jest [`paired-core-v2.md`](paired-core-v2.md). Poniższa propozycja 4+28 jest historyczna; nowy firmware ma odrębną wersję nagłówka i testowy SID16.
+
 > **Decyzja właściciela z 2026-11-03 (aktualna): 8 bajtów metadanych + do 24 bajtów danych użytkownika.** Poprzednia koncepcja 4+28 opisana poniżej pozostaje historycznym wariantem porównawczym i **nie jest wyborem docelowym**. Zmierzone 540 pełnych wymian/s daje arytmetyczne 12 960 B/s użytecznego BODY na kierunek dla 24 B, jeszcze bez transportu i rzeczywistych kosztów CPU. Przejście do 4+28 zwiększałoby teoretyczny limit o 2160 B/s, ale odbierałoby połowę miejsca na diagnostykę i kontrolę przepływu. Obecny UART 115200 8N1 ma limit 11 520 B/s na kierunek.
 
 > **Kontrakt warstw:** MAC/PHY transportuje nieinterpretowaną treść BODY oraz utrzymuje stan łącza. Nie wie, czy BODY zawiera komendy, dane pliku, rekordy transportu TCP-like, szyfrogram lub inny protokół. Tylko opcjonalne ramki CONTROL są interpretowane przez warstwę sterowania. Nie implementować teraz routingu, formatu pliku, szyfrowania ani niezawodnego transportu end-to-end; zachować możliwość ich późniejszego dołożenia jako usług ponad BODY.

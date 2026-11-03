@@ -64,6 +64,15 @@ Szczegóły techniczne należą do kodu, testów i ewentualnej dokumentacji konk
 ## Kompaktowa ramka 4+28 dla już sparowanej pary
 
 - [x] Wybrać format **8 B metadanych + do 24 B przezroczystego BODY**, zamiast 4+28; priorytet: diagnostyka i sterowanie, bez interpretacji danych transportu (decyzja 2026-11-03).
-- [ ] Uzgodnić szczegółowy układ 8 B nagłówka szybkiego STREAM: TX_SEQ, RX_LAST, dwa wskaźniki strat po 4 bity, credits, typ/flags, epoka/kompatybilność; testy modulo i stare ACK Payload.
+- [x] Uzgodniono i zaimplementowano układ 8 B (TX_SEQ, RX_LAST, LOSS_AB/BA, ARC_LAST/RX_DROP, RX_CREDIT, TYPE_FLAGS, SESSION_ID16) w oddzielnym formacie `paired_frame.h`; hostowe testy modulo i DPL PASS. Szczegóły `paired-core-v2.md`.
 - [ ] Zweryfikować bezpieczne odseparowanie sesji po resecie bez SID w każdej ramce: negocjowany adres radiowy per epoch albo alternatywny identyfikator, z próbami resetów, FIFO flush i wykrywaniem starych ACK Payload.
-- [ ] Przed implementacją szybkiego 8+24 B dodać wielokrotnego użytku obsługę DPL 8..32 B i jej testy na hostowych mockach, zachowując obecny pomiarowy rdzeń 32B.
+- [x] Dodano wielokrotnego użytku DPL 8..32 B dla szybkiego PHY, testy hostowe oraz niezależny wariant 2; zachowany poprzedni benchmark 32+32 B w trybie 1.
+
+## Bieżący etap: test nowego 8+24 na dwóch RF-Nano
+
+- [x] Kod codec/link/PHY i demonstrator `paired_core_main.cpp`, wybór 0/1/2, stałe bufory i oddzielenie aplikacyjnego BODY od diagnostyki.
+- [x] GitHub Actions: wszystkie testy hostowe i krzyżowa kompilacja AVR-GCC wariantów 0/1/2 zaliczone (2026-11-03).
+- [ ] Zbudować F7 w Microchip Studio i wgrać F12 na **obie** płytki: tryb 2. Zebrać RealTerm `A TX/s ACK/s` i `B RX/s Q/s` (po kilkanaście sekund), porównać z osobnym pomiarem starego 540/s. Potwierdzić prawidłowy BODY 24B i IDLE 8B, brak FULL/BAD/IO.
+- [ ] Wynegocjować prawdziwy SESSION_ID16 przy parowaniu i automatyczny powrót po resetach obu stron — stałe `0x4E52` jest teraz WYŁĄCZNIE testowym ID, nie gwarancją rozdzielenia sesji.
+- [ ] Powiązać RX_CREDIT oraz RX_DROP z rzeczywistym sinkiem danych (UART lub inna usługa) i sprawdzić bezpieczeństwo pipeline ACK Payload, timeouty i wielokrotne przepełnienia.
+- [ ] Dodać później wyższe protokoły (file, TCP-like, szyfrowanie) poza tym rdzeniem dopiero na osobne zamówienie; obecnie DATA BODY jest transparentne.

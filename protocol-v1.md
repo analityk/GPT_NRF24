@@ -1,5 +1,7 @@
 # Protokół RF v1 — specyfikacja binarna (projekt)
 
+> **Uwaga o wersjach (2026-11-03):** ten plik opisuje **starszy** format 8B CTRL/SRC/DST/SID/TX_SEQ/RX_LAST/EP/EP używany w mostku UART (wariant 0). Nowy, odrębny profil P2P 8+24, z LOSS/ARC/RX_DROP/CREDIT/TYPE_FLAGS/SID16 i sprzętowym ACK Payload, jest opisany w [`paired-core-v2.md`](paired-core-v2.md) oraz zaimplementowany w `paired_frame.h`. Nie wolno bez negocjacji mieszać obu formatów.
+
 **Status:** projekt do implementacji, bez testów na sprzęcie. **Zakres M1:** dwa węzły różnych klas. Radio nRF24L01+, stały payload 32 B, CRC16 sprzętowe poza payloadem, 1 Mb/s. Adres sprzętowy radia jest odrębny od SRC/DST. Nie ma dodatkowego CRC w payloadzie.
 
 ## 1. Nagłówek: 8 bajtów, BODY: 24 bajty

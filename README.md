@@ -189,3 +189,11 @@ Obecnie `GPT_NRF2401/application_select.h` ma `GPT_NRF24_ACK_BENCHMARK=1`, co wy
 ### Pierwszy wynik z rzeczywistego ACK Payload (2026-11-03)
 
 Na obu płytkach uzyskano stabilne **540 pełnych wymian/s**: A TX/s=540 i ACK/s=540, B RX/s=540 i Q/s=540, wszystkie liczniki EMPTY/MAX/ARC/BAD/IO/GAP/FULL równe zero w pokazanych oknach. Surowy payload 32 B w każdą stronę = **17 280 B/s na kierunek**, w sumie 34 560 B/s. Średni odstęp między transakcjami to **1,85 ms**. Nie jest to zmierzona latencja pojedynczej ramki ani przepustowość danych UART. Szczegóły: `history.md`, `ack-payload-benchmark.md`.
+
+## Nowy rdzeń z 8-bajtową diagnostyką i 24 B opaque DATA (2026-11-03)
+
+W aktualnym `application_select.h` domyślny `GPT_NRF24_APPLICATION=2` wybiera nowy rdzeń na sprzętowym ACK Payload: `paired_frame.h` (jawny wire format), `paired_link.h` (niezależna diagnostyka A→B i B→A), `paired_core_main.cpp` (weryfikacja binarnych 24B danych). Wspólny HEX, A0 GND→A/PTX, A0 własne VCC→B/PRX. DPL: 8..32B; typ IDLE zajmuje tylko 8B, pełne DATA 32B.
+
+W tym eksperymencie RealTerm służy **wyłącznie do odczytu liczników**, nie do przesyłania tekstu między portami: `PAIR CORE A/B...`, `TX/s`, `ACK/s`, `RX/s`, `Q/s`, `ARC`, `MAX`, `GAB/GBA`, `DROP`, `BAD`. BODY jest ignorowany przez rdzeń i wypełniany w aplikacji 24B wzorcem testowym. **SESSION_ID=0x4E52 jest stały tylko na potrzeby eksperymentu**; później potrzebny handshake i ochrona przed resetem. Nie jest to jeszcze gotowy transport aplikacyjny, sesja P2P ani szyfrowanie.
+
+Dostępne warianty: `0` = poprzedni, fizycznie sprawdzony UART bridge, `1` = benchmark 32+32B (540 wymian/s zmierzone sprzętowo), `2` = NOWY rdzeń 8+24B (wymaga testu fizycznego). Zmienia się jedno makro w `application_select.h`, projekt i programowanie F7/F12 pozostają bez zmian. Specyfikacja i instrukcja: [`paired-core-v2.md`](paired-core-v2.md). Testy hostowe i cross-build AVR wariantów 0/1/2 PASS w GitHub Actions; nowego wyniku sprzętowego jeszcze nie ma.

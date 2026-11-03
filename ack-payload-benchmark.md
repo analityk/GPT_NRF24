@@ -47,3 +47,7 @@ Podstawowe źródło hardware: Nordic nRF24L01+ Product Specification v1.0, rys.
 Fizyczny test dwóch płytek RF-Nano potwierdzony zrzutem obu RealTerm: A `TX/s=540 ACK/s=540 EMPTY=0 MAX=0 ARC=0 BAD=0 IO=0 GAP=0`, B `RX/s=540 Q/s=540 FULL=0 BAD=0 IO=0 GAP=0`. Wartości są stabilne przez wiele kolejnych sekund na zrzucie. Podstawowy eksperyment uznano za **zaliczony**.
 
 Przepustowość **surowego payloadu** to 540×32 = **17 280 B/s per direction**, 34 560 B/s łącznie; bez potrącenia aplikacyjnego 8-bajtowego nagłówka v1 ani kosztu innych protokołów. `540/s` oznacza średni okres 1,85185 ms na potwierdzoną pełną wymianę, **nie** 600 µs end-to-end latency. Minimalny budżet w eterze 32B DATA + 32B ACK Payload + przełączenie ~130us to około 788us przy 1Mb/s, ale do pełnego czasu dochodzą m.in. obsługa SPI/MCU. Opóźnienie pojedynczej ramki i percentyle wymagają osobnego pomiaru. W hipotetycznej wersji z 18 B użytecznego UART per kierunek przy identycznym tempie maksimum byłoby 9 720 B/s/kierunek, niepotwierdzone end-to-end. Zrzuty nie dowodzą zerowego PER ani braku strat przy zakłóceniach.
+
+## Wersjonowanie aplikacji
+
+Sprawdzony fizycznie benchmark 32B DATA/32B ACK Payload to aktualnie wariant `GPT_NRF24_APPLICATION=1` (zamiast historycznego `GPT_NRF24_ACK_BENCHMARK=1`). Nowy profil 8+24B jest wariantem `2`, a most UART wariantem `0`. Nie utożsamiać zmierzonych 540/s starego benchmarku z wynikiem nowego formatu przed pomiarem; oba są zachowane i można je ponownie uruchomić przez wybór jednego makra.

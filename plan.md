@@ -93,3 +93,7 @@ Właściciel chce dla sprzętowego DATA↔ACK Payload uprościć 32B payload do 
 ## Decyzja w sprawie payloadu rdzenia — 2026-11-03
 
 Właściciel wybrał **8 B header + do 24 B nieinterpretowanych danych**, aby zamiast oszczędności 2,16 kB/s/kierunek przy hipotetycznych 540/s uzyskać więcej miejsca na diagnostykę i sterowanie. Nie implementować teraz wyższych protokołów transferu, rozpoznawania typów aplikacyjnych ani szyfrowania; to niezależne warstwy ponad rdzeniem. Poprzednia propozycja 4+28 jest archiwalna. Szczegóły i nierozstrzygnięte pola w `compact-pair-frame-proposal.md`. Zbadana fizycznie 32+32 B wymiana ACK Payload pozostaje wzorcem prędkości. Nowa wersja stream musi zachować jawne uzgodnienie/wersjonowanie względem `frame_v1.h`.
+
+## Implementacja zaakceptowanego formatu 8+24 (2026-11-03)
+
+Nowy profil `paired_frame.h` oraz `paired_link.h` implementuje wszystkie przyjęte pola diagnostyczne i transparentną treść 0..24B na sprzętowym ACK Payload. `paired_core_main.cpp` został dodany jako **wariant 2** (wariant 0 = stary UART bridge, 1 = wcześniej mierzony 32+32B). Testy hostowe i cross AVR trzech wariantów PASS, fizyczny test nowego rdzenia pozostaje otwarty. Sesja 16-bit jest obecnie stałym fixture `0x4E52`, więc w przyszłej warstwie parowania potrzebna bezpieczna negocjacja nonce/epoki. Nie mieszać nowego wire format ze starym `protocol-v1.md`. Pełna specyfikacja, testy i procedura: `paired-core-v2.md`. Usługi aplikacyjne ponad BODY są świadomie poza zakresem.
