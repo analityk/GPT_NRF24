@@ -6,13 +6,21 @@
  */ 
 
 #include <avr/io.h>
+#include "gpio.h"
+
+void delay(uint32_t volatile t){
+	while(t--){};
+}
 
 
 int main(void)
 {
+	GPIO led1(&PORTD, PIND0);
     /* Replace with your application code */
     while (1) 
     {
+		delay(0xFFFF);
+		led1.flip();
     }
 }
 
