@@ -178,6 +178,11 @@ static void runLeader() {
         }
         phy.standby();
 
+        if (session.active() && bridge.needsRecovery()) {
+            session.restart();
+            ++counters.linkRestarts;
+            misses=0;
+        }
         if (session.active()) {
             if (!gotReply) {
                 ++counters.replyMiss;
@@ -217,6 +222,11 @@ static void runFollower() {
         } else if (session.active() && v.header.src==0 &&
                    v.header.dst==1 && v.header.sid==session.sid()) {
             acceptActive(v,0,1,rxLast);
+            if (bridge.needsRecovery()) {
+                session.restart();
+                ++counters.linkRestarts;
+                continue;
+            }
             bool ack=false,data=false;
             if (encodeActive(1,0,seq,rxLast,ack,data)) {
                 sendReply=true;

@@ -36,7 +36,8 @@ public:
 
     ReliableUartV1() : outstanding_(false), pendingLength_(0),
         sendSeq_(0), nextExpected_(0), acceptedLast_(false),
-        ackPending_(false), ackSeq_(0), ackStatus_(0), txAttempts_(0) {}
+        ackPending_(false), ackSeq_(0), ackStatus_(0), txAttempts_(0),
+        needsRecovery_(false) {}
 
     // Called only AFTER a newly negotiated session is accepted. Pending
     // unacknowledged bytes are retained and retried as segment zero.
@@ -48,8 +49,10 @@ public:
         acceptedLast_=false;
         ackPending_=false;
         txAttempts_=0;
+        needsRecovery_=false;
     }
 
+    bool needsRecovery() const { return needsRecovery_; }
     bool hasOutstanding() const { return outstanding_; }
     const Statistics& stats() const { return stats_; }
 
@@ -103,6 +106,7 @@ public:
             if (txAttempts_ != 0 && stats_.retransmitted != 0xFFFF)
                 ++stats_.retransmitted;
             if (txAttempts_ != 0xFF) ++txAttempts_;
+            if (txAttempts_ >= 64) needsRecovery_=true;
         }
     }
 
@@ -150,7 +154,8 @@ private:
         } else if (status==BUSY) {
             ++stats_.ackBusy;
         } else {
-            ++stats_.ackRejected; // preserve pending bytes, never silently drop
+            ++stats_.ackRejected;
+            needsRecovery_=true; // preserve pending, renegotiate rather than deadlock
         }
     }
 
@@ -192,6 +197,7 @@ private:
     bool acceptedLast_;
     bool ackPending_;
     uint8_t ackSeq_,ackStatus_,txAttempts_;
+    bool needsRecovery_;
     Statistics stats_;
 };
 #endif
