@@ -81,6 +81,18 @@ int main() {
     assert(deliver(freshB,newA)==S::Event::ESTABLISHED);
     assert(newA.active() && newA.sid()==freshB.sid());
 
+    // A changed initiator nonce must update the responder even if its
+    // state stays WAIT_READY: its previously queued WELCOME is then stale.
+    S responder(false,S::Identity(71,0));
+    S first(true,S::Identity(81,0));
+    S second(true,S::Identity(82,0));
+    assert(deliver(first,responder)==S::Event::CHANGED);
+    assert(responder.phase()==S::Phase::WAIT_READY);
+    assert(responder.peer()==S::Identity(81,0));
+    assert(deliver(second,responder)==S::Event::CHANGED);
+    assert(responder.phase()==S::Phase::WAIT_READY);
+    assert(responder.peer()==S::Identity(82,0));
+
     // Malformed/foreign control never starts a session.
     S invalid(true,S::Identity(90,0));
     assert(invalid.prepare(raw,width));

@@ -149,7 +149,6 @@ static void processFrame(PairedLink& link,uint8_t peer,uint8_t width) {
     if(PairedFrame::decode(incoming,width,view)!=PairedFrame::Error::OK) {
         ++period.bad;return;
     }
-    const PairedSession::Phase previous=session.phase();
     const PairedSession::Event event=session.accept(view);
     if(event!=PairedSession::Event::NONE){
         lastPeerProgress=ticks.now();
@@ -165,7 +164,9 @@ static void processFrame(PairedLink& link,uint8_t peer,uint8_t width) {
         } else if(event==PairedSession::Event::ESTABLISHED) {
             link.configure(isLeader,session.sid());
         }
-        if(!isLeader && session.phase()!=previous)replaceAck=true;
+        // A new peer nonce can change the ACK reply while the responder
+        // remains in WAIT_READY. Phase equality is NOT proof of FIFO safety.
+        if(!isLeader)replaceAck=true;
     }
     if(view.header.kind()==PairedFrame::Kind::CONTROL)return;
     if(!session.active() || view.header.sessionId!=session.sid()) {
@@ -250,8 +251,8 @@ static bool queueB() {
 }
 static void runB() {
     if(!phy.beginPrx())fatal("PRX");
-    // Initial idle ACK advertises one packet of buffer credit.
-    // B must NOT send DATA before it knows A's advertised RX credit.
+    // Initial BEACON is a 15B CONTROL frame in hardware ACK Payload.
+    // B does not transmit application DATA until A confirms the session.
     if(!queueB())fatal("PRIME");
     Diagnostic hello;hello.word("PAIR CORE B PRX 8+24B SESSION SPI8");hello.send();
     lastSecond=ticks.now();
