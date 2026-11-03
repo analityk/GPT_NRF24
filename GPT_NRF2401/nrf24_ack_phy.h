@@ -2,9 +2,9 @@
 #define GPT_NRF24_ACK_PAYLOAD_PHY_H
 #include <stdint.h>
 
-// Event-driven 32-byte RF exchange. Reusable with a mocked Radio, Delay,
+// Event-driven DPL RF exchange with an 8-byte minimum payload. Reusable with a mocked Radio, Delay,
 // Clock and with the real AVR adapters. No AVR headers, no heap, no UART.
-// PTX transmits one packet; the full 32-byte reply arrives INSIDE hardware
+// PTX transmits a packet; the reply arrives INSIDE hardware
 // Enhanced ShockBurst ACK. PRX never changes its radio mode per packet.
 // Timer Clock must return monotonic modulo-2^32 ticks at 2 MHz.
 template<class Radio,class Delay,class Clock>
@@ -42,77 +42,7 @@ public:
         return true;
     }
 
-    // Deadline includes all configured auto-retransmissions (0x23, 3 * 750us).
-    // A 8ms watchdog is a failure bound, not an inter-packet pause.
-    TxResult transfer(const uint8_t (&out)[32],uint8_t (&reply)[32]) {
-        TxResult result;
-        if (!radio_.writePayload(out)) return result;
-        // Nordic timing diagram requires >=130us between PTX exchanges.
-        // Preserve this physical turnaround, not the old arbitrary 20/25ms.
-        if (haveLast_)
-            while (static_cast<uint32_t>(clock_.now()-lastCompleted_)<260UL) {}
-        radio_.ceHigh();
-        delay_.us(15); // CE pulse >=10us; standby -> TX takes ~130us
-        radio_.ceLow();
-
-        const uint32_t begin=clock_.now();
-        uint8_t flags=0;
-        for (;;) {
-            if (!radio_.status(flags)) return result;
-            if (flags&0x30) break;
-            if (static_cast<uint32_t>(clock_.now()-begin)>=16000UL) {
-                // Radio should have finished all retries by now.
-                (void)radio_.flushTx();
-                (void)radio_.clearIrq(0x70);
-                result.code=TxCode::TIMEOUT;
-                lastCompleted_=clock_.now();haveLast_=true;
-                return result;
-            }
-        }
-        uint8_t observe=0;
-        if (!radio_.readRegister(Radio::OBSERVE_TX,observe)) return result;
-        result.retries=static_cast<uint8_t>(observe&0x0F);
-        if (flags&0x10) {
-            if (!radio_.flushTx() || !radio_.clearIrq(0x70)) return result;
-            result.code=TxCode::MAX_RT;
-            lastCompleted_=clock_.now();haveLast_=true;
-            return result;
-        }
-
-        const RxCode rx=readReply(reply);
-        if (!radio_.clearIrq(0x70)) return result;
-        if (rx==RxCode::GOOD) result.code=TxCode::ACK_WITH_DATA;
-        else if (rx==RxCode::EMPTY) result.code=TxCode::ACK_EMPTY;
-        else if (rx==RxCode::BAD_SIZE) result.code=TxCode::BAD_REPLY_SIZE;
-        lastCompleted_=clock_.now();haveLast_=true;
-        return result;
-    }
-
-    // PRX side: read the FIFO, never infer receipt merely from IRQ state.
-    RxCode receive(uint8_t (&data)[32]) {
-        uint8_t fifo=0;
-        if (!radio_.readRegister(Radio::FIFO_STATUS,fifo))
-            return RxCode::IO_ERROR;
-        if (fifo&0x01) return RxCode::EMPTY;
-        uint8_t width=0;
-        if (!radio_.readDynamicPayload(data,width))
-            return (width==0 || width>32)?RxCode::BAD_SIZE:RxCode::IO_ERROR;
-        return width==32?RxCode::GOOD:RxCode::BAD_SIZE;
-    }
-
-    // Hardware ACK payload is FIFO-queued in advance. If the queue is full,
-    // the caller must retry later, not overwrite an untransmitted payload.
-    QueueCode queueReply(const uint8_t (&data)[32]) {
-        uint8_t fifo=0;
-        if (!radio_.readRegister(Radio::FIFO_STATUS,fifo))
-            return QueueCode::IO_ERROR;
-        if (fifo&0x20) return QueueCode::FULL;
-        return radio_.writeAckPayload(0,data,32)?
-               QueueCode::QUEUED:QueueCode::IO_ERROR;
-    }
-
-    // Variant for negotiated 8-byte diagnostic header plus 0..24 opaque
-    // data bytes. The original strict 32B benchmark method remains intact.
+    // Frames have an 8-byte diagnostic header plus 0..24 opaque bytes.
     // replyWidth comes from the hardware DPL register, never from an
     // application-defined LEN field.
     TxResult transfer(const uint8_t (&out)[32],uint8_t txWidth,
@@ -194,16 +124,6 @@ public:
     bool clearPrxFlags() { return radio_.clearIrq(0x70); }
 
 private:
-    RxCode readReply(uint8_t (&data)[32]) {
-        uint8_t fifo=0;
-        if (!radio_.readRegister(Radio::FIFO_STATUS,fifo))
-            return RxCode::IO_ERROR;
-        if (fifo&0x01) return RxCode::EMPTY;
-        uint8_t width=0;
-        if (!radio_.readDynamicPayload(data,width)) return RxCode::IO_ERROR;
-        return width==32?RxCode::GOOD:RxCode::BAD_SIZE;
-    }
-
     Radio& radio_;
     Delay& delay_;
     Clock& clock_;

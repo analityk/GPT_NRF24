@@ -1,281 +1,219 @@
-#include "application_select.h"
-#if GPT_NRF24_APPLICATION == 0
 /*
- * RF-Nano UART <-> reliable v1 UART endpoint over nRF24L01+.
+ * Paired diagnostic RF core, 8 B header + up to 24 B OPAQUE data.
+ * Both boards run one binary; A0 low => A/PTX, high => B/PRX.
  *
- * Both boards run EXACTLY the same firmware.
- * ADC0 to GND => class 0 (initiates each RF exchange).
- * ADC0 to own VCC => class 1 (listens and answers).
- *
- * Binary-transparent port: no local echo, no 'command' characters,
- * no text diagnostics mixed with user payload.
- * 8 B v1 header + up to 24 B body, fixed 32 B RF payload.
- * Session handshake: HELLO / HELLO_REPLY / READY / READY_ACK.
- * App transport: stop-and-wait ACK/duplicate filtering in both directions.
- *
- * This is still a staged M1 implementation: no hardware UART flow control,
- * no multi-node access, no exactly-once delivery across resets.
+ * Physical ACK payload provides the return direction with no role change.
+ * 16-bit SESSION_ID below is a deliberate test fixture, not pairing!
+ * Periodic UART output is DIAGNOSTIC only; the user payload never enters it.
+ * Single active paired-core firmware. Historical variants are archived in Git.
  */
 #include "board_clock.h"
+#include <stdint.h>
 #include <avr/io.h>
 #include <avr/interrupt.h>
 #include "gpio.h"
 #include "uart.h"
 #include "spi.h"
 #include "nrf24.h"
-#include "nrf24_phy.h"
 #include "avr_delay.h"
 #include "adc0.h"
-#include "frame_v1.h"
-#include "uart_transport_v1.h"
-#include "session_v1.h"
-#include "boot_epoch.h"
+#include "timer1_clock.h"
+#include "paired_frame.h"
+#include "paired_link.h"
+#include "nrf24_ack_phy.h"
 
-typedef Nrf24<SpiMaster, GPIO> Radio;
-typedef Nrf24Phy<Radio, AvrDelay> Phy;
-typedef ReliableUartV1<UART> Bridge;
-
+typedef Nrf24<SpiMaster,GPIO> Radio;
+typedef NrfAckPayloadPhy<Radio,AvrDelay,Timer1Clock> AckPhy;
+static const uint16_t TEST_SESSION=0x4E52;
 static UART uart;
 static SpiMaster spi;
-static GPIO radioCe(&PORTB, PB2);
-static GPIO radioCsn(&PORTB, PB1);
-static Radio radio(spi,radioCe,radioCsn);
+static GPIO ce(&PORTB,PB2),csn(&PORTB,PB1);
+static Radio radio(spi,ce,csn);
 static AvrDelay delay;
-static Phy phy(radio,delay);
-static Bridge bridge;
-static SessionV1 session(0,1,1);
+static Timer1Clock ticks;
+static AckPhy phy(radio,delay,ticks);
+static PairedLink linkState(true,TEST_SESSION);
+static uint8_t packet[32],incoming[32],body[24];
+static uint8_t ackStaged[32],ackSize=0;
+static bool ackWaiting=false;
 
-// One reusable RF packet buffer, no stack copies of 32-byte payloads.
-static uint8_t packet[FrameV1::FRAME_SIZE];
-static uint8_t body[FrameV1::BODY_SIZE];
-
-// No UART debug output: use a debugger or later sideband telemetry.
-// Counters saturate/wrap only as unsigned metrics; never affect delivery.
-struct LinkCounters {
-    uint16_t txAck,txMaxRt,txTimeout,txIoError,txRetries;
-    uint16_t rxValid,rxMalformed,rxWrongSession;
-    uint16_t replyMiss,linkRestarts;
-    LinkCounters() : txAck(0),txMaxRt(0),txTimeout(0),
-      txIoError(0),txRetries(0),rxValid(0),rxMalformed(0),
-      rxWrongSession(0),replyMiss(0),linkRestarts(0) {}
+class Diagnostic {
+public:
+    Diagnostic():size_(0) {}
+    void word(const char* s) {while(*s) put(*s++);}
+    void number(uint32_t n) {
+        char rev[10];uint8_t i=0;
+        do {rev[i++]=static_cast<char>('0'+n%10UL);n/=10UL;}
+        while(n && i<10);
+        while(i)put(rev[--i]);
+    }
+    void send() {
+        put('\r');put('\n');
+        if(uart.freeSpace()>=size_)
+            (void)uart.writeAll(reinterpret_cast<const uint8_t*>(data_),size_);
+        size_=0;
+    }
+private:
+    void put(char c) {if(size_<sizeof(data_))data_[size_++]=c;}
+    char data_[112];uint8_t size_;
 };
-static LinkCounters counters;
 
-static void countTx(const Phy::TxResult& result) {
-    if (result.result==Phy::TxStatus::ACKED) ++counters.txAck;
-    else if (result.result==Phy::TxStatus::MAX_RETRIES) ++counters.txMaxRt;
-    else if (result.result==Phy::TxStatus::TIMEOUT) ++counters.txTimeout;
-    else ++counters.txIoError;
-    counters.txRetries=static_cast<uint16_t>(counters.txRetries+result.arc);
+struct Period {
+    uint16_t tx,rx,queued,arc,maxRt,empty,bad,io,full;
+    Period():tx(0),rx(0),queued(0),arc(0),maxRt(0),empty(0),
+             bad(0),io(0),full(0) {}
+    void reset() {*this=Period();}
+};
+static Period period;
+static uint32_t lastSecond=0;
+
+static void pattern(uint8_t role,uint8_t seq,uint8_t (&out)[24]) {
+    for(uint8_t i=0;i<24;++i)
+        out[i]=static_cast<uint8_t>(
+            (static_cast<uint16_t>(seq)*37U +
+             static_cast<uint16_t>(i)*41U +
+             static_cast<uint16_t>(role)*71U) ^
+            (static_cast<uint16_t>(seq)>>(i&3U)));
 }
-
-static bool readFrame(FrameV1::View& view) {
-    bool received=false;
-    if (!phy.receive(packet,received)) {
-        ++counters.rxMalformed; // includes SPI receive errors
-        return false;
-    }
-    if (!received) return false;
-    const FrameV1::Error status=FrameV1::decode(packet,view);
-    if (status!=FrameV1::Error::OK) {
-        ++counters.rxMalformed;
-        return false;
-    }
+static bool check(const uint8_t* bytes,uint8_t role,uint8_t seq) {
+    if(!bytes)return false;
+    uint8_t expected[24];
+    pattern(role,seq,expected);
+    for(uint8_t i=0;i<24;++i)if(bytes[i]!=expected[i])return false;
     return true;
 }
-
-static void freshTransport(uint16_t& seenGeneration,
-                           uint8_t& txSeq,uint8_t& rxLast) {
-    if (!session.active() || seenGeneration==session.generation()) return;
-    seenGeneration=session.generation();
-    bridge.newSession();
-    txSeq=0;
-    rxLast=0xFF;
+static void report(bool leader,PairedLink& link) {
+    const uint32_t now=ticks.now();
+    if(static_cast<uint32_t>(now-lastSecond)<2000000UL)return;
+    lastSecond=now;
+    Diagnostic l;
+    l.word(leader?"A TX/s=":"B RX/s=");
+    l.number(leader?period.tx:period.rx);
+    l.word(leader?" ACK/s=":" Q/s=");
+    l.number(leader?period.rx:period.queued);
+    l.word(" ARC=");l.number(period.arc);
+    l.word(" MAX=");l.number(period.maxRt);
+    l.word(" BAD=");l.number(period.bad);
+    l.word(" IO=");l.number(period.io);
+    l.word(" GAB=");l.number(leader?link.remoteLoss():link.localLoss());
+    l.word(" GBA=");l.number(leader?link.localLoss():link.remoteLoss());
+    l.word(" DROP=");l.number(link.localDrops());
+    l.word(" FULL=");l.number(period.full);
+    l.send();
+    period.reset();
 }
-
-// Both directions share the same radio packet; the transport sees only
-// valid, correctly addressed and session-matched frames.
-static void acceptActive(const FrameV1::View& v,uint8_t peer,uint8_t self,
-                         uint8_t& rxLast) {
-    const FrameV1::Header& h=v.header;
-    if (!session.active() || h.src!=peer || h.dst!=self ||
-        h.sid!=session.sid()) {
-        ++counters.rxWrongSession;
-        return;
+static void fatal(const char* what) {
+    Diagnostic l;l.word("PAIR CORE FAIL ");l.word(what);l.send();
+    for(;;)delay.ms(100);
+}
+static bool makeDataOrIdle(PairedLink& link,uint8_t role,
+                           uint8_t* dst,uint8_t& width) {
+    if(link.peerCredit()!=0) {
+        pattern(role,link.nextTxSeq(),body);
+        return link.make(PairedFrame::Kind::DATA,0,1,body,24,
+                         dst,width)==PairedFrame::Error::OK;
     }
-    rxLast=h.txSeq;
-    ++counters.rxValid;
-    bridge.accept(v,uart);
+    return link.make(PairedFrame::Kind::IDLE,0,1,0,0,
+                     dst,width)==PairedFrame::Error::OK;
 }
-
-static bool encodeActive(uint8_t self,uint8_t peer,
-                         uint8_t seq,uint8_t rxLast,
-                         bool& hasAck,bool& hasData) {
-    FrameV1::Header h;
-    if (!bridge.prepare(uart,self,peer,session.sid(),seq,rxLast,h,body))
-        return false;
-    hasAck=(h.kind==FrameV1::Kind::CONTROL);
-    hasData=(h.kind==FrameV1::Kind::DATA && h.length!=0) ||
-            (h.kind==FrameV1::Kind::CONTROL && body[0]==0x12);
-    return FrameV1::encode(h,body,packet)==FrameV1::Error::OK;
+static void processFrame(PairedLink& link,uint8_t peer,uint8_t width) {
+    PairedFrame::View view;
+    if(PairedFrame::decode(incoming,width,view)!=PairedFrame::Error::OK) {
+        ++period.bad;return;
+    }
+    const PairedLink::Receipt receipt=link.receive(view);
+    if(receipt==PairedLink::Receipt::WRONG_SESSION) {
+        ++period.bad;return;
+    }
+    if(receipt!=PairedLink::Receipt::NEW_FRAME)return;
+    if(view.header.kind()==PairedFrame::Kind::DATA) {
+        if(view.length!=24 || !check(view.body,peer,view.header.txSeq)) {
+            ++period.bad;
+            link.noteLocalDrop();
+            return;
+        }
+    }
+    ++period.rx;
 }
-
-static Phy::TxResult sendFrame(bool hasAck,bool hasData) {
-    const Phy::TxResult tx=phy.transmit(packet);
-    countTx(tx);
-    bridge.afterTransmit(tx.result==Phy::TxStatus::ACKED,
-                         hasAck,hasData);
-    return tx;
-}
-
-static void runLeader() {
-    uint8_t seq=0,rxLast=0xFF;
-    uint16_t generation=0;
-    uint8_t misses=0;
-    delay.ms(150);
-
-    for (;;) {
-        if (!session.active()) {
-            if (!session.prepare(packet)) {
-                delay.ms(20);
-                continue;
-            }
-            const Phy::TxResult tx=phy.transmit(packet);
-            countTx(tx);
-        } else {
-            bool ack=false,data=false;
-            if (!encodeActive(0,1,seq,rxLast,ack,data)) {
-                session.restart();
-                ++counters.linkRestarts;
-                continue;
-            }
-            (void)sendFrame(ack,data);
-            ++seq;
-        }
-
-        bool gotReply=false;
-        if (phy.listen()) {
-            for (uint8_t ms=0;ms<100;++ms) {
-                FrameV1::View v;
-                if (readFrame(v)) {
-                    if (!session.active()) {
-                        if (session.accept(v)) {
-                            gotReply=true;
-                            freshTransport(generation,seq,rxLast);
-                            break;
-                        }
-                    } else if (v.header.kind==FrameV1::Kind::CONTROL &&
-                               v.body[0]==0x01) {
-                        // A newly booted peer should never originate HELLO
-                        // in M1 (the smaller class is the initiator).
-                    } else if (v.header.src==1 && v.header.dst==0 &&
-                               v.header.sid==session.sid()) {
-                        acceptActive(v,1,0,rxLast);
-                        gotReply=true;
-                        break;
-                    }
-                }
-                delay.ms(1);
-            }
-        }
-        phy.standby();
-
-        if (session.active() && bridge.needsRecovery()) {
-            session.restart();
-            ++counters.linkRestarts;
-            misses=0;
-        }
-        if (session.active()) {
-            if (!gotReply) {
-                ++counters.replyMiss;
-                if (++misses>=5) {
-                    session.restart();
-                    ++counters.linkRestarts;
-                    misses=0;
-                }
-            } else misses=0;
-        } else {
-            misses=0;
-        }
-        delay.ms(session.active()?20:90);
+static void runA() {
+    if(!phy.beginPtx())fatal("PTX");
+    delay.ms(150); // only once, allow PRX to boot
+    Diagnostic hello;
+    hello.word("PAIR CORE A PTX 8+24B SID16 SPI8");
+    hello.send();
+    lastSecond=ticks.now();
+    for(;;) {
+        uint8_t width=0;
+        if(!makeDataOrIdle(linkState,0,packet,width))fatal("ENCODE");
+        uint8_t incomingWidth=0;
+        const AckPhy::TxResult tx=phy.transfer(packet,width,incoming,incomingWidth);
+        linkState.notePtxRetries(tx.retries);
+        period.arc=static_cast<uint16_t>(period.arc+tx.retries);
+        if(tx.code==AckPhy::TxCode::ACK_WITH_DATA ||
+           tx.code==AckPhy::TxCode::ACK_EMPTY) ++period.tx;
+        if(tx.code==AckPhy::TxCode::ACK_WITH_DATA)
+            processFrame(linkState,1,incomingWidth);
+        else if(tx.code==AckPhy::TxCode::ACK_EMPTY) ++period.empty;
+        else if(tx.code==AckPhy::TxCode::MAX_RT) ++period.maxRt;
+        else if(tx.code==AckPhy::TxCode::BAD_REPLY_SIZE) ++period.bad;
+        else if(tx.code==AckPhy::TxCode::IO_ERROR ||
+                tx.code==AckPhy::TxCode::TIMEOUT) ++period.io;
+        report(true,linkState);
     }
 }
 
-static void runFollower() {
-    uint8_t seq=0,rxLast=0xFF;
-    uint16_t generation=0;
-    (void)phy.listen();
-    for (;;) {
-        FrameV1::View v;
-        if (!readFrame(v)) {
-            delay.ms(1);
-            continue;
+static bool queueB() {
+    if(!ackWaiting) {
+        if(!makeDataOrIdle(linkState,1,ackStaged,ackSize))return false;
+        ackWaiting=true;
+    }
+    const AckPhy::QueueCode q=phy.queueReply(ackStaged,ackSize);
+    if(q==AckPhy::QueueCode::QUEUED) {
+        ackWaiting=false;
+        ++period.queued;
+    } else if(q==AckPhy::QueueCode::FULL) {
+        ++period.full;
+    } else ++period.io;
+    return q==AckPhy::QueueCode::QUEUED;
+}
+static void runB() {
+    if(!phy.beginPrx())fatal("PRX");
+    // Initial idle ACK advertises one packet of buffer credit.
+    // B must NOT send DATA before it knows A's advertised RX credit.
+    if(!queueB())fatal("PRIME");
+    Diagnostic hello;hello.word("PAIR CORE B PRX 8+24B SID16 SPI8");hello.send();
+    lastSecond=ticks.now();
+    for(;;) {
+        uint8_t incomingWidth=0;
+        const AckPhy::RxCode rx=phy.receive(incoming,incomingWidth);
+        if(rx==AckPhy::RxCode::GOOD) {
+            processFrame(linkState,0,incomingWidth);
+            if(!phy.clearPrxFlags()) ++period.io;
+            (void)queueB();
+        } else if(rx==AckPhy::RxCode::BAD_SIZE) {
+            ++period.bad;
+            if(!phy.clearPrxFlags()) ++period.io;
+        } else if(rx==AckPhy::RxCode::IO_ERROR) {
+            ++period.io;
+            if(!phy.clearPrxFlags()) ++period.io;
         }
-
-        bool sendReply=false;
-        bool handshaking=false;
-        if (v.header.kind==FrameV1::Kind::CONTROL &&
-            (v.body[0]==0x01 || v.body[0]==0x03)) {
-            if (session.accept(v)) {
-                freshTransport(generation,seq,rxLast);
-                handshaking=session.prepare(packet);
-                sendReply=handshaking;
-            }
-        } else if (session.active() && v.header.src==0 &&
-                   v.header.dst==1 && v.header.sid==session.sid()) {
-            acceptActive(v,0,1,rxLast);
-            if (bridge.needsRecovery()) {
-                session.restart();
-                ++counters.linkRestarts;
-                continue;
-            }
-            bool ack=false,data=false;
-            if (encodeActive(1,0,seq,rxLast,ack,data)) {
-                sendReply=true;
-            }
-            // v points into packet, which was overwritten above.
-            if (sendReply) {
-                // CE/RX must finish ACK before crossing to TX.
-                delay.ms(25);
-                const Phy::TxResult tx=sendFrame(ack,data);
-                ++seq;
-                (void)tx;
-                (void)phy.listen();
-            }
-            continue;
-        }
-
-        if (sendReply) {
-            delay.ms(25);
-            const Phy::TxResult tx=phy.transmit(packet);
-            countTx(tx);
-            session.sentReply();
-            (void)phy.listen();
-        }
+        report(false,linkState);
     }
 }
-
 int main() {
     uart.begin();
+    Timer1Clock::begin();
     sei();
-    radioCe.clear();
-    radioCsn.set();
+    ce.clear();csn.set();
     delay.ms(110);
-
-    if (radio.probeAndConfigure().result!=Radio::Result::OK)
-        for (;;) {delay.ms(100);} // do not emit error bytes on data port
-
+    if(radio.probeAndConfigure().result!=Radio::Result::OK)
+        fatal("NRF");
+    spi.setSpeed(SpiMaster::Speed::MHz8);
+    if(!radio.enableAckPayload(0x23))fatal("DPL");
     uint16_t adc=0;
-    if (!Adc0::sample(adc))
-        for (;;) {delay.ms(100);}
-    const uint8_t self=Adc0::classForM1(adc);
-    uint32_t epoch=0;
-    if (!BootEpoch::advance(epoch))
-        for (;;) {delay.ms(100);}
-    session.configure(self,static_cast<uint8_t>(1U-self),epoch);
-
-    if (session.isLeader()) runLeader();
-    else runFollower();
+    if(!Adc0::sample(adc))fatal("ADC");
+    const bool isA=(Adc0::classForM1(adc)==0);
+    linkState.configure(isA,TEST_SESSION);
+    if(isA)runA();
+    else runB();
 }
-
-#endif // GPT_NRF24_APPLICATION == 0

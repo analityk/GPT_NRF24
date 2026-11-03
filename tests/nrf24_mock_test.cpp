@@ -102,16 +102,12 @@ int main() {
     assert(memcmp(hw.rxAddress,hw.txAddress,5)==0);
     uint8_t values[32]={};
     for (unsigned i=0;i<32;++i) values[i]=static_cast<uint8_t>(i*3U);
-    assert(radio.writePayload(values));
-    assert(hw.txPayloadCount==32 && memcmp(values,hw.txPayload,32)==0);
+    // Keep test payload as a hardware-frame fixture, not an application format.
     memcpy(hw.rxPayload,values,32);
+    assert(radio.writeDynamicPayload(values,32));
+    assert(hw.txPayloadCount==32 && memcmp(hw.txPayload,values,32)==0);
     memset(values,0,sizeof(values));
-    assert(radio.readPayload(values));
-    assert(memcmp(values,hw.rxPayload,32)==0);
-    assert(!radio.writePayload(nullptr));
-    assert(!radio.readPayload(nullptr));
-    // Full 32-byte hardware ACK Payload and dynamic RX width are separate
-    // operations from the existing fixed-payload API.
+    // ACK Payload and DPL must work at the radio command layer.
     assert(radio.enableAckPayload(0x23));
     assert(hw.regs[0x1D]==0x06 && hw.regs[0x1C]==0x01 &&
            hw.regs[0x04]==0x23);

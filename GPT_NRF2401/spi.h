@@ -3,7 +3,7 @@
 
 #include <stdint.h>
 
-// ATmega328P hardware SPI master (mode 0, MSB first, F_CPU/16 = 1 MHz).
+// ATmega328P hardware SPI master (mode 0, MSB first, selectable 1/8 MHz).
 // One caller at a time. The UART interrupt does not touch this peripheral.
 // Every byte transfer has a finite polling limit.
 class SpiMaster {

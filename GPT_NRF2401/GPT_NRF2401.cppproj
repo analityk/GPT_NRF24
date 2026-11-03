@@ -187,19 +187,22 @@
     </ToolchainSettings>
   </PropertyGroup>
   <ItemGroup>
-    <Compile Include="paired_core_main.cpp">
-      <SubType>compile</SubType>
-    </Compile>
-    <None Include="paired_frame.h">
-      <SubType>compile</SubType>
-    </None>
-    <None Include="paired_link.h">
-      <SubType>compile</SubType>
-    </None>
-    <Compile Include="ack_bench_main.cpp">
+    <Compile Include="main.cpp">
       <SubType>compile</SubType>
     </Compile>
     <Compile Include="timer1_clock.cpp">
+      <SubType>compile</SubType>
+    </Compile>
+    <Compile Include="gpio.cpp">
+      <SubType>compile</SubType>
+    </Compile>
+    <Compile Include="adc0.cpp">
+      <SubType>compile</SubType>
+    </Compile>
+    <Compile Include="spi.cpp">
+      <SubType>compile</SubType>
+    </Compile>
+    <Compile Include="uart.cpp">
       <SubType>compile</SubType>
     </Compile>
     <None Include="timer1_clock.h">
@@ -208,33 +211,12 @@
     <None Include="nrf24_ack_phy.h">
       <SubType>compile</SubType>
     </None>
-    <None Include="ack_bench_pattern.h">
+    <None Include="paired_frame.h">
       <SubType>compile</SubType>
     </None>
-    <None Include="application_select.h">
+    <None Include="paired_link.h">
       <SubType>compile</SubType>
     </None>
-    <Compile Include="main.cpp">
-      <SubType>compile</SubType>
-    </Compile>
-    <Compile Include="gpio.cpp">
-      <SubType>compile</SubType>
-    </Compile>
-    <Compile Include="boot_epoch.cpp">
-      <SubType>compile</SubType>
-    </Compile>
-    <None Include="boot_epoch.h">
-      <SubType>compile</SubType>
-    </None>
-    <None Include="session_v1.h">
-      <SubType>compile</SubType>
-    </None>
-    <None Include="uart_transport_v1.h">
-      <SubType>compile</SubType>
-    </None>
-    <Compile Include="adc0.cpp">
-      <SubType>compile</SubType>
-    </Compile>
     <None Include="adc0.h">
       <SubType>compile</SubType>
     </None>
@@ -244,37 +226,19 @@
     <None Include="avr_delay.h">
       <SubType>compile</SubType>
     </None>
-    <None Include="frame_v1.h">
-      <SubType>compile</SubType>
-    </None>
-    <None Include="v1_probe_pattern.h">
-      <SubType>compile</SubType>
-    </None>
-    <None Include="rf_raw_pattern.h">
-      <SubType>compile</SubType>
-    </None>
-    <None Include="nrf24_phy.h">
-      <SubType>compile</SubType>
-    </None>
-    <Compile Include="spi.cpp">
-      <SubType>compile</SubType>
-    </Compile>
     <None Include="spi.h">
       <SubType>compile</SubType>
     </None>
     <None Include="nrf24.h">
       <SubType>compile</SubType>
     </None>
-    <Compile Include="uart.cpp">
+    <None Include="gpio.h">
       <SubType>compile</SubType>
-    </Compile>
+    </None>
     <None Include="uart.h">
       <SubType>compile</SubType>
     </None>
     <None Include="byte_ring.h">
-      <SubType>compile</SubType>
-    </None>
-    <None Include="gpio.h">
       <SubType>compile</SubType>
     </None>
   </ItemGroup>

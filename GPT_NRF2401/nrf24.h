@@ -66,16 +66,7 @@ public:
     bool clearIrq(uint8_t flags) {
         return writeRegister(STATUS, static_cast<uint8_t>(flags & 0x70U));
     }
-    bool readPayload(uint8_t* dst) {
-        return dst && transaction(0x61, 0, dst, 32, 0);
-    }
-    bool writePayload(const uint8_t* src) {
-        return src && transaction(0xA0, src, 0, 32, 0);
-    }
-
-
-    // Enhanced ShockBurst ACK payload support (no change to the default
-    // fixed-payload configuration used by the UART bridge).
+    // Enhanced ShockBurst ACK payload + dynamic payload support.
     // Some devices lock FEATURE until ACTIVATE 0x73; probe before toggling,
     // never blindly toggle a device where FEATURE already works.
     bool enableAckPayload(uint8_t retries=0x23) {
@@ -159,7 +150,7 @@ public:
         if (!writeRegister(RF_CH, oldChannel))
             return failure(p, Result::SPI_ERROR, RF_CH);
 
-        // CRC16, radio powered down, fixed 32 B, 1 Mbps, 5 B addressing,
+        // CRC16, radio powered down, initial width 32 B, 1 Mbps, 5 B addressing,
         // auto ACK on pipe0 only; chosen channel 76 (2476 MHz).
         const uint8_t pairs[][2] = {
             { CONFIG, 0x0C }, { EN_AA, 0x01 }, { EN_RXADDR, 0x01 },
@@ -183,7 +174,7 @@ public:
             }
         }
 
-        // Identical discovery address for now; later MAC assigns unicast pipes.
+        // Shared test radio address; session-specific routing is future work.
         const uint8_t address[5] = { 0xD2, 0xF0, 0xF0, 0xF0, 0xA1 };
         const uint8_t addrRegs[2] = { RX_ADDR_P0, TX_ADDR };
         for (uint8_t a=0; a<2; ++a) {
