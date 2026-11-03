@@ -40,3 +40,7 @@ Dwie identyczne płytki RF-Nano, ATmega328P + nRF24L01+, połączone radiowo. Dw
 Rozpocząć od architektury dwukierunkowego łącza dla dwóch równorzędnych urządzeń. Następnie realizować M1a–M1c według `plan.md` i odznaczać rzeczywiście wykonane pozycje z `todo.md`.
 
 Po zmianach aktualizować dokumentację i wskazywać wyniki sprawdzeń; niezależnie weryfikować działanie na fizycznych płytkach.
+
+## Checkpoint 2026-11-03
+
+Dodano `gpio.h` i `gpio.cpp` do projektu; `plan.md` opisuje szczegółową kolejność UART → SPI/nRF24 → transfer → protokół → discovery → arbitraż full duplex → testy. Następny krok: kompilacja GPIO w Microchip Studio, potem UART. Nie ma jeszcze potwierdzonego testu sprzętowego GPIO ani RF.

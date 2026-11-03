@@ -44,3 +44,7 @@ Kod ma używać jawnie tworzonych obiektów i statycznych buforów; nie wolno st
 - [migracja.md](migracja.md) — samodzielna instrukcja kontynuacji.
 
 Szczegółowe instrukcje testowania komunikacji zostaną uzupełnione wraz z implementacją i weryfikacją M1.
+
+## GPIO
+
+Dodano `GPT_NRF2401/gpio.h` i `gpio.cpp`: statyczne obiekty do sterowania pinami bez Arduino i alokacji dynamicznej. Przykład: `GPIO led(&PORTB, PB5); led.set(); led.clear();`. Metody `i2c_set` i `i2c_clr` zapewniają wejście z pull-up lub aktywne LOW (nie kompletny kontroler I²C). Wymagana weryfikacja kompilacji AVR w Studio.

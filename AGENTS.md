@@ -16,6 +16,7 @@ Instrukcje muszą być samowystarczalne. Fakty wymagające zachowania należy za
 
 - **Środowisko:** wyłącznie Microchip Studio / Atmel Studio, AVR-GCC i C++ na ATmega328P. Nie proponuj migracji do innego IDE.
 - **Pamięć:** bez `new`, `delete`, `malloc`, `free` i kontenerów wymagających alokacji dynamicznej. Obiekty mają być jawnie instancjonowane, a bufory mieć stałą pojemność i czas życia. Uwzględniaj ograniczenia SRAM.
+- **GPIO:** do sterowania pojedynczymi pinami używaj klasy `GPIO` z `GPT_NRF2401/gpio.h`; SPI/USART obsługują własne peryferia. Uwzględniaj atomowość przy współdzieleniu portu z ISR.
 - **Dwie płytki, jeden firmware:** nie uzależniaj roli urządzenia od portu COM ani jego podłączenia do komputera.
 - **Rozdział odpowiedzialności:** obsługa sprzętu, transport/protokół radiowy, sterowanie łączem i logika konsoli powinny mieć oddzielne, testowalne granice.
 - **Wielokrotne użycie:** każdy problem naprawiaj we właściwej warstwie, poprzez mechanizm nadający się do ponownego użycia. Rozwiązanie nie może zależeć od nazwy pliku, katalogu, projektu czy przypadku testowego.
