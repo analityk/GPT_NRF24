@@ -151,6 +151,7 @@ private:
             pendingLength_=0;
             sendSeq_=static_cast<uint8_t>(sendSeq_+1U);
             txAttempts_=0;
+            needsRecovery_=false; // successful application ACK resolves retry budget
         } else if (status==BUSY) {
             ++stats_.ackBusy;
         } else {

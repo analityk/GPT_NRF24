@@ -43,6 +43,11 @@ int main() {
     roundTrip(heartbeat);
     roundTrip(reliable);
     roundTrip(ack);
+    const uint8_t combined[32]={
+        0x67,0x01,0x00,0x2A,0x08,0x11,0x00,0x00,
+        0x12,0x00,0x00,0x78,0x00,0x01,0x41
+    };
+    roundTrip(combined);
     // LINK_REPORT: 10 B total, including the one-byte control opcode.
     const uint8_t linkReport[32]={
         0x6A,0x00,0x01,0x2A,0x03,0x02,0x00,0x00,
@@ -75,6 +80,13 @@ int main() {
     std::memcpy(sample,linkReport,32);
     sample[0]=0x69; // 9 B would omit one byte of MAX_RT16
     expectError(sample,Error::BAD_CONTROL_LENGTH);
+    std::memcpy(sample,combined,32);
+    sample[0]=0x66; // combined DATA_ACK requires at least 7 body bytes
+    sample[14]=0; // clear padding beyond LEN=6
+    expectError(sample,Error::BAD_CONTROL_LENGTH);
+    std::memcpy(sample,combined,32);
+    sample[10]=0xFE; // unknown ACK status must not be treated as success
+    assert(decode(sample,view)==Error::UNKNOWN_CONTROL);
     std::memcpy(sample,ack,32);
     sample[6]=1;
     expectError(sample,Error::BAD_ENDPOINT);
