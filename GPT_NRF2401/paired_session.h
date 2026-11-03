@@ -88,14 +88,17 @@ public:
         // Active-state data from A proves that A received READY_ACK.
         // For B this is the only safe transition to application DATA.
         if(!leader_ && phase_==Phase::WAIT_CONFIRM &&
-           f.header.kind()!=PairedFrame::Kind::CONTROL &&
+           (f.header.kind()==PairedFrame::Kind::DATA ||
+            f.header.kind()==PairedFrame::Kind::IDLE) &&
            sid_!=0 && f.header.sessionId==sid_){
             phase_=Phase::ACTIVE;
             ++generation_;
             return Event::ESTABLISHED;
         }
         if(f.header.kind()!=PairedFrame::Kind::CONTROL ||
-           f.header.sessionId!=0 || f.length<7 || !f.body)return Event::NONE;
+           f.header.sessionId!=0 ||
+           (f.header.flags&PairedFrame::RESYNC)==0 ||
+           f.length<7 || !f.body)return Event::NONE;
         const uint8_t op=f.body[0];
         const Identity sentBy=getIdentity(f.body+1);
         if(sentBy.boot==0)return Event::NONE;

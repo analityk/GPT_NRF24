@@ -91,6 +91,9 @@ int main() {
     raw[6]=1; // CONTROL handshake always requires SID=0
     assert(PairedFrame::decode(raw,width,v)==PairedFrame::Error::OK);
     assert(freshB.accept(v)==S::Event::NONE);
+    raw[6]=0;raw[5]=static_cast<uint8_t>(PairedFrame::Kind::CONTROL);
+    assert(PairedFrame::decode(raw,width,v)==PairedFrame::Error::OK);
+    assert(freshB.accept(v)==S::Event::NONE); // missing RESYNC flag
     // Session attempt cannot silently wrap.
     S exhausted(true,S::Identity(123,0xFFFF));
     assert(!exhausted.restart());
