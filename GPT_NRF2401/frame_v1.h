@@ -41,6 +41,7 @@ namespace FrameV1 {
             case 0x03: return 10; // READY
             case 0x04: return 2;  // READY_ACK
             case 0x10: return 5;  // TRANSPORT_ACK
+            case 0x12: return 0;  // DATA_ACK: variable, 7..24 bytes
             case 0x11: return 10; // LINK_REPORT: opcode + 1 + 4 + 2 + 2 bytes
             case 0x7F: return 0;  // EXT: length >= 3
             default: return 0;    // unknown extension/control
@@ -74,6 +75,11 @@ namespace FrameV1 {
                 return Error::BAD_SESSION;
         } else if (h.sid == 0) {
             return Error::BAD_SESSION;
+        }
+        if (opcode == 0x12) {
+            if (h.length < 7) return Error::BAD_CONTROL_LENGTH;
+            if (body[2] > 2) return Error::UNKNOWN_CONTROL;
+            return Error::OK;
         }
         if (opcode == 0x7F) {
             if (h.length < 3) return Error::BAD_CONTROL_LENGTH;
