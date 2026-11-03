@@ -65,3 +65,12 @@ Przyszłe wpisy powinny zawierać datę, zakres faktycznie wykonanej zmiany, com
 - To potwierdza wykonanie programu diagnostycznego na obu ATmega328P, komunikację SPI z radiem oraz zakończenie procedury testowej zawierającej zapis/odczyt rejestru RF_CH i konfiguracji nRF24 (przy założeniu wynikającej z kodu, że komunikat OK jest emitowany po wszystkich sprawdzeniach).
 - **Etap inicjalizacji sprzętowego SPI i dostępu rejestrowego nRF24 uznany za zaliczony na obu płytkach.** Nie testowano jeszcze nadawania/odbioru fal radiowych, auto-ACK, IRQ, rzeczywistych strat ani naprzemiennych slotów. Nie należy mylić napisu `NRF24 OK` wysłanego przez UART/CH340 z komunikatem odebranym drogą radiową.
 - Poprzedni wpis mówiący, że test SPI jest niepotwierdzony, był aktualny podczas jego sporządzania; niniejszy wpis dokumentuje późniejsze dowody. Decyzja o pozostawieniu wyłączonego `Pack Structure Members` pozostaje bez zmian.
+
+## 2026-11-03 — pierwszy test wymiany ramek RAW32 (oczekuje na sprzęt)
+
+- Właściciel zlecił **pierwsze rzeczywiste połączenie radiowe** dwóch RF-Nano, na razie bez wdrażania protokołu v1. Przygotowano ten sam firmware dla obu płytek; **ADC0** (GND/3,3 V, próg surowy 512) zatrzaskuje rolę inicjatora / respondera po starcie.
+- Dodano `nrf24_phy.h` (osobna od rejestrów nRF warstwa CE/PRX/PTX, ACK/TX_DS, MAX_RT, timeouty, obsługa RX FIFO i flagi RX_DR), `adc0.h/.cpp`, `avr_delay.h`, `board_clock.h`, `rf_raw_pattern.h`. Aktualny `main.cpp` nadaje wzorce 32 B A→B, B sprawdza i odpowiada 32 B B→A; oba urządzenia raportują w RealTerm wyniki transmisji, ARC_CNT i RX_DR.
+- `board_clock.h` stanowi wspólną definicję F_CPU=16 MHz dla opóźnień, USART, SPI i ADC0; wcześniej sam `adc0.cpp` nie miał gwarantowanej konfiguracji F_CPU przed `util/delay.h`.
+- Dodano `tests/nrf24_phy_test.cpp` i `tests/rf_raw_pattern_test.cpp`. Lokalnie uruchomiono równoważne testy modelowe g++ C++11 z `-Wall -Wextra -Werror -pedantic`: PASS dla ACK, MAX_RT, timeoutu, błędu SPI, odbioru FIFO, wszystkich bajtów wzorca (mutacje) i progu ADC.
+- Test radiowy wykorzystuje sprzętowe CRC16 i auto-ACK z poprzedniej konfiguracji nRF. Stałe opóźnienia testowe są świadomie częścią diagnostyki, nie przyszłego scheduler/MAC.
+- **Nie wykonano kompilacji AVR ani próby dwóch fizycznych radii dla nowego wsadu; brak potwierdzenia transmisji RF.** Zmiany nie dotyczą F12, Post-Build ani wyłączenia Pack Structure Members.

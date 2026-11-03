@@ -44,6 +44,8 @@ Warstwa SPI, rejestrowy sterownik nRF i UART diagnostyczny zostały dodane. **Et
 Uruchomić sprzętowe SPI mode 0, bezpieczny zegar, GPIO dla CE/CSN. Udostępnić read/write register, read/write buffer i command. Potwierdzić odczyt/zapis rejestrów. Ustalić wspólny kanał, adres, CRC, 1 Mb/s, Enhanced ShockBurst i stały payload 32 B. Obsłużyć CONFIG, STATUS, FIFO_STATUS, RX_DR, TX_DS, MAX_RT, flush FIFO, czasy CE i przejścia RX/TX. Jeśli IRQ nie jest podłączone, odpytywać status bez nieograniczonego czekania. Bramka: obie płytki raportują sprawne SPI i radio.
 
 ## 4. Test jednostronny
+
+Dodano diagnostyczny RAW32 ping-pong bez protokołu v1: identyczny firmware, inicjator według zatrzaśniętego ADC0 (GND vs 3,3 V), odbiorca odsyła sprawdzony surowy payload. Oddzielna warstwa PHY odpowiada za przełączanie CE/PRX/PTX, ACK i timeouty. Test modelowy (g++ C++11) wykonany; **weryfikacja fizyczna pozostaje otwarta**.
 Na czas testu jedną płytkę ustawić w RX, drugą w TX (nie utrwalać ról). Przesłać znaną ramkę z licznikiem, zweryfikować payload na UART odbiorcy i TX_DS lub MAX_RT nadawcy. Powtórzyć w przeciwnym kierunku oraz bez odbiorcy. Bramka: rzeczywisty transfer A→B i B→A.
 
 ## 5. Protokół danych

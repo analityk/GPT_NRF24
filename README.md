@@ -83,3 +83,35 @@ Klasy `SpiMaster` (`spi.h/.cpp`) i `Nrf24<Spi, Pin>` (`nrf24.h`) są odseparowan
 ### Ostrzeżenia kompilatora o `packed`
 
 Jeśli Microchip Studio pokazuje `ignoring packed attribute` dla pól referencyjnych sterownika radia, sprawdź ustawienie `Pack Structure Members` w opcjach **C i C++** dla **Debug oraz Release**. W tym projekcie ustawiono je na `False` — globalny `-fpack-struct` jest niepotrzebny i niebezpieczny dla struktur aplikacyjnych. Format radiowy serializuje się jawnie do 32-bajtowej tablicy, bez bezpośredniego mapowania na spakowane obiekty. O sukcesie builda rozstrzyga `Output > Build` i wynik `Rebuild All`, a nie wyłącznie `Error List`.
+
+## Test radiowy RAW32 — bez protokołu v1
+
+Aktualny wsad jest **etapem sprawdzenia sprzętu radiowego**, nie mostem UART↔RF ani implementacją `protocol-v1.md`. Obydwie płytki otrzymują **identyczny HEX**. Ich rolę w samym teście określa wyłącznie pomiar ADC0 po starcie:
+
+- **A / CLASS=00** — połączyć ADC0/A0 z **GND**. Płytka okresowo wysyła 32-bajtowy wzorzec, oczekuje sprzętowego ACK i potem 32-bajtowej odpowiedzi.
+- **B / CLASS=01** — połączyć ADC0/A0 z **3,3 V**. Płytka odbiera wzorzec w PRX, sprawdza każdy bajt, odczekuje na zakończenie sprzętowych ACK, przełącza się do PTX i odsyła odpowiedź; wraca do PRX.
+- W obu przypadkach masy i zasilanie muszą należeć do **własnej** płytki. Nie łączyć ze sobą pinów radiowych ani UART obu płytek. Dla AVCC 5 V, 3,3 V na ADC0 daje ok. 675/1023, czyli CLASS=01. Jeśli A0 pozostanie niepodłączony, klasa jest nieokreślona.
+- ADC0 używa odniesienia AVCC; wynik 10-bitowy jest uśredniany z ośmiu konwersji, zatrzaskiwany po uruchomieniu. Próg: `ADC < 512` → 0, `ADC >= 512` → 1. Nie ma tu enumeracji klas ani automatycznego discovery.
+
+**Po F7 (Microchip Studio) i F12 (ręczne programowanie) otworzyć dwa porty RealTerm 115200 8N1**. Przykładowe odpowiedzi:
+
+```text
+COM A: NRF OK CLASS=00 ADC=0000 MODE=RAW32
+COM A: A SEQ=0000 TX=ACK ARC=00 REPLY=OK RD=1
+COM A: A SEQ=0001 TX=ACK ARC=00 REPLY=OK RD=1
+
+COM B: NRF OK CLASS=01 ADC=02A3 MODE=RAW32
+COM B: B SEQ=0000 RX=OK TX=ACK ARC=00 RD=1
+COM B: B SEQ=0001 RX=OK TX=ACK ARC=00 RD=1
+```
+
+`TX=ACK` oznacza `TX_DS` (układ radiowy otrzymał sprzętowe ACK); `TX=MAX_RT` oznacza wyczerpanie retransmisji radia, `TX=TIMEOUT` lub `TX=SPI_ERR` wskazuje na niedomkniętą operację/błąd. `ARC` jest odczytem sprzętowego `ARC_CNT` dla ostatniej emisji, `RD=1` oznacza zaobserwowaną flagę `RX_DR` przy odbiorze. `REPLY=OK` po stronie A dodatkowo dowodzi, że w programie B przetworzono poprawny wzorzec i odesłano odpowiedź.
+
+Znak `?` odpyta lokalne liczniki: `RX`, `BAD`, `TX_ACK`, `TX_FAIL`, `REPLY_TO`, `RX_DR`. Pozostałe znaki wysyłane z terminala są na tym etapie ignorowane (brak mostu UART-RF). Numery i wzorzec danych są **wyłącznie diagnostyczne**: bajty 0..2 to znacznik i numer testu, pozostałe 29 bajtów mają obliczalną zawartość. Odpowiedź odwraca wyłącznie znacznik. To nie jest nagłówek protokołu v1.
+
+Scenariusze sprzętowe: uruchomić obie płytki, odłączyć zasilanie B (A powinno raportować MAX_RT/MISS), podłączyć ponownie (powinno samoczynnie wrócić ACK/REPLY=OK), powtórzyć reset A. Obecne stałe odstępy testowe służą tylko weryfikacji przełączania TX/RX; nie są docelowym harmonogramem slotów M1. Test nie zapewnia pełnej bezstratności, routingu, negocjacji ról ani logicznego full duplex dla dowolnych danych UART.
+
+**Warstwy kodu:** `nrf24.h` (polecenia SPI/rejestry), `nrf24_phy.h` (sterowanie CE, PRX/PTX, ograniczone operacje TX/RX, przerwania/status), `adc0.h/.cpp` (sprzęt ADC), `board_clock.h` (wspólne F_CPU dla sterowników i opóźnień), `avr_delay.h` (adapter czasów), `rf_raw_pattern.h` (wzorzec testowy), `main.cpp` (wyłącznie scenariusz RAW32). Podstawowa transmisja wymaga prawdziwego testu na obu fizycznych radiach.
+
+Na hoście dodano `tests/nrf24_phy_test.cpp` i `tests/rf_raw_pattern_test.cpp`; testy pomocnicze uruchomiono przez `g++ -std=c++11 -Wall -Wextra -Werror -pedantic` na odpowiednikach bieżącej logiki PHY i wzorca. Kompilacja AVR i fizyczny transfer RF nie zostały jeszcze zweryfikowane.
+

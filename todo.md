@@ -13,7 +13,9 @@
 - [x] Dodać i uruchomić na obu fizycznych RF-Nano obsługę SPI oraz diagnostykę rejestrów nRF24L01+; potwierdzenie COM10/COM11 w RealTerm, 2026-11-03.
 - [x] Zweryfikować inicjalizację SPI/nRF na obu RF-Nano: oba raportują `NRF24 OK S=0E CFG=0C CH=4C RF=06 FIFO=11`, a procedura OK obejmuje readback rejestrów.
 - [ ] Dodatkowa walidacja: build obu konfiguracji, obsługa odłączenia/awarii SPI i przypadki graniczne; brak jeszcze testu transmisji RF.
-- [ ] Przetestować pierwszą transmisję radiową stałej ramki 32 B A→B i B→A oraz sprzętowe TX_DS/MAX_RT/RX_DR.
+- [x] Przygotować firmware i sterownik PHY dla surowych 32-bajtowych ramek A→B i B→A, z auto-ACK, MAX_RT, ARC_CNT i RX_DR; testy modelowe przeszły.
+- [ ] Zweryfikować na obu fizycznych RF-Nano przesyłanie RAW32 A→B→A, przydział roli ADC0, powtarzalność ACK i poprawność flag RX_DR/ARC_CNT.
+- [ ] Przetestować brak partnera, ponowny start i powrót do transmisji po MAX_RT bez ręcznego resetowania drugiego radia.
 - [ ] Zaimplementować przesyłanie danych UART ↔ radio.
 - [ ] Zapewnić komunikację w obu kierunkach przy identycznym firmware.
 - [ ] Utrzymywać naprzemienną wymianę 32-bajtowych ramek również bez danych UART.
