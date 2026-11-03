@@ -23,6 +23,7 @@ public:
         counters_=Counters();
     }
     uint16_t sessionId() const {return sid_;}
+    uint8_t nextTxSeq() const {return txSeq_;}
     uint8_t peerCredit() const {return peerCredit_;}
     uint8_t localLoss() const {return localLoss_;}
     uint8_t remoteLoss() const {return remoteLoss_;}

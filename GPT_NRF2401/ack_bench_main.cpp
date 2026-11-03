@@ -1,5 +1,5 @@
 #include "application_select.h"
-#if GPT_NRF24_ACK_BENCHMARK
+#if GPT_NRF24_APPLICATION == 1
 
 /*
  * Physical ACK-payload ping-pong benchmark: 32 bytes A->B, 32 bytes B->A
@@ -195,4 +195,4 @@ int main() {
     else runRx();
 }
 
-#endif // GPT_NRF24_ACK_BENCHMARK
+#endif // GPT_NRF24_APPLICATION == 1

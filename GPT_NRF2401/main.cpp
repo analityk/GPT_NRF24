@@ -1,5 +1,5 @@
 #include "application_select.h"
-#if !GPT_NRF24_ACK_BENCHMARK
+#if GPT_NRF24_APPLICATION == 0
 /*
  * RF-Nano UART <-> reliable v1 UART endpoint over nRF24L01+.
  *
@@ -278,4 +278,4 @@ int main() {
     else runFollower();
 }
 
-#endif // !GPT_NRF24_ACK_BENCHMARK
+#endif // GPT_NRF24_APPLICATION == 0

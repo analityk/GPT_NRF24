@@ -187,6 +187,15 @@
     </ToolchainSettings>
   </PropertyGroup>
   <ItemGroup>
+    <Compile Include="paired_core_main.cpp">
+      <SubType>compile</SubType>
+    </Compile>
+    <None Include="paired_frame.h">
+      <SubType>compile</SubType>
+    </None>
+    <None Include="paired_link.h">
+      <SubType>compile</SubType>
+    </None>
     <Compile Include="ack_bench_main.cpp">
       <SubType>compile</SubType>
     </Compile>
