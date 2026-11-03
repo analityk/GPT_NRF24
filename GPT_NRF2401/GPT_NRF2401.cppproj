@@ -193,6 +193,18 @@
     <Compile Include="gpio.cpp">
       <SubType>compile</SubType>
     </Compile>
+    <Compile Include="boot_epoch.cpp">
+      <SubType>compile</SubType>
+    </Compile>
+    <None Include="boot_epoch.h">
+      <SubType>compile</SubType>
+    </None>
+    <None Include="session_v1.h">
+      <SubType>compile</SubType>
+    </None>
+    <None Include="uart_transport_v1.h">
+      <SubType>compile</SubType>
+    </None>
     <Compile Include="adc0.cpp">
       <SubType>compile</SubType>
     </Compile>

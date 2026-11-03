@@ -1,13 +1,20 @@
 /*
- * V1 payload bring-up: fixed 32 B over working bidirectional nRF24 PHY.
- * Same binary on both boards: ADC0 to GND = class 0 (initiator),
- * ADC0 to AVCC or 3.3V = class 1 (responder).
- * Sends length 0/1/23/24 byte test frames. NO UART bridge yet.
- * TEST_SID is a fixture, NOT session negotiation or reliable transport.
- * RF pins: PB2/D10 CE, PB1/D9 CSN (verified on these RF-Nanos).
+ * RF-Nano UART <-> reliable v1 UART endpoint over nRF24L01+.
+ *
+ * Both boards run EXACTLY the same firmware.
+ * ADC0 to GND => class 0 (initiates each RF exchange).
+ * ADC0 to own VCC => class 1 (listens and answers).
+ *
+ * Binary-transparent port: no local echo, no 'command' characters,
+ * no text diagnostics mixed with user payload.
+ * 8 B v1 header + up to 24 B body, fixed 32 B RF payload.
+ * Session handshake: HELLO / HELLO_REPLY / READY / READY_ACK.
+ * App transport: stop-and-wait ACK/duplicate filtering in both directions.
+ *
+ * This is still a staged M1 implementation: no hardware UART flow control,
+ * no multi-node access, no exactly-once delivery across resets.
  */
 #include "board_clock.h"
-
 #include <avr/io.h>
 #include <avr/interrupt.h>
 #include "gpio.h"
@@ -18,254 +25,243 @@
 #include "avr_delay.h"
 #include "adc0.h"
 #include "frame_v1.h"
-#include "v1_probe_pattern.h"
+#include "uart_transport_v1.h"
+#include "session_v1.h"
+#include "boot_epoch.h"
+
+typedef Nrf24<SpiMaster, GPIO> Radio;
+typedef Nrf24Phy<Radio, AvrDelay> Phy;
+typedef ReliableUartV1<UART> Bridge;
 
 static UART uart;
 static SpiMaster spi;
 static GPIO radioCe(&PORTB, PB2);
 static GPIO radioCsn(&PORTB, PB1);
-static Nrf24<SpiMaster, GPIO> radio(spi, radioCe, radioCsn);
+static Radio radio(spi,radioCe,radioCsn);
 static AvrDelay delay;
-static Nrf24Phy<Nrf24<SpiMaster, GPIO>, AvrDelay> phy(radio, delay);
+static Phy phy(radio,delay);
+static Bridge bridge;
+static SessionV1 session(0,1,1);
 
-class LogLine {
-public:
-    LogLine() : n_(0) {}
-    void reset() { n_=0; }
-    void text(const char* s) { while (*s) character(*s++); }
-    void hex8(uint8_t v) {
-        digit(static_cast<uint8_t>(v >> 4));
-        digit(static_cast<uint8_t>(v & 0x0FU));
-    }
-    void hex16(uint16_t v) {
-        hex8(static_cast<uint8_t>(v >> 8));
-        hex8(static_cast<uint8_t>(v));
-    }
-    void send() {
-        text("\r\n");
-        // All-or-nothing: diagnostics never partially fill the UART stream.
-        if (uart.freeSpace() >= n_) {
-            (void)uart.write(reinterpret_cast<const uint8_t*>(buf_), n_);
-        }
-        n_=0;
-    }
-private:
-    void digit(uint8_t d) {
-        character(static_cast<char>(d < 10U ? '0'+d : 'A'+d-10U));
-    }
-    void character(char c) {
-        if (n_<sizeof(buf_)) buf_[n_++]=c;
-    }
-    char buf_[80];
-    uint8_t n_;
+// One reusable RF packet buffer, no stack copies of 32-byte payloads.
+static uint8_t packet[FrameV1::FRAME_SIZE];
+static uint8_t body[FrameV1::BODY_SIZE];
+
+// No UART debug output: use a debugger or later sideband telemetry.
+// Counters saturate/wrap only as unsigned metrics; never affect delivery.
+struct LinkCounters {
+    uint16_t txAck,txMaxRt,txTimeout,txIoError,txRetries;
+    uint16_t rxValid,rxMalformed,rxWrongSession;
+    uint16_t replyMiss,linkRestarts;
+    LinkCounters() : txAck(0),txMaxRt(0),txTimeout(0),
+      txIoError(0),txRetries(0),rxValid(0),rxMalformed(0),
+      rxWrongSession(0),replyMiss(0),linkRestarts(0) {}
 };
+static LinkCounters counters;
 
-static LogLine logLine;
-static uint8_t payload[FrameV1::FRAME_SIZE]; // single reusable RF buffer
-static uint16_t goodRx=0;
-static uint16_t invalidRx=0;
-static uint16_t txAck=0;
-static uint16_t txFail=0;
-static uint16_t replyTimeout=0;
-static uint16_t rxDrSeen=0;
-static uint16_t rejectedFrames=0;
-static bool lastRxDr=false;
-
-static const char* txName(Nrf24Phy<Nrf24<SpiMaster, GPIO>, AvrDelay>::TxStatus s) {
-    typedef Nrf24Phy<Nrf24<SpiMaster, GPIO>, AvrDelay> Phy;
-    switch (s) {
-        case Phy::TxStatus::ACKED: return "ACK";
-        case Phy::TxStatus::MAX_RETRIES: return "MAX_RT";
-        case Phy::TxStatus::TIMEOUT: return "TIMEOUT";
-        default: return "SPI_ERR";
-    }
+static void countTx(const Phy::TxResult& result) {
+    if (result.result==Phy::TxStatus::ACKED) ++counters.txAck;
+    else if (result.result==Phy::TxStatus::MAX_RETRIES) ++counters.txMaxRt;
+    else if (result.result==Phy::TxStatus::TIMEOUT) ++counters.txTimeout;
+    else ++counters.txIoError;
+    counters.txRetries=static_cast<uint16_t>(counters.txRetries+result.arc);
 }
 
-static void reportCounters() {
-    logLine.reset();
-    // Short labels guarantee the whole line fits in the fixed 80 B buffer.
-    logLine.text("CNT R="); logLine.hex16(goodRx);
-    logLine.text(" B="); logLine.hex16(invalidRx);
-    logLine.text(" ACK="); logLine.hex16(txAck);
-    logLine.text(" F="); logLine.hex16(txFail);
-    logLine.text(" TO="); logLine.hex16(replyTimeout);
-    logLine.text(" RD="); logLine.hex16(rxDrSeen);
-    logLine.text(" REJ="); logLine.hex16(rejectedFrames);
-    logLine.send();
-}
-
-static void commands() {
-    uint8_t input=0;
-    while (uart.read(input)) {
-        if (input=='?') reportCounters();
-    }
-}
-
-static bool pollRx(bool& received) {
-    bool sawRxDr=false;
-    if (!phy.receive(payload,received,&sawRxDr)) {
-        logLine.reset();
-        logLine.text("RADIO SPI ERROR RX");
-        logLine.send();
+static bool readFrame(FrameV1::View& view) {
+    bool received=false;
+    if (!phy.receive(packet,received)) {
+        ++counters.rxMalformed; // includes SPI receive errors
         return false;
     }
-    if (received) {
-        lastRxDr=sawRxDr;
-        if (sawRxDr) ++rxDrSeen;
+    if (!received) return false;
+    const FrameV1::Error status=FrameV1::decode(packet,view);
+    if (status!=FrameV1::Error::OK) {
+        ++counters.rxMalformed;
+        return false;
     }
     return true;
 }
 
-static void initiatorLoop() {
-    delay.ms(200); // responder may power up at a different time
-    uint8_t nextSeq=0;
-    uint8_t lastReplySeq=0xFF;
+static void freshTransport(uint16_t& seenGeneration,
+                           uint8_t& txSeq,uint8_t& rxLast) {
+    if (!session.active() || seenGeneration==session.generation()) return;
+    seenGeneration=session.generation();
+    bridge.newSession();
+    txSeq=0;
+    rxLast=0xFF;
+}
+
+// Both directions share the same radio packet; the transport sees only
+// valid, correctly addressed and session-matched frames.
+static void acceptActive(const FrameV1::View& v,uint8_t peer,uint8_t self,
+                         uint8_t& rxLast) {
+    const FrameV1::Header& h=v.header;
+    if (!session.active() || h.src!=peer || h.dst!=self ||
+        h.sid!=session.sid()) {
+        ++counters.rxWrongSession;
+        return;
+    }
+    rxLast=h.txSeq;
+    ++counters.rxValid;
+    bridge.accept(v,uart);
+}
+
+static bool encodeActive(uint8_t self,uint8_t peer,
+                         uint8_t seq,uint8_t rxLast,
+                         bool& hasAck,bool& hasData) {
+    FrameV1::Header h;
+    if (!bridge.prepare(uart,self,peer,session.sid(),seq,rxLast,h,body))
+        return false;
+    hasAck=(h.kind==FrameV1::Kind::CONTROL);
+    hasData=(h.kind==FrameV1::Kind::DATA && h.length!=0) ||
+            (h.kind==FrameV1::Kind::CONTROL && body[0]==0x12);
+    return FrameV1::encode(h,body,packet)==FrameV1::Error::OK;
+}
+
+static Phy::TxResult sendFrame(bool hasAck,bool hasData) {
+    const Phy::TxResult tx=phy.transmit(packet);
+    countTx(tx);
+    bridge.afterTransmit(tx.result==Phy::TxStatus::ACKED,
+                         hasAck,hasData);
+    return tx;
+}
+
+static void runLeader() {
+    uint8_t seq=0,rxLast=0xFF;
+    uint16_t generation=0;
+    uint8_t misses=0;
+    delay.ms(150);
+
     for (;;) {
-        commands();
-        const uint8_t wantedLength=V1ProbePattern::length(nextSeq,0);
-        if (V1ProbePattern::make(0,1,nextSeq,lastReplySeq,payload)
-                != FrameV1::Error::OK) {
-            logLine.reset(); logLine.text("V1 ENCODE ERROR A"); logLine.send();
-            delay.ms(100);
-            continue;
+        if (!session.active()) {
+            if (!session.prepare(packet)) {
+                delay.ms(20);
+                continue;
+            }
+            const Phy::TxResult tx=phy.transmit(packet);
+            countTx(tx);
+        } else {
+            bool ack=false,data=false;
+            if (!encodeActive(0,1,seq,rxLast,ack,data)) {
+                session.restart();
+                ++counters.linkRestarts;
+                continue;
+            }
+            (void)sendFrame(ack,data);
+            ++seq;
         }
-        const auto tx=phy.transmit(payload);
-        if (tx.result==decltype(tx.result)::ACKED) ++txAck;
-        else ++txFail;
 
         bool gotReply=false;
-        bool replyRxDr=false;
-        uint8_t receivedLength=0;
-        if (!phy.listen()) {
-            logLine.reset(); logLine.text("RADIO SPI ERROR ENTER_RX"); logLine.send();
-        } else {
-            for (uint8_t ms=0; ms<100; ++ms) {
-                bool received=false;
-                if (!pollRx(received)) break;
-                if (received) {
-                    FrameV1::View view;
-                    const FrameV1::Error parsed=FrameV1::decode(payload,view);
-                    if (parsed==FrameV1::Error::OK &&
-                        V1ProbePattern::inspect(view,1,0) &&
-                        view.header.rxLast==nextSeq) {
-                        lastReplySeq=view.header.txSeq;
-                        receivedLength=view.header.length;
-                        replyRxDr=lastRxDr;
-                        ++goodRx;
+        if (phy.listen()) {
+            for (uint8_t ms=0;ms<100;++ms) {
+                FrameV1::View v;
+                if (readFrame(v)) {
+                    if (!session.active()) {
+                        if (session.accept(v)) {
+                            gotReply=true;
+                            freshTransport(generation,seq,rxLast);
+                            break;
+                        }
+                    } else if (v.header.kind==FrameV1::Kind::CONTROL &&
+                               v.body[0]==0x01) {
+                        // A newly booted peer should never originate HELLO
+                        // in M1 (the smaller class is the initiator).
+                    } else if (v.header.src==1 && v.header.dst==0 &&
+                               v.header.sid==session.sid()) {
+                        acceptActive(v,1,0,rxLast);
                         gotReply=true;
                         break;
                     }
-                    ++invalidRx;
-                    if (parsed!=FrameV1::Error::OK) ++rejectedFrames;
                 }
                 delay.ms(1);
             }
         }
         phy.standby();
-        if (!gotReply) ++replyTimeout;
-        logLine.reset();
-        logLine.text("A SEQ="); logLine.hex8(nextSeq);
-        logLine.text(" LEN="); logLine.hex8(wantedLength);
-        logLine.text(" TX="); logLine.text(txName(tx.result));
-        logLine.text(" ARC="); logLine.hex8(tx.arc);
-        logLine.text(" REPLY="); logLine.text(gotReply ? "OK" : "MISS");
-        logLine.text(" IN="); logLine.hex8(receivedLength);
-        logLine.text(" RD="); logLine.text((gotReply && replyRxDr) ? "1" : "0");
-        logLine.send();
-        ++nextSeq; // v1 TX_SEQ wraps modulo 256
-        delay.ms(200); // diagnostic only, not the M1 slot scheduler
+
+        if (session.active()) {
+            if (!gotReply) {
+                ++counters.replyMiss;
+                if (++misses>=5) {
+                    session.restart();
+                    ++counters.linkRestarts;
+                    misses=0;
+                }
+            } else misses=0;
+        } else {
+            misses=0;
+        }
+        delay.ms(session.active()?20:90);
     }
 }
 
-static void responderLoop() {
-    uint8_t nextSeq=0; // own TX_SEQ is independent of initiator's
-    if (!phy.listen()) {
-        logLine.reset(); logLine.text("RADIO SPI ERROR ENTER_RX"); logLine.send();
-    }
+static void runFollower() {
+    uint8_t seq=0,rxLast=0xFF;
+    uint16_t generation=0;
+    (void)phy.listen();
     for (;;) {
-        commands();
-        bool received=false;
-        if (!pollRx(received)) {
-            delay.ms(100);
-            (void)phy.listen();
-            continue;
-        }
-        if (!received) {
+        FrameV1::View v;
+        if (!readFrame(v)) {
             delay.ms(1);
             continue;
         }
-        FrameV1::View view;
-        const FrameV1::Error parsed=FrameV1::decode(payload,view);
-        if (parsed!=FrameV1::Error::OK ||
-            !V1ProbePattern::inspect(view,0,1)) {
-            ++invalidRx;
-            if (parsed!=FrameV1::Error::OK) ++rejectedFrames;
-            logLine.reset();
-            logLine.text("B BAD_FRAME E=");
-            logLine.hex8(static_cast<uint8_t>(parsed));
-            logLine.send();
+
+        bool sendReply=false;
+        bool handshaking=false;
+        if (v.header.kind==FrameV1::Kind::CONTROL &&
+            (v.body[0]==0x01 || v.body[0]==0x03)) {
+            if (session.accept(v)) {
+                freshTransport(generation,seq,rxLast);
+                handshaking=session.prepare(packet);
+                sendReply=handshaking;
+            }
+        } else if (session.active() && v.header.src==0 &&
+                   v.header.dst==1 && v.header.sid==session.sid()) {
+            acceptActive(v,0,1,rxLast);
+            bool ack=false,data=false;
+            if (encodeActive(1,0,seq,rxLast,ack,data)) {
+                sendReply=true;
+            }
+            // v points into packet, which was overwritten above.
+            if (sendReply) {
+                // CE/RX must finish ACK before crossing to TX.
+                delay.ms(25);
+                const Phy::TxResult tx=sendFrame(ack,data);
+                ++seq;
+                (void)tx;
+                (void)phy.listen();
+            }
             continue;
         }
-        ++goodRx;
-        const uint8_t receivedSeq=view.header.txSeq;
-        const uint8_t receivedLength=view.header.length;
-        const bool observedRxDr=lastRxDr;
-        // nRF may assert RX_DR before hardware ACK exchange finishes.
-        delay.ms(25);
-        const uint8_t responseLength=V1ProbePattern::length(nextSeq,1);
-        if (V1ProbePattern::make(1,0,nextSeq,receivedSeq,payload)
-                != FrameV1::Error::OK) {
-            logLine.reset(); logLine.text("V1 ENCODE ERROR B"); logLine.send();
+
+        if (sendReply) {
+            delay.ms(25);
+            const Phy::TxResult tx=phy.transmit(packet);
+            countTx(tx);
+            session.sentReply();
             (void)phy.listen();
-            continue;
         }
-        const auto tx=phy.transmit(payload);
-        if (tx.result==decltype(tx.result)::ACKED) ++txAck;
-        else ++txFail;
-        if (!phy.listen()) {
-            logLine.reset(); logLine.text("RADIO SPI ERROR ENTER_RX"); logLine.send();
-        }
-        logLine.reset();
-        logLine.text("B SEQ="); logLine.hex8(receivedSeq);
-        logLine.text(" LEN="); logLine.hex8(receivedLength);
-        logLine.text(" RX=OK TX="); logLine.text(txName(tx.result));
-        logLine.text(" ARC="); logLine.hex8(tx.arc);
-        logLine.text(" OUT="); logLine.hex8(responseLength);
-        logLine.text(" RD="); logLine.text(observedRxDr ? "1" : "0");
-        logLine.send();
-        ++nextSeq;
     }
 }
 
 int main() {
     uart.begin();
     sei();
-
-    // Power on reset time: nRF needs a settled supply before SPI setup.
     radioCe.clear();
     radioCsn.set();
     delay.ms(110);
-    const auto probe=radio.probeAndConfigure();
-    if (probe.result!=decltype(probe.result)::OK) {
-        logLine.reset();
-        logLine.text("NRF FAIL C=");
-        logLine.hex8(static_cast<uint8_t>(probe.result));
-        logLine.text(" REG="); logLine.hex8(probe.reg);
-        logLine.send();
-        for (;;) { commands(); delay.ms(100); }
-    }
-    uint16_t rawAdc=0;
-    if (!Adc0::sample(rawAdc)) {
-        logLine.reset(); logLine.text("ADC0 FAILED"); logLine.send();
-        for (;;) { commands(); delay.ms(100); }
-    }
-    const uint8_t nodeClass=Adc0::classForM1(rawAdc);
-    logLine.reset();
-    logLine.text("NRF OK CLASS="); logLine.hex8(nodeClass);
-    logLine.text(" ADC="); logLine.hex16(rawAdc);
-    logLine.text(" MODE=V1PAYLOAD");
-    logLine.send();
 
-    if (nodeClass==0) initiatorLoop();
-    else responderLoop();
+    if (radio.probeAndConfigure().result!=Radio::Result::OK)
+        for (;;) {delay.ms(100);} // do not emit error bytes on data port
+
+    uint16_t adc=0;
+    if (!Adc0::sample(adc))
+        for (;;) {delay.ms(100);}
+    const uint8_t self=Adc0::classForM1(adc);
+    uint32_t epoch=0;
+    if (!BootEpoch::advance(epoch))
+        for (;;) {delay.ms(100);}
+    session.configure(self,static_cast<uint8_t>(1U-self),epoch);
+
+    if (session.isLeader()) runLeader();
+    else runFollower();
 }
