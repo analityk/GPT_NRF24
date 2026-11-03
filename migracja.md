@@ -1,12 +1,12 @@
 # Migracja / punkt kontynuacji GPT_NRF24
 
-**Aktualny stan: 2026-11-03 — jeden aktywny rdzeń 8+24 B z hardware ACK Payload.**
+**Aktualny stan: 2026-11-04 — jeden aktywny rdzeń 8+24 B z hardware ACK Payload i nowym handshake SID16 (host+AVR PASS, fizyczny test sesji otwarty).**
 
 ## Źródło prawdy
 
 - Repozytorium: https://github.com/analityk/GPT_NRF24, gałąź `main`.
 - Dotychczasowy działający, kompletny stan **sprzed porządkowania**: commit `d91630509ba32fb62ab0437ff2d2b5770feae31c`, gałąź `archive/pre-paired-core-cleanup-2026-11-03`. Znajdują się tam osobny dawny UART bridge, stary v1, jego handshake, poprzedni 32+32 benchmark i testy. Nie przenosić ich z powrotem bez konkretnego wymagania.
-- W bieżącym źródle pozostaje jeden program `GPT_NRF2401/main.cpp`. **Nie ma już `application_select.h`, `paired_core_main.cpp`, `ack_bench_main.cpp`, `boot_epoch.cpp`, `frame_v1.h` ani trzech wariantów firmware.**
+- W bieżącym źródle pozostaje jeden program `GPT_NRF2401/main.cpp`. **Nie ma już `application_select.h`, `paired_core_main.cpp`, `ack_bench_main.cpp`, `frame_v1.h` ani trzech wariantów firmware.** Moduł `boot_epoch.cpp` **jest obecnie ponownie potrzebny**, ale w nowej architekturze: adapter EEPROM dla przenośnego `epoch_journal.h`.
 - Zmiany wyników i uzasadnienia z wcześniejszych faz zachowuje `history.md`; bieżący kontrakt binarny w `paired-core-v2.md`, plan w `plan.md`, zadania w `todo.md`.
 
 ## Stałe wymagania
@@ -24,14 +24,22 @@ W RealTerm, na dwóch RF-Nano, nowy rdzeń 8+24 osiągnął **~625 transakcji/s*
 
 ## Granice i następne zadania
 
-- Testowe `SESSION_ID=0x4E52` jest stałe, więc nie ma jeszcze prawdziwej negocjacji pary ani zabezpieczenia przed starym ACK po resecie.
+- Stałe testowe `SESSION_ID=0x4E52` **zastąpiono handshake** `paired_session.h` z nonce każdej strony `boot_epoch32+attempt16`; SID16 pochodzi z CRC16 obu nonce. Warstwy sesji/PHY chronią przed typowymi starymi odpowiedziami i negocjują restart. **Zaliczone testy hostowe i cross-build AVR; brak jeszcze testu fizycznego nowej wersji.**
 - `RX_CREDIT=1` jest symulacją, nie stanem prawdziwego odbiornika.
 - Sprzętowy ACK potwierdza odbiór ramki przez radio, nie przyjęcie przez UART lub plik.
 - Wyższe protokoły usług (TCP-like, pliki, szyfrowanie) są świadomie poza bieżącą warstwą; zachować opaque BODY.
-- Następny etap: handshake sesji, reset recovery i włączenie rzeczywistej informacji o dostępności bufora, bez pogorszenia sprawdzonego rdzenia.
+- Następny etap: test fizyczny handshake/odtwarzania po resetach A, B i obu; wspólny niezerowy `SID` i `ST=4` w obu RealTerm. Potem włączyć rzeczywistą informację o dostępności bufora, nie pogarszając rdzenia.
 
 ## Testy i zachowanie danych
 
 `sh tests/run_host_tests.sh` kompiluje automatycznie wszystkie aktywne `tests/*_test.cpp`. `sh tests/build_avr.sh` kompiluje jeden program dla ATmega328P bez programowania sprzętu. GitHub Actions wykonuje obie czynności. W Microchip Studio nadal F7/F12; nie mieszać hostowego PASS, krzyżowego build PASS i fizycznego testu.
 
 Porządkowanie zmienia bieżące pliki źródłowe, **nie usuwa historii Git**; stary kod można odczytać w gałęzi `archive/pre-paired-core-cleanup-2026-11-03`. Żadna zmiana nie wymaga nazwy portu COM ani stałej ścieżki Windows.
+
+## Nowy handshake i trwałość sesji — 2026-11-04
+
+Zaimplementowano `GPT_NRF2401/paired_session.h` jako maszynę stanów MCU-independent dla A/PTX oraz B/PRX. Wiadomości CONTROL, `SID=0`, `RESYNC=1`: HELLO 15B DPL, BEACON 15B, WELCOME 21B, READY 23B, READY_ACK 23B. A przechodzi ACTIVE dopiero po READY_ACK od B; B dopiero po pierwszym poprawnym DATA/IDLE z nowym SID. SID16 to CRC16-CCITT z uporządkowanych A/B 6-bajtowych nonce, NIE uwierzytelnienie. Persistent `boot_epoch32` z `boot_epoch.cpp` zapisuje się w rotacyjnym dzienniku 16×6B EEPROM z CRC8 i markerem commit; `attempt16` jest w RAM i rośnie przy renegocjacji. To mechanizm wielokrotnego użytku.
+
+Na granicach handshake B `replacePrxReply()` czeka 550µs, czyści TX/RX FIFO i kolejkuje tylko aktualny ACK; A `resetPtxFifos()` czyści stare dane. Brak 20/25ms delayów per DATA. Watchdog A ACTIVE=250ms, A WAIT_READY_ACK=1000ms, B ACTIVE=750ms, B WAIT_READY/WAIT_CONFIRM=2000ms; DISCOVER nie podbija nonce przy wielogodzinnej nieobecności peer. Na bieżącym `main.cpp` w RealTerm przy stabilnej sesji oczekiwane wspólne niezerowe `SID`, `ST=4`, `R` jest licznikiem odzyskiwań; przejściowe `BAD/MAX` przy resetach są możliwe.
+
+W CI hostowe testy protokołu, sekwencji, resetów A/B, opóźnionych ACK, dziennika EEPROM z przerwanym zapisem, nRF SPI i PHY oraz kompilacja AVR-GCC **PASS**. Nowy handshake nie został dotąd uruchomiony na dwóch rzeczywistych RF-Nano (w przeciwieństwie do poprzedniego benchmarku 625/s); **nie przypisywać mu prędkości 625/s bez pomiaru**. Obecny UART jest tylko konsolą diagnostyczną. Kod bez `malloc/new`, Microchip Studio i ręczne F12 bez zmian. Specyfikacja: `paired-core-v2.md`.

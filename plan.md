@@ -6,6 +6,7 @@
 - **`NrfAckPayloadPhy`:** stabilna rola A/PTX, B/PRX, minimalne czasy radiowe, zdarzenia `TX_DS/MAX_RT/RX_DR`, przenoszenie ramek 8–32 B.
 - **`PairedFrame`:** jeden schemat 8 B nagłówka, do 24 B opaque BODY; niezależny od AVR, jawne kodowanie bajtów.
 - **`PairedLink`:** numeracja i statystyki dwóch kierunków, odrzucanie starych duplikatów i obcych sesji, kredyty i licznik odrzuceń.
+- **`PairedSession` i `EpochJournal`:** niezależny od platformy handshake, SID16 z pełnych nonce i trwały, rotacyjny licznik uruchomień w EEPROM; rekey/timeouty po stronie aplikacji, fizyczna ochrona FIFO w PHY.
 - **`main.cpp`:** tymczasowa aplikacja fizycznego testu rdzenia, odpowiada za testowe BODY i konsolę diagnostyczną, nie za transport plików.
 
 ## Ustalone wyniki
@@ -17,7 +18,7 @@
 
 ## Najbliższe kroki
 
-1. Uzgadnianie `SESSION_ID16`, identyfikatorów/numerów epoki i automatyczne odtwarzanie po resecie; wyraźne rozdzielenie `DISCOVERY` od aktywnej sesji.
+1. **ZAIMPLEMENTOWANE, HOST/AVR PASS; TEST FIZYCZNY OTWARTY:** `SESSION_ID16` z `boot_epoch32+attempt16` obu węzłów, komunikaty HELLO/BEACON/WELCOME/READY/READY_ACK, reakcje na restart, timeouty i czyszczenie FIFO. Najbliższy punkt odbioru: reset A/B/obu w RealTerm, zgodny niezerowy SID i ST=4.
 2. Poprawna kontrola przepływu: `RX_CREDIT` wynikające z rzeczywistego sinku, zapas na opóźniony ACK Payload, statusy przeciążenia; testy negatywne.
 3. Stan łącza i diagnostyka: rozdzielić hardware retry `ARC`, `MAX_RT`, luki w TX_SEQ, lokalne odrzucenia i timeouty; testować realną utratę łączności bez oszukiwania fizyki.
 4. Przełączenie na krótkie dynamiczne ramki IDLE/CONTROL w spoczynku; zmierzyć przepustowość, latencję i zużycie energii przy różnym obciążeniu.

@@ -1,6 +1,6 @@
 # Paired Core — format 8+24 B i sprzętowe ACK Payload
 
-**Status 2026-11-03:** główny, jedyny format aktywnego firmware. Przetestowany na dwóch fizycznych RF-Nano: około 625 wymian/s. Pełny format jest częścią aktualnego `main`, a dawny `protocol-v1.md` dostępny jest tylko w gałęzi archiwalnej.
+**Status 2026-11-04:** główny, jedyny format aktywnego firmware. Format DATA+ACK Payload przetestowany na dwóch fizycznych RF-Nano (około 625 wymian/s w poprzednim firmware); nowy handshake i samoczynna rekonwergencja po resetach mają zaliczone testy hostowe i AVR build, lecz **wymagają osobnego testu fizycznego**. Pełny format jest częścią aktualnego `main`, a dawny `protocol-v1.md` dostępny jest tylko w gałęzi archiwalnej.
 
 ## Warstwa fizyczna i podział odpowiedzialności
 
@@ -30,8 +30,51 @@ Typy: `DATA=0`, `IDLE=1` (BODY=0), `CONTROL=2` (BODY ≥1), `EXT=3` (zarezerwowa
 - `TX_SEQ` i `RX_LAST` zawijają się modulo256. W `PairedLink` różnica 0 to duplikat, 1..127 — nowa ramka, 128..255 — stara/niejednoznaczna. Po dużej przerwie lub resecie wymagana jest nowa sesja, nie interpretacja starej epoki jako ciąg dalszy.
 - Czterobitowe LOSS i DROP zawijają się modulo16, więc **nie są pełnymi, długoterminowymi licznikami błędów**. Lokalny stan utrzymuje szersze liczniki diagnostyczne.
 - Metadane ACK Payload są przygotowywane **przed** odebraniem następnej ramki. `RX_LAST` i `RX_CREDIT` raportowane przez B są więc opóźnione. Program wyższej warstwy musi uwzględniać już wysłane segmenty w locie. Duplikaty i stare ramki nie mogą cofnąć peer credits.
-- `SESSION_ID` jest sprawdzany przed modyfikacją diagnostyki. **W obecnym programie jest testową stałą `0x4E52`**, a nie wynikiem negocjacji; nie daje odporności na restarty, uwierzytelnienia ani gwarantowanej unikalności.
+- `SESSION_ID` jest sprawdzany przed modyfikacją diagnostyki. **Obecnie jest negocjowany** przez kontrolne ramki z identyfikatorami obu uruchomień, zamiast stałej `0x4E52`. Wartość SID16 ma tylko 16 bitów: nie jest tajna, nie daje uwierzytelnienia ani matematycznie gwarantowanej unikalności.
 - `RX_CREDIT=1` w obecnym generowanym wzorcu jest **symulacją miejsca w odbiorniku**. Nie używać tej wartości jako dowodu gotowości prawdziwego sinku.
+
+
+## Handshake P2P — nowy etap (implementacja 2026-11-04)
+
+Radio pozostaje w stałych rolach: **A=PTX inicjuje każdą transakcję**, **B=PRX odpowiada przygotowanym ACK Payload**. CONTROL jest przenoszony w tym samym formacie `PairedFrame` co DATA, ale ma `SESSION_ID=0`, `TYPE=CONTROL` i `FLAGS.RESYNC=1`. Dane BODY protokołu aplikacyjnego nadal są nieinterpretowane.
+
+Każda strona przy starcie wywołuje `BootEpoch::advance()` i uzyskuje persistent **32-bitowy numer uruchomienia**. Numer próby (16 bitów) rośnie tylko przy kolejnych restartach negocjacji podczas *tego samego* uruchomienia. Gdy licznik próby zbliży się do zawinięcia, adapter odnawia epokę w EEPROM; nie wolno ponownie wykorzystać wcześniej użytego identyfikatora.
+
+Tożsamość każdego peer: `[boot_epoch:32 LE, attempt:16 LE]`, łącznie 6 B. Opakowanie CONTROL:
+
+| Op | Nadawca i stan | BODY | DPL |
+|---|---|---|---:|
+| 1 `HELLO` | A / DISCOVER | op (1) + ID_A (6) | 15 B |
+| 2 `BEACON` | B / DISCOVER | op (1) + ID_B (6) | 15 B |
+| 3 `WELCOME` | B / WAIT_READY | op (1) + ID_B (6) + echo ID_A (6) | 21 B |
+| 4 `READY` | A / WAIT_READY_ACK | op (1) + ID_A (6) + ID_B (6) + SID16 (2) | 23 B |
+| 5 `READY_ACK` | B / WAIT_CONFIRM | op (1) + ID_B (6) + ID_A (6) + SID16 (2) | 23 B |
+
+SID16 jest **CRC-16/CCITT-FALSE** z 14 bajtów: `0x50,0x32,ID_A[6],ID_B[6]`, z mapowaniem wyniku 0 na 1. Pełne 12 bajtów tożsamości są porównywane podczas handshake, natomiast 16-bitowe SID służy wyłącznie jako tani filtr starych ramek DATA po jego ukończeniu.
+
+**Wymuszona kolejność bez synchronizacji timerów MCU:** A wielokrotnie wyzwala HELLO, B odsyła wcześniej zaprogramowany BEACON albo WELCOME; A po WELCOME wysyła READY, B przechodzi do WAIT_CONFIRM i przygotowuje READY_ACK; A po odebranym READY_ACK zaczyna DATA/IDLE z nowym SID; **B uznaje sesję za ACTIVE dopiero po pierwszej poprawnej DATA/IDLE z tym SID.** Powtórzone HELLO/READY lub opóźniony stary ACK są ignorowane bądź obsługiwane idempotentnie.
+
+Podczas zmiany kontrolnej odpowiedzi lub sesji B wykonuje przez `replacePrxReply` krótki guard **550 µs** w standby, czyści TX/RX FIFO oraz przygotowuje ACK Payload na nową epokę; po ponownym CE HIGH czeka **150 µs** na ustalenie PRX. To ochrona przed pozostawieniem starego payloadu w sprzętowej kolejce, nie stała przerwa między DATA. A przy rekonwergencji czyści TX/RX FIFO bez ponownego usypiania radia.
+
+### Timeouty (obecne parametry eksperymentalne)
+
+| Stan | Węzeł | Warunek inicjacji ponownego uzgodnienia |
+|---|---|---|
+| ACTIVE | A | Brak poprawnego pakietu sesji od B przez 250 ms |
+| WAIT_READY_ACK | A | Brak postępu negocjacji przez 1000 ms |
+| ACTIVE | B | Brak poprawnej ramki sesji A przez 750 ms |
+| WAIT_READY / WAIT_CONFIRM | B | Brak postępu negocjacji przez 2000 ms |
+| DISCOVER | Oba | Pozostają w discovery bez limitu; nie zużywają ciągle numerów prób podczas wielogodzinnego braku partnera |
+
+Utrata zasięgu nie jest tożsama z utratą aplikacyjnych danych. Po ponownej synchronizacji strumień testowego BODY może ruszyć na nowej sesji, lecz **nie ma jeszcze gwarancji zachowania niewysłanego bufora użytkownika** — taka polityka należy do usług ponad rdzeniem.
+
+`ST` w raporcie UART mapuje `PairedSession::Phase`: `0=DISCOVER`, `1=WAIT_READY` (B), `2=WAIT_READY_ACK` (A), `3=WAIT_CONFIRM` (B), `4=ACTIVE`. `SID` w logu jest dziesiętny, zero poza ACTIVE; `R` to licznik lokalnych restartów sesji, nie BER/PER. Dla zdrowej pary, po obu stronach, zobaczysz **`ST=4` i jednakowy niezerowy SID**. Na B przy pierwszym pakiecie po resecie mogą wystąpić `BAD/MAX`, które są przejściowymi informacjami, nie dowodem trwałej awarii.
+
+### Trwałość i ograniczenia
+
+`EpochJournal` przechowuje **16 rekordów po 6 bajtów EEPROM**: little-endian 32-bit boot epoch, CRC8 i `commit=0xA5` wpisywane na końcu. Zapis urwany przez reset nie nadpisuje ostatniego zatwierdzonego rekordu; każda próba restartu w RAM nie powoduje zapisu EEPROM. W obecnej płytce ma to ograniczyć zużycie EEPROM i ryzyko przypadkowego powtórzenia sesji.
+
+SID16 nie zapewnia uwierzytelnienia ani kryptograficznej świeżości. Po dowolnie wielu różnych negocjacjach możliwa jest kolizja 16 bitów, a ponowny pełny reflash z czyszczeniem EEPROM resetuje licznik epoki. Mechanizm chroni przed **przypadkowymi starymi odpowiedziami podczas typowych restartów**, nie zastępuje zabezpieczeń przed atakami czy kontraktu exactly-once.
 
 ## Źródła i weryfikacja
 
@@ -39,9 +82,13 @@ Typy: `DATA=0`, `IDLE=1` (BODY=0), `CONTROL=2` (BODY ≥1), `EXT=3` (zarezerwowa
 - `paired_link.h`: stan kierunków, sekwencje, luki, RX_CREDIT, deduplikacja, sesja.
 - `nrf24.h`, `nrf24_ack_phy.h`: rejestry DPL, FIFO, SPI i sprzętowy DATA/ACK Payload.
 - `main.cpp`: pojedyncza diagnostyczna aplikacja fizyczna, A/PTX i B/PRX z tego samego HEX.
+- `paired_session.h`: niezależna od AVR maszyna stanów sesji, kontrolne wiadomości i pochodny SID16.
+- `epoch_journal.h` + `boot_epoch.cpp`: przenośny algorytm dziennika 16 rekordów i AVR EEPROM z CRC8 oraz znacznikiem commit.
 - `tests/*_test.cpp`, `tests/run_host_tests.sh`, `tests/build_avr.sh`: testy hostowe i build AVR, **bez programowania płytki**.
 
 **Zmierzony wynik:** A TX/s=ACK/s około 625, B RX/s=Q/s około 625 (czasami 626 w niezależnych oknach); zgłoszone ARC, MAX, BAD, IO, GAB, GBA, DROP, FULL = 0 w widocznym teście. 24 B × 625/s = **15 000 B/s wzorca testowego na kierunek**, 30 000 B/s łącznie; to nie pomiar transferu UART. Średnia repetycja 1,6 ms nie jest zmierzoną latencją pojedynczej ramki.
+
+**Nowy handshake:** testy hostowe parowania, restartu A/B, opóźnionego BEACON, niepoprawnych nagłówków i urwanego zapisu EEPROM oraz kompilacja AVR-GCC przeszły. **Test fizyczny nowego handshake'u nie został wykonany.**
 
 **Test sprzętowy:** ten sam firmware, A0 GND na A, A0 plus na B; F7 build i F12 manualne programowanie; RealTerm 115200 8N1 do odczytu diagnostyki. Docelowy kod transportu nie jest jeszcze częścią tego rdzenia.
 

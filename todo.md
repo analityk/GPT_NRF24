@@ -11,8 +11,10 @@
 
 ## Do zrobienia — bieżący protokół
 
-- [ ] Prawdziwa negocjacja `SESSION_ID16` z rozdzieleniem epok i automatycznym odzyskaniem łączności po resecie jednej lub obu ATmeg. Obecne `0x4E52` to stała diagnostyczna.
-- [ ] Zabezpieczyć stan po utraconym/zdublowanym ACK Payload oraz po długim braku partnera; przetestować zmianę sesji z pakietami w FIFO.
+- [x] Kod negocjacji `SESSION_ID16` z epokami EEPROM i próbami, BEACON/HELLO/WELCOME/READY/READY_ACK, automatyczny rekey A/B po timeoutach, testy hostowe i kompilacja AVR.
+- [ ] **Odbiór sprzętowy sesji:** F7/F12 na obu RF-Nano, obserwacja wspólnego niezerowego SID, ST=4, następnie RESET B, RESET A oraz obu, z kontrolą automatycznego powrotu. Tych testów jeszcze nie wykonano.
+- [x] Implementacja unieważniania starych ACK Payload na zmianie epoki, odrzucania opóźnionych BEACON i duplikatów, stabilnego DISCOVER podczas braku partnera; testy hostowe PASS.
+- [ ] Zweryfikować fizycznie błędy `MAX_RT`, chwilowe rozłączenie RF, opóźnione ACK i zachowanie FIFO przy resetach. Potwierdzić, że nie występują trwałe dwie różne aktywne sesje.
 - [ ] Powiązać `RX_CREDIT` i `RX_DROP` z realnym odbiorcą danych (w tym obsługa kredytów in-flight), bez modyfikowania znaczenia BODY.
 - [ ] Sprawdzić sprzętowo ramki IDLE (8 B) i krótsze DATA (9–31 B), przepełnienia FIFO oraz diagnostykę przy spadającej jakości zasięgu.
 - [ ] Zmierzyć rozkład rzeczywistej latencji pojedynczej wymiany i goodput po dołożeniu rzeczywistego sinku; 625/s oznacza średnią repetycję, nie pomiar latency.

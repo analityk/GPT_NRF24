@@ -7,7 +7,7 @@ Projekt C++11 dla dwóch identycznych **RF-Nano (ATmega328P 16 MHz + nRF24L01+)*
 - **Działa fizycznie na dwóch RF-Nano:** 8 B metadanych + 24 B danych binarnych, dwa kierunki w jednym cyklu DATA A→B / sprzętowy ACK Payload B→A.
 - **Pomiar z 2026-11-03:** stabilne około **625 potwierdzonych wymian na sekundę**, brak widocznych błędów w pokazanych oknach RealTerm. Pełne BODY testowe odpowiada **15 000 B/s na kierunek** (30 000 B/s łącznie). Średni odstęp wymian wynosi około 1,6 ms — **nie jest to osobny pomiar latencji pojedynczej wiadomości**.
 - Rola A = **PTX**, B = **PRX**. Fizycznie radio jest półdupleksowe; logiczne dwa kierunki realizuje sprzętowy ACK Payload. B wysyła odpowiedź wcześniej przygotowaną w FIFO.
-- **Jeszcze nie działa:** automatyczna negocjacja sesji i jej odzyskiwanie po restarcie, UART↔UART w tym nowym profilu, prawdziwy bufor odbiorcy dla `RX_CREDIT`, usługowy transport plików, szyfrowanie. `SESSION_ID=0x4E52` to wyłącznie wartość testowa.
+- **Nowe w firmware (2026-11-04):** automatyczny handshake sesji z 32-bitowymi epokami uruchomienia i 16-bitowymi numerami prób, resynchronizacja po resetach i timeoutach oraz czyszczenie starych FIFO. Hostowe testy i AVR build PASS; **nie przetestowano jeszcze fizycznie tej nowej wersji na obu płytkach**. Bez zmian: UART↔UART, rzeczywiste `RX_CREDIT`, transfer plików i szyfrowanie są poza obecnym rdzeniem.
 
 ## Budowanie i sprawdzenie na płytkach
 
@@ -15,11 +15,11 @@ Projekt C++11 dla dwóch identycznych **RF-Nano (ATmega328P 16 MHz + nRF24L01+)*
 2. Zbuduj **F7**, zaprogramuj ręcznie **F12**. **Nie włączać automatycznego programowania Post-Build**.
 3. Wgraj **ten sam HEX** na obie płytki. A0 do GND → A/PTX; A0 do dodatniego zasilania własnej płytki → B/PRX.
 4. RealTerm na dwóch portach USB/CH340, **115200, 8N1**. Port transmituje tutaj tylko diagnostykę; wpisywanie tekstu **nie wyśle** go do partnera.
-5. W stabilnym stanie powinieneś zobaczyć raporty:
-   - `A TX/s=625 ACK/s=625 ARC=0 MAX=0 BAD=0 IO=0 ...`
-   - `B RX/s=625 Q/s=625 ARC=0 MAX=0 BAD=0 IO=0 ...`
+5. W najnowszym firmware uruchamia się najpierw handshake. **Oba węzły powinny osiągnąć `ST=4` (ACTIVE) i ten sam niezerowy `SID`**, zanim rozpoczną regularne DATA+ACK Payload. Zobaczysz raporty:
+   - `A TX/s=... ACK/s=... ARC=... MAX=... BAD=... IO=... SID=... ST=4 R=...`
+   - `B RX/s=... Q/s=... ARC=... MAX=... BAD=... IO=... SID=... ST=4 R=...`
 
-Liczba 625 jest wcześniej **zmierzonym punktem odniesienia**, nie gwarancją dla każdych warunków. Dane wysyłane na radiu to obecnie deterministyczny, 24-bajtowy wzorzec testowy sprawdzany przez aplikację diagnostyczną; sam rdzeń traktuje BODY jako nieprzezroczysty ciąg bajtów.
+Liczba 625 z poprzedniego fizycznego firmware jest **zmierzonym punktem odniesienia**, nie gwarancją dla każdych warunków. Dane wysyłane na radiu to obecnie deterministyczny, 24-bajtowy wzorzec testowy sprawdzany przez aplikację diagnostyczną; sam rdzeń traktuje BODY jako nieprzezroczysty ciąg bajtów.
 
 ## Format radia
 
@@ -45,6 +45,7 @@ Szczegółowe reguły (liczniki modulo, opóźnienie ACK Payload, znaczenie kred
 | Aplikacja diagnostyczna | `GPT_NRF2401/main.cpp` | Jeden program A/B, binarny wzorzec BODY, liczniki po UART |
 | Kodek | `paired_frame.h` | Jawne bajtowe kodowanie/dekodowanie 8+24 |
 | Stan łącza | `paired_link.h` | TX/RX, luki, kredyty, sesja, duplikaty |
+| Sesja i trwała tożsamość startu | `paired_session.h`, `epoch_journal.h`, `boot_epoch.*` | HELLO/BEACON/WELCOME/READY/READY_ACK, SID16, wear-levelled EEPROM i rekonwergencja po resetach |
 | Radio/PHY | `nrf24.h`, `nrf24_ack_phy.h` | Rejestry, SPI, DPL, FIFO, DATA↔ACK Payload |
 | Sprzęt platformy | `spi.*`, `gpio.*`, `adc0.*`, `timer1_clock.*`, `uart.*`, `byte_ring.h`, `avr_delay.h` | Peryferia i diagnostyka, bez zależności protokołu od AVR |
 
@@ -59,3 +60,9 @@ Brak `malloc/new`, kontenery statyczne, brak globalnego `-fpack-struct`.
 ## Dawne warianty i historia
 
 Starszy most UART, odrębny benchmark 32+32 B, stary format v1 oraz związane z nimi źródła i testy zostały **wycofane tylko z bieżącej gałęzi**, aby nie utrzymywać kilku równoległych aplikacji. Zachowano je w gałęzi [`archive/pre-paired-core-cleanup-2026-11-03`](https://github.com/analityk/GPT_NRF24/tree/archive/pre-paired-core-cleanup-2026-11-03), wskazującej commit [`d91630509ba3`](https://github.com/analityk/GPT_NRF24/commit/d91630509ba32fb62ab0437ff2d2b5770feae31c). Pełne wyniki eksperymentów pozostają w `history.md`. Odtwarzanie starszych testów wymaga świadomego przejścia do archiwalnej wersji, a nie przełączania makra w bieżącym firmware.
+
+## Nowy test sprzętowy — negocjacja sesji i restarty (2026-11-04)
+
+Po ręcznym wgraniu tego samego HEX-a na obie RF-Nano zaobserwuj przez kilka sekund dwa terminale RealTerm (COM10/11 tylko orientacyjnie; użyj rzeczywistych portów). Po handshake oba powinny mieć **ten sam niezerowy `SID`, `ST=4` i regularny przepływ**. Następnie naciśnij RESET osobno na B, osobno na A i na obu; urządzenie bez resetu powinno wrócić automatycznie do stanu 4. Wskaźnik `R` zlicza lokalne przejścia odzyskiwania, nie jest licznikiem utraconych ramek. Podczas przejścia dopuszczalne są chwilowe `MAX`/`BAD`, lecz nie trwałe zatrzymanie.
+
+Test uruchomienia i resetów na nowej wersji **pozostaje do potwierdzenia przez użytkownika**. Szczegóły handshake i bezpieczeństwa: [`paired-core-v2.md`](paired-core-v2.md).

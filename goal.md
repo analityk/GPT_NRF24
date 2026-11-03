@@ -13,7 +13,7 @@ Rdzeń powinien poprawnie raportować sekwencje, braki, retransmisje sprzętowe,
 
 ## Jeszcze nieukończone
 
-- Negocjowanie i utrzymywanie prawdziwego identyfikatora sesji, odzyskiwanie synchronizacji po resecie i utracie łącza.
+- Negocjowanie i utrzymywanie identyfikatora sesji oraz automatyczne odzyskiwanie po resecie **zaimplementowano i sprawdzono hostowo/AVR (2026-11-04)**. Pozostaje **obowiązkowy test fizyczny** resetów obu RF-Nano; to nie jest jeszcze potwierdzony wynik sprzętowy.
 - Udostępnianie odbiorcom z prawdziwą pamięcią właściwych `RX_CREDIT` i `RX_DROP`, diagnostyka utraty/zwłoki w obu kierunkach.
 - Test dynamicznych, krótkich IDLE i CONTROL w realnym radiu oraz dokładne pomiary latencji, jittera i obciążenia.
 - Możliwość podłączenia usług nad nieinterpretowanym BODY (np. UART, pliki, komunikaty, ewentualnie szyfrowane dane) przez osobne kontrakty. W tej fazie nie implementujemy ani nie definiujemy jeszcze szczegółów tych usług.
