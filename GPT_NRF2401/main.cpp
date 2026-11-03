@@ -209,7 +209,10 @@ static void runA() {
         else if(tx.code==AckPhy::TxCode::BAD_REPLY_SIZE) ++period.bad;
         else if(tx.code==AckPhy::TxCode::IO_ERROR ||
                 tx.code==AckPhy::TxCode::TIMEOUT) ++period.io;
-        if(static_cast<uint32_t>(ticks.now()-lastPeerProgress)>
+        // Discovery is idempotent. Never burn through attempts (and EEPROM
+        // epochs) just because the other board is powered off for days.
+        if(session.phase()!=PairedSession::Phase::DISCOVER &&
+           static_cast<uint32_t>(ticks.now()-lastPeerProgress)>
            (session.active()?500000UL:2000000UL)) {
             if(!restartIdentity() || !phy.resetPtxFifos())
                 fatal("RESTART_A");
@@ -268,7 +271,9 @@ static void runB() {
         }
         // B cannot transmit unsolicited frames. After silence it prepares
         // a new BEACON which the next PTX trigger will retrieve in ACK.
-        if(static_cast<uint32_t>(ticks.now()-lastPeerProgress)>
+        // Once in DISCOVER, the prepared BEACON remains valid indefinitely.
+        if(session.phase()!=PairedSession::Phase::DISCOVER &&
+           static_cast<uint32_t>(ticks.now()-lastPeerProgress)>
            (session.active()?1500000UL:4000000UL)) {
             if(!restartIdentity())fatal("RESTART_B");
             replaceAck=true;

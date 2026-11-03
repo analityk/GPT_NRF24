@@ -18,7 +18,7 @@ struct Fake {
     uint8_t txWidth=0,rxWidth=8,ackWidth=0;
     bool rxPresent=false,full=false,fail=false;
     uint8_t txFlags=0x20;
-    unsigned polls=0,highs=0,flushes=0;
+    unsigned polls=0,highs=0,flushes=0,rxFlushes=0;
     void ceLow() {}
     void ceHigh(){++highs;}
     bool writeRegister(uint8_t,uint8_t){return !fail;}
@@ -54,6 +54,7 @@ struct Fake {
         return true;
     }
     bool flushTx(){++flushes;return !fail;}
+    bool flushRx(){++rxFlushes;return !fail;}
 };
 int main() {
     typedef NrfAckPayloadPhy<Fake,Delay,Clock> Phy;
@@ -104,6 +105,16 @@ int main() {
     assert(prx.receive(back,width)==Phy::RxCode::BAD_SIZE && width==7);
     receiver.rxPresent=true;receiver.rxWidth=33;
     assert(prx.receive(back,width)==Phy::RxCode::BAD_SIZE && width==33);
+    // Re-keying must discard both RX and preloaded ACK TX FIFO.
+    receiver.full=false;
+    assert(prx.replacePrxReply(out,8));
+    assert(receiver.flushes==1 && receiver.rxFlushes==1 &&
+           receiver.ackWidth==8);
+    assert(rxDelay.usTotal>=700); // 550us guard + 150us PRX settle
+    assert(!prx.replacePrxReply(out,7));
+    // A may discard stale packets without powering its oscillator down.
+    assert(phy.resetPtxFifos());
+    assert(radio.flushes==3 && radio.rxFlushes==1);
     receiver.fail=true;
     assert(prx.receive(back,width)==Phy::RxCode::IO_ERROR);
 }
