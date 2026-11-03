@@ -1,4 +1,4 @@
-name: C++11 host and AVR firmware regressions
+name: Paired ACK Payload core — C++11 and ATmega328P
 on:
   push:
     branches: [main]
@@ -9,7 +9,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Compile and run protocol state-machine tests
+      - name: Compile and run all active host regressions
         run: sh tests/run_host_tests.sh
   avr-firmware:
     runs-on: ubuntu-latest
@@ -19,5 +19,5 @@ jobs:
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y -qq gcc-avr avr-libc binutils-avr
-      - name: Cross-compile firmware mode 0, 1 and 2
+      - name: Cross-compile the active paired firmware
         run: sh tests/build_avr.sh
