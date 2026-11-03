@@ -16,7 +16,9 @@
 - [x] Przygotować firmware i sterownik PHY dla surowych 32-bajtowych ramek A→B i B→A, z auto-ACK, MAX_RT, ARC_CNT i RX_DR; testy modelowe przeszły.
 - [x] Fizycznie zweryfikować RAW32 A→B→A: COM10 A i COM11 B, zgodne SEQ 000B–0019, `TX=ACK`, `REPLY=OK`, `RX=OK`, `ARC=00`, `RD=1` na zrzucie RealTerm (2026-11-03).
 - [x] Zweryfikować przytrzymanie RESET B, pojawienie się `MAX_RT ARC=0F REPLY=MISS` na A oraz samoczynny powrót do `TX=ACK REPLY=OK` po zwolnieniu RESET B, bez restartu A. Sprawdzono również restart A i wznowienie wymiany.
-- [ ] Sprawdzić pełne odłączenie zasilania B (łącznie z nRF24), ponowne włączenie i zachowanie przy niestabilnym łączu — reset samej ATmegi nie jest równoważny odcięciu zasilania radia.
+- [ ] [ODROCZONE] Pełne odcięcie zasilania nRF24: obecny test wymaga odłączenia USB/CH340, co usuwa COM w RealTerm, a jego ponowne otwarcie resetuje ATmegę. Wykonać dopiero przy niezależnym zasilaniu lub aparaturze bez tego ograniczenia.
+- [x] Wdrożyć koder/dekoder v1 (8 B nagłówek, 24 B BODY, stałe 32 B w radiu), testowe payloady 0/1/23/24 B, RX_LAST i niezależny TX_SEQ; testy hosta PASS.
+- [ ] Zweryfikować v1 payload na dwóch fizycznych RF-Nano: F7, F12, odbiór wszystkich długości i odrzucanie uszkodzonych ramek.
 - [ ] Zaimplementować przesyłanie danych UART ↔ radio.
 - [ ] Zapewnić komunikację w obu kierunkach przy identycznym firmware.
 - [ ] Utrzymywać naprzemienną wymianę 32-bajtowych ramek również bez danych UART.

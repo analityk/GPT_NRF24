@@ -119,3 +119,37 @@ Na hoście dodano `tests/nrf24_phy_test.cpp` i `tests/rf_raw_pattern_test.cpp`; 
 ### Potwierdzenie RAW32 na fizycznych płytkach (2026-11-03)
 
 Właściciel potwierdził działającą wymianę A→B→A na RF-Nano, COM10/COM11. Oba terminale pokazują zgodne kolejne `SEQ=000B..0019`, odpowiednio `A TX=ACK ARC=00 REPLY=OK RD=1` oraz `B RX=OK TX=ACK ARC=00 RD=1`. **Fizyczny test dwukierunkowych surowych 32-bajtowych pakietów jest zaliczony.** Opis wcześniejszego etapu wymagającego testu należy traktować jako instrukcję reprodukcji, nie aktualny brak potwierdzenia. Do przetestowania pozostają MAX_RT przy zaniku drugiego urządzenia, recovery, dalsze obciążenia oraz właściwy protokół i UART↔RF.
+
+## Test ramki v1 z payloadem 0/1/23/24 B — następny etap
+
+Od aktualnego `main.cpp` radio **nie wysyła już wzorca RAW32** z poprzedniej próby. Każdy pakiet nadal ma fizycznie **32 bajty**, ale teraz używa **8-bajtowego nagłówka v1** (`CTRL,SRC,DST,SID,TX_SEQ,RX_LAST,SRC_EP,DST_EP`) i **24-bajtowego obszaru BODY**. Parser i koder są odseparowane w `GPT_NRF2401/frame_v1.h` (bez AVR, bez alokacji i bez spakowanych struktur). Kompletna specyfikacja: `protocol-v1.md`.
+
+Do **celowego testu długości** wysyłamy kolejno `BODY LEN=0,1,23,24`; niewykorzystane bajty są zerowane i weryfikowane. `LEN=0` to heartbeat; przy `LEN>0` używany jest **diagnostyczny endpoint 2**, generujący znany deterministyczny wzorzec binarny. Każdy węzeł porównuje treść ze spodziewaną, nie tylko ufa sprzętowemu CRC. Węzeł A rozpoznaje odpowiedź B także przez `RX_LAST`, który musi wskazywać właśnie przesłany `TX_SEQ`; obie strony numerują własne ramki niezależnie w zakresie 0–255.
+
+**Ważne ograniczenie:** `SID=0x2A` jest w tym teście stałą, a nie wynikiem negocjacji `HELLO/READY`; endpoint 2 jest wyłącznie serwisem testowym, a nie gotowym transportem UART RELIABLE. Nie dodano jeszcze ACK aplikacyjnego, buforowania/ponawiania danych użytkownika ani UART↔radio. Ta wersja ma sprawdzić *format v1 i payload na prawdziwym radiu*, bez sugerowania gwarancji dostarczenia.
+
+**Uruchomienie:** na A połączyć A0 z GND, na B A0 z dodatnim zasilaniem **tej samej płytki**; wgrać jeden HEX na obie RF-Nano (F7 kompilacja, F12 ręczne programowanie), otworzyć dwa porty RealTerm 115200 8N1.
+
+Przykładowe oczekiwane linie pierwszych cykli:
+
+```text
+A: NRF OK CLASS=00 ADC=0000 MODE=V1PAYLOAD
+A: A SEQ=00 LEN=00 TX=ACK ARC=00 REPLY=OK IN=17 RD=1
+A: A SEQ=01 LEN=01 TX=ACK ARC=00 REPLY=OK IN=18 RD=1
+A: A SEQ=02 LEN=17 TX=ACK ARC=00 REPLY=OK IN=00 RD=1
+A: A SEQ=03 LEN=18 TX=ACK ARC=00 REPLY=OK IN=01 RD=1
+
+B: NRF OK CLASS=01 ADC=03FF MODE=V1PAYLOAD
+B: B SEQ=00 LEN=00 RX=OK TX=ACK ARC=00 OUT=17 RD=1
+B: B SEQ=01 LEN=01 RX=OK TX=ACK ARC=00 OUT=18 RD=1
+B: B SEQ=02 LEN=17 RX=OK TX=ACK ARC=00 OUT=00 RD=1
+B: B SEQ=03 LEN=18 RX=OK TX=ACK ARC=00 OUT=01 RD=1
+```
+
+Wartości `LEN` i `IN/OUT` zapisane są **szesnastkowo**: `17` oznacza 23 bajty, `18` oznacza 24 bajty. Sekwencje B są niezależne od A, więc po utracie pakietów `IN/OUT` mogą się przesunąć względem przykładu. Warunkiem zaliczenia jest poprawne parsowanie, odbiór długości 0/1/23/24 oraz `REPLY=OK` i `RX=OK` przy prawidłowych ramkach. `TX=MAX_RT`/brak odpowiedzi oznaczają brak potwierdzenia przez radio lub logikę testu. Przepełnienie UART może zgubić wiersz diagnostyczny, ale nie zatrzymuje testu.
+
+Znak `?` pokazuje liczniki z krótkimi etykietami `CNT R=` (poprawne RX), `B=` (błędne), `ACK=` (TX_DS), `F=` (błędy TX), `TO=` (brak odpowiedzi A), `RD=` (RX_DR), `REJ=` (odrzucone przez parser). Pozostałe znaki UART nie są w tej wersji transmitowane radiowo.
+
+**Hostowe testy kodera:** `tests/frame_v1_test.cpp` (pięć dokładnych wektorów 32 B ze specyfikacji, nieznane podtypy, błędne długości, adresy, padding, sesja, ACK) i `tests/v1_probe_pattern_test.cpp` (pełne zakresy 8-bitowego numeru ramki i obu klas, mutacje każdego znaczącego bajtu). Testy logiczne wykonano na komputerze przy użyciu `g++ -std=c++11 -Wall -Wextra -Werror -pedantic`, zakończone PASS. **Nowy wariant firmware nie został jeszcze skompilowany w Microchip Studio ani sprawdzony fizycznie.**
+
+Odłączenie zasilania całej płytki RF-Nano nie jest obecnie dobrym testem samodzielnej odporności radia: odcina również USB/CH340, RealTerm traci port COM, a jego ponowne otwarcie może resetować ATmegę. Właściciel potwierdził wcześniej reset A i przytrzymanie RESET B oraz powrót RAW32; pełny test odcięcia zasilania radia **odłożono do etapu z niezależnym zasilaniem i pomiarem**, nie jest warunkiem tej próby.

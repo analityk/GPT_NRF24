@@ -49,6 +49,8 @@ Dodano diagnostyczny RAW32 ping-pong bez protokołu v1: identyczny firmware, ini
 Na czas testu jedną płytkę ustawić w RX, drugą w TX (nie utrwalać ról). Przesłać znaną ramkę z licznikiem, zweryfikować payload na UART odbiorcy i TX_DS lub MAX_RT nadawcy. Powtórzyć w przeciwnym kierunku oraz bez odbiorcy. Bramka: rzeczywisty transfer A→B i B→A.
 
 ## 5. Protokół danych
+
+Etap 1 wdrożenia: koder/parser ramki v1 8+24 B oraz diagnostyczny test payloadów 0/1/23/24 B w obu kierunkach (testy hosta PASS, test fizyczny do wykonania). Nadal brak negocjacji SID i niezawodnego transportu UART.
 Stała 32-bajtowa ramka łącząca telemetryczne heartbeat, potwierdzenia i dane UART; nagłówek ogranicza liczbę bajtów użytkownika. Osobne numery ramek pomiarowych i danych wymagających retransmisji, numer sesji, informacja zwrotna o odbiorze, długość i typ. Nie stosować dynamicznych payloadów na M1. Rozdzielić sprzętowy ACK od ACK aplikacyjnego: ten drugi oznacza przyjęcie danych do kolejki UART, nie ich fizyczne wyświetlenie. Stop-and-wait niezależnie dla każdego kierunku, retry bez zmiany numeru sekwencyjnego, deduplikacja, obsługa zawinięcia numerów i restartu sesji. Zaprojektować źródło rozróżnialnych identyfikatorów sesji, nie zakładać unikalnego ID w ATmega328P. Bramka: testy ramek, duplikatów, zgubionych ACK, restartów i pełnych buforów na hoście.
 
 ## 6. Odkrywanie partnera
