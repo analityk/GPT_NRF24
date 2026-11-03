@@ -15,7 +15,8 @@
 - [ ] Dodatkowa walidacja: build obu konfiguracji, obsługa odłączenia/awarii SPI i przypadki graniczne; dwukierunkowy RAW32 działa, ale nie sprawdzono jeszcze awarii/zakłóceń.
 - [x] Przygotować firmware i sterownik PHY dla surowych 32-bajtowych ramek A→B i B→A, z auto-ACK, MAX_RT, ARC_CNT i RX_DR; testy modelowe przeszły.
 - [x] Fizycznie zweryfikować RAW32 A→B→A: COM10 A i COM11 B, zgodne SEQ 000B–0019, `TX=ACK`, `REPLY=OK`, `RX=OK`, `ARC=00`, `RD=1` na zrzucie RealTerm (2026-11-03).
-- [ ] Przetestować brak partnera, ponowny start i powrót do transmisji po MAX_RT bez ręcznego resetowania drugiego radia.
+- [x] Zweryfikować przytrzymanie RESET B, pojawienie się `MAX_RT ARC=0F REPLY=MISS` na A oraz samoczynny powrót do `TX=ACK REPLY=OK` po zwolnieniu RESET B, bez restartu A. Sprawdzono również restart A i wznowienie wymiany.
+- [ ] Sprawdzić pełne odłączenie zasilania B (łącznie z nRF24), ponowne włączenie i zachowanie przy niestabilnym łączu — reset samej ATmegi nie jest równoważny odcięciu zasilania radia.
 - [ ] Zaimplementować przesyłanie danych UART ↔ radio.
 - [ ] Zapewnić komunikację w obu kierunkach przy identycznym firmware.
 - [ ] Utrzymywać naprzemienną wymianę 32-bajtowych ramek również bez danych UART.

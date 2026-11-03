@@ -84,3 +84,7 @@ F7 zbudować, F12 zaprogramować oba RF-Nano, otworzyć RealTerm 115200 8N1. A o
 ## Odbiór sprzętowy RAW32 — potwierdzony 2026-11-03
 
 Właściciel dostarczył zrzut **obu terminali jednocześnie**: COM10 (A) `A SEQ=000B..0019 TX=ACK ARC=00 REPLY=OK RD=1`; COM11 (B) `B SEQ=000B..0019 RX=OK TX=ACK ARC=00 RD=1`. **Rzeczywista komunikacja radiowa w obie strony potwierdzona**, 32-bajtowy wzorzec jest weryfikowany w obu urządzeniach; działa automatyczne ACK nRF i przełączanie RX/TX. To test surowych ramek, nie protokół v1 ani most UART-RF. Nie ponawiać prośby o test podstawowego RAW32. Najbliższe sensowne testy fizyczne: odłączyć jedno urządzenie, zaobserwować MAX_RT i powrót po ponownym zasileniu; następnie implementować warstwę protokołu bez modyfikowania sprawnego SPI/PHY bez powodu.
+
+## Test resetów i odzyskania RAW32 — potwierdzony 2026-11-03
+
+Właściciel przesłał trzy zrzuty testu: reset A → przytrzymanie RESET B → zwolnienie RESET B. Po resecie A numeracja startuje od `0000`, B nadal przyjmuje poprawne ramki. Przy RESET B A przechodzi od `TX=ACK REPLY=MISS` do `TX=MAX_RT ARC=0F REPLY=MISS`. Po zwolnieniu RESET B oba logi wykazują od `SEQ=0185` ponownie poprawne `TX=ACK`, `RX=OK`, `REPLY=OK`, `RD=1` i `ARC=00` **bez restartu A**. Test fizycznego powrotu po resetach mikrokontrolerów zaliczony; nadal nie potwierdzono pełnego odcięcia zasilania samego nRF24 ani obsługi utraty sesji docelowego protokołu. Nie ponawiać tego samego testu; kolejne prace: protokół v1 i walidacja rzeczywistych trybów awaryjnych.

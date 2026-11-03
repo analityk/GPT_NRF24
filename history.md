@@ -81,3 +81,11 @@ Przyszłe wpisy powinny zawierać datę, zakres faktycznie wykonanej zmiany, com
 - Widoczny wycinek kolejnych numerów ramki **000B–0019** jest zgodny po obu stronach. A raportuje `TX=ACK ARC=00 REPLY=OK RD=1`; B raportuje `RX=OK TX=ACK ARC=00 RD=1`. Potwierdza to nadanie i poprawne odebranie surowych 32 B A→B, przetworzenie wzorca przez B, nadanie odpowiedzi B→A oraz jej zweryfikowanie przez A. Sprzętowe potwierdzenia, RX_DR i przełączanie PTX/PRX działają dla pokazanego przebiegu.
 - W widocznym fragmencie nie odnotowano retransmisji ani błędnych pakietów (`ARC=00`, `REPLY=OK`, `RX=OK`). Nie oznacza to zmierzonego PER=0 w długim okresie ani odporności na zakłócenia.
 - **Etap fizycznego testu dwukierunkowego RAW32 zaliczony.** Nadal brak protokołu v1, mostu UART↔RF, discovery, docelowego arbitrażu, testów `MAX_RT` przy odłączeniu odbiorcy i automatycznego odzyskiwania łączności. Dalsze testy awaryjne pozostają otwarte.
+
+## 2026-11-03 — test restartów A i B oraz automatycznego powrotu RAW32
+
+- Właściciel przesłał trzy zrzuty RealTerm przedstawiające sekwencję testową: **(1) restart A**, **(2) wciśnięcie i przytrzymanie RESET B**, **(3) zwolnienie RESET B i oczekiwanie na odzyskanie łączności**. Ustalone fizyczne role: A0 przy GND = A/CLASS 00, A0 przy dodatnim zasilaniu = B/CLASS 01.
+- Po restarcie A log pokazuje `NRF OK CLASS=00 ... MODE=RAW32`, ponowną numerację od `SEQ=0000` oraz poprawne `TX=ACK REPLY=OK`; B przyjmuje kolejne ramki i odsyła odpowiedzi.
+- Przy trzymaniu RESET B na A widać etap `TX=ACK` przy `REPLY=MISS`, następnie `TX=MAX_RT ARC=0F REPLY=MISS` (m.in. okolice `SEQ=00B7..00BC`). Jest to spodziewane rozróżnienie: **sprzętowy ACK radia nie oznacza odpowiedzi aplikacyjnej**. Podczas resetu samej ATmegi nRF24 może pozostać zasilony i przez krótki czas nadal odpowiadać sprzętowo.
+- Po zwolnieniu RESET B ponownie uruchamia się program B (`NRF OK CLASS=01 ... MODE=RAW32`), a na obu stronach widać od `SEQ=0185` poprawną wymianę: A `TX=ACK ARC=00 REPLY=OK RD=1`, B `RX=OK TX=ACK ARC=00 RD=1`. A nie była dodatkowo restartowana. **Odzyskiwanie RAW32 po resetach mikrokontrolerów potwierdzone sprzętowo.**
+- Zakres dowodu: reset ATmega328P, **nie pełne odcięcie zasilania nRF24**, zakłócenia RF, wiele węzłów ani docelowe wykrywanie sesji w protokole v1. Nie deklarować ogólnej niezawodności bez testów protokołu, buforów i strat.
