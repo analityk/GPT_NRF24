@@ -10,8 +10,10 @@
 - [ ] Ustalić architekturę komunikacji dwóch równorzędnych urządzeń.
 - [x] Dodać nieblokujący sterownik USART0 z kolejkami RX/TX i programem echo; kompilacja AVR oraz test sprzętowy pozostają do potwierdzenia.
 - [ ] Przetestować UART 115200 8N1 na obu RF-Nano: pojedyncze bajty, dane binarne, długie serie, przepełnienia i błędy USART.
-- [x] Dodać rejestrową obsługę SPI i nRF24L01+, bezpieczne inicjowanie POWER_DOWN i diagnostykę przez UART (oczekuje na weryfikację F7 i sprzętową).
-- [ ] Zweryfikować SPI/nRF na obu RF-Nano: F7 (Debug/Release), F12, wynik `NRF24 OK`, ponowienie diagnostyki znakiem `?`, readback i odporność na brak odpowiedzi układu.
+- [x] Dodać i uruchomić na obu fizycznych RF-Nano obsługę SPI oraz diagnostykę rejestrów nRF24L01+; potwierdzenie COM10/COM11 w RealTerm, 2026-11-03.
+- [x] Zweryfikować inicjalizację SPI/nRF na obu RF-Nano: oba raportują `NRF24 OK S=0E CFG=0C CH=4C RF=06 FIFO=11`, a procedura OK obejmuje readback rejestrów.
+- [ ] Dodatkowa walidacja: build obu konfiguracji, obsługa odłączenia/awarii SPI i przypadki graniczne; brak jeszcze testu transmisji RF.
+- [ ] Przetestować pierwszą transmisję radiową stałej ramki 32 B A→B i B→A oraz sprzętowe TX_DS/MAX_RT/RX_DR.
 - [ ] Zaimplementować przesyłanie danych UART ↔ radio.
 - [ ] Zapewnić komunikację w obu kierunkach przy identycznym firmware.
 - [ ] Utrzymywać naprzemienną wymianę 32-bajtowych ramek również bez danych UART.

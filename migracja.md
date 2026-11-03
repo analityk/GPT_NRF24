@@ -70,3 +70,7 @@ Właściciel potwierdził stabilny UART po wysłaniu całego pliku RealTerm bez 
 ## Porządkowanie ostrzeżeń kompilatora — 2026-11-03
 
 Na podstawie zrzutów właściciela: Rebuild All SPI/nRF zakończony sukcesem (4558 B Flash i 482 B Data w pokazanej kompilacji), ale 3 ostrzeżenia o ignorowaniu atrybutu packed dla referencji C++ oraz mylący wpis `required from here` w Error List. W projekcie wyłączono globalne `PackStructureMembers` dla C i C++ w obu konfiguracjach Debug/Release; nie zmieniono instancji Nrf24. Po aktualizacji zalecana czysta przebudowa i kontrola Output > Build. Realne działanie SPI/nRF nadal niepotwierdzone.
+
+## SPI/nRF na obu fizycznych płytkach — potwierdzone zrzutami, 2026-11-03
+
+Dwa zrzuty RealTerm dostarczone przez właściciela: COM11 i COM10, oba wielokrotnie pokazują `NRF24 OK S=0E CFG=0C CH=4C RF=06 FIFO=11`. Test `probeAndConfigure()` wykonuje transakcje SPI, dwa wzorce RF_CH, readback konfiguracji oraz kontrolę adresów; komunikat OK jest końcowym wynikiem tej procedury. **SPI i komunikacja rejestrowa nRF24 są sprawdzone sprzętowo na obu płytkach.** Stan radia nadal POWER_DOWN; nie było jeszcze fizycznego transferu RF, ACK czy testu kolizji. Następne zadanie: sterowanie RX/TX i jednostronna transmisja 32 B, następnie kierunek odwrotny, bez utrwalania ról w firmware. Nie ponawiać prośby o potwierdzenie `NRF24 OK`, bo dowód jest już dostępny w rozmowie.

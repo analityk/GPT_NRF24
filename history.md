@@ -58,3 +58,10 @@ Przyszłe wpisy powinny zawierać datę, zakres faktycznie wykonanej zmiany, com
 - Potwierdzono świadomą zmianę wprowadzoną przez asystenta w commicie `307e52b`: **jawnie wyłączono globalne `Pack Structure Members`** (`PackStructureMembers=False`) dla kompilatora C i C++ w obu konfiguracjach Debug i Release projektu ATmega328P.
 - Właściciel zgłosił wątpliwość dotyczącą wpływu na 2 KB SRAM, ale zdecydował **pozostawić aktualną konfigurację i kontynuować prace nad SPI/nRF24**, bez cofania zmiany na tym etapie.
 - Nie wykonano porównawczych pomiarów `sizeof`, Flash i SRAM przed/po zmianie; nie twierdzić, że wpływ na pamięć wynosi zero. Pokazana wcześniej kompilacja zakończyła się sukcesem, lecz zawierała ostrzeżenia. Sterownik nRF24 nadal wymaga potwierdzenia działania SPI na obu fizycznych płytkach.
+
+## 2026-11-03 — potwierdzenie fizycznego SPI i nRF24L01+ na obu RF-Nano
+
+- Właściciel dostarczył dwa zrzuty RealTerm z dwóch fizycznych płytek: **COM11** i **COM10**. Oba porty pokazują powtarzające się wyniki `NRF24 OK S=0E CFG=0C CH=4C RF=06 FIFO=11`.
+- To potwierdza wykonanie programu diagnostycznego na obu ATmega328P, komunikację SPI z radiem oraz zakończenie procedury testowej zawierającej zapis/odczyt rejestru RF_CH i konfiguracji nRF24 (przy założeniu wynikającej z kodu, że komunikat OK jest emitowany po wszystkich sprawdzeniach).
+- **Etap inicjalizacji sprzętowego SPI i dostępu rejestrowego nRF24 uznany za zaliczony na obu płytkach.** Nie testowano jeszcze nadawania/odbioru fal radiowych, auto-ACK, IRQ, rzeczywistych strat ani naprzemiennych slotów. Nie należy mylić napisu `NRF24 OK` wysłanego przez UART/CH340 z komunikatem odebranym drogą radiową.
+- Poprzedni wpis mówiący, że test SPI jest niepotwierdzony, był aktualny podczas jego sporządzania; niniejszy wpis dokumentuje późniejsze dowody. Decyzja o pozostawieniu wyłączonego `Pack Structure Members` pozostaje bez zmian.

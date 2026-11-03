@@ -40,7 +40,7 @@ Skonfigurować USART 8N1, początkowo 115200 przy potwierdzonym F_CPU. Obliczyć
 
 ## 3. SPI i nRF24L01+
 
-Warstwa SPI, rejestrowy sterownik nRF i UART diagnostyczny zostały dodane. Do zaliczenia tego etapu potrzebny jest test na obu fizycznych RF-Nano. Sterowanie TX/RX z czasami przejść należy do późniejszej maszyny stanów MAC.
+Warstwa SPI, rejestrowy sterownik nRF i UART diagnostyczny zostały dodane. **Etap komunikacji SPI i rejestrów nRF zaliczony na obu fizycznych RF-Nano**: zrzuty RealTerm COM10 i COM11 pokazują `NRF24 OK S=0E CFG=0C CH=4C RF=06 FIFO=11` (2026-11-03). Potwierdzenie nie obejmuje transmisji fal radiowych. Sterowanie TX/RX z czasami przejść należy do późniejszej maszyny stanów MAC.
 Uruchomić sprzętowe SPI mode 0, bezpieczny zegar, GPIO dla CE/CSN. Udostępnić read/write register, read/write buffer i command. Potwierdzić odczyt/zapis rejestrów. Ustalić wspólny kanał, adres, CRC, 1 Mb/s, Enhanced ShockBurst i stały payload 32 B. Obsłużyć CONFIG, STATUS, FIFO_STATUS, RX_DR, TX_DS, MAX_RT, flush FIFO, czasy CE i przejścia RX/TX. Jeśli IRQ nie jest podłączone, odpytywać status bez nieograniczonego czekania. Bramka: obie płytki raportują sprawne SPI i radio.
 
 ## 4. Test jednostronny
