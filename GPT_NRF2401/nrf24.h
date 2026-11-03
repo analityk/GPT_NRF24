@@ -109,7 +109,8 @@ public:
             { RF_SETUP, 0x06 }, { RX_PW_P0, 32 }, { DYNPD, 0 },
             { FEATURE, 0 }
         };
-        for (uint8_t i=0; i<sizeof(pairs)/sizeof(pairs[0]); ++i) {
+        const uint8_t pairCount = static_cast<uint8_t>(sizeof(pairs) / sizeof(pairs[0]));
+        for (uint8_t i=0; i<pairCount; ++i) {
             const uint8_t reg = pairs[i][0];
             const uint8_t expected = pairs[i][1];
             if (!writeRegister(reg, expected))
