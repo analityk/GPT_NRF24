@@ -66,3 +66,7 @@ Właściciel potwierdził na **obu fizycznych płytkach** echo wysyłanych bajt�
 ## Uruchomienie SPI i nRF24L01+ — 2026-11-03
 
 Właściciel potwierdził stabilny UART po wysłaniu całego pliku RealTerm bez delayów. Aktualny `main.cpp` zastąpiono testem diagnostycznym SPI/nRF (status startowy na obu UART, powtórzenie przez `?`; zwykłe bajty nadal są echem). Kod: `spi.h/.cpp`, szablon `nrf24.h`, test modelowy `tests/nrf24_mock_test.cpp`, połączenie w `.cppproj`. Na starszym RF-Nano ATmega328P obowiązuje CSN D9/PB1, CE D10/PB2, MOSI D11, MISO D12, SCK D13; w innych rewizjach może być inaczej. Po 110 ms od inicjalizacji pinów: test RF_CH, konfiguracja i readback, POWER_DOWN. Spodziewany zapis: `NRF24 OK S=0E CFG=0C CH=4C RF=06 FIFO=11`. Przyszła obsługa RX/TX i slotów nie została jeszcze zaimplementowana. **Nie potwierdzono kompilacji AVR ani testów rzeczywistego SPI.** F7 kompiluje, F12 programuje ręcznie (nie zmieniać).
+
+## Porządkowanie ostrzeżeń kompilatora — 2026-11-03
+
+Na podstawie zrzutów właściciela: Rebuild All SPI/nRF zakończony sukcesem (4558 B Flash i 482 B Data w pokazanej kompilacji), ale 3 ostrzeżenia o ignorowaniu atrybutu packed dla referencji C++ oraz mylący wpis `required from here` w Error List. W projekcie wyłączono globalne `PackStructureMembers` dla C i C++ w obu konfiguracjach Debug/Release; nie zmieniono instancji Nrf24. Po aktualizacji zalecana czysta przebudowa i kontrola Output > Build. Realne działanie SPI/nRF nadal niepotwierdzone.

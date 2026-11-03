@@ -22,6 +22,7 @@ Instrukcje muszą być samowystarczalne. Fakty wymagające zachowania należy za
 - **Wielokrotne użycie:** każdy problem naprawiaj we właściwej warstwie, poprzez mechanizm nadający się do ponownego użycia. Rozwiązanie nie może zależeć od nazwy pliku, katalogu, projektu czy przypadku testowego.
 - **Integracja:** zachowuj istniejący projekt Microchip Studio i działający mechanizm programowania przez USB. Nie nadpisuj ścieżek narzędzi ani ustawień portów bez potrzeby i zgody.
 - **Zależności:** żadnych nowych frameworków lub bibliotek bez rzeczywistej potrzeby, uzasadnienia kosztu pamięci i zgodności z kompilatorem AVR.
+- **Układ danych i ABI:** nie włączać globalnego `Pack Structure Members` / `-fpack-struct` dla C/C++. Formaty binarne radia i pamięci trwałej kodować jawnie bajtami; nie rzutować buforów na spakowane typy C++.
 
 ## Fizyka łącza — sedno projektu
 

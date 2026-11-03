@@ -79,3 +79,7 @@ Test sprawdza `STATUS`, zapis/odczyt dwóch różnych wartości `RF_CH` z odtwor
 Klasy `SpiMaster` (`spi.h/.cpp`) i `Nrf24<Spi, Pin>` (`nrf24.h`) są odseparowane. Sterownik radia nie posiada na stałe przypisanych pinów i nie zależy od AVR; test modelowy `tests/nrf24_mock_test.cpp` symuluje magistralę i rejestry. Przykładowa komenda kompilacji na hoście: `g++ -std=c++11 -Wall -Wextra -Werror -pedantic tests/nrf24_mock_test.cpp -o nrf24_mock_test`. Test wymaga niezależnego uruchomienia na hoście; firmware wymaga kompilacji F7 oraz ręcznego wgrania F12 i sprawdzenia wyniku na obu portach COM.
 
 Źródła pinów i parametrów: [instrukcja RF-Nano V1.1](https://michiel.vanderwulp.be/domotica/Modules/RFNanoKeywish/RF-NANO-Operating-Instruction_V.1.1.pdf) oraz [nRF24L01+ Product Specification](https://www.sparkfun.com/datasheets/Wireless/Nordic/nRF24L01P_Product_Specification_1_0.pdf).
+
+### Ostrzeżenia kompilatora o `packed`
+
+Jeśli Microchip Studio pokazuje `ignoring packed attribute` dla pól referencyjnych sterownika radia, sprawdź ustawienie `Pack Structure Members` w opcjach **C i C++** dla **Debug oraz Release**. W tym projekcie ustawiono je na `False` — globalny `-fpack-struct` jest niepotrzebny i niebezpieczny dla struktur aplikacyjnych. Format radiowy serializuje się jawnie do 32-bajtowej tablicy, bez bezpośredniego mapowania na spakowane obiekty. O sukcesie builda rozstrzyga `Output > Build` i wynik `Rebuild All`, a nie wyłącznie `Error List`.

@@ -46,3 +46,9 @@ Przyszłe wpisy powinny zawierać datę, zakres faktycznie wykonanej zmiany, com
 - Program `main.cpp` realizuje read/write/restore probe, konfigurację i odczyt zwrotny, wynik ASCII na UART, ponowienie znakiem `?`. W RF ustawiono 32 B, 1 Mb/s, CRC16, pipe 0 auto-ACK; radio pozostaje POWER_DOWN, bez transmisji między węzłami.
 - Pinout starszego RF-Nano z ATmega328P: D9 CSN, D10 CE (odwrotność typowego modułu zewnętrznego); źródło: RF-Nano V1.1 producenta. Piny nie są zaszyte w sterowniku radiowym, tylko w `main.cpp`.
 - Dodano `tests/nrf24_mock_test.cpp` (mock SPI i rejestrów, testy inicjalizacji, FIFO, braku radia, błędnego readbacku i awarii SPI). W tym środowisku nie wykonano kompilacji AVR ani testu na RF-Nano; wyniki z obu płytek oczekiwane od właściciela.
+
+## 2026-11-03 — wyłączenie globalnego pakowania struktur (ostrzeżenia C++)
+
+- Właściciel pokazał `Rebuild All: 1 succeeded, 0 failed, 0 skipped` oraz trzy ostrzeżenia `ignoring packed attribute` wskazujące na pola referencyjne `Spi&` i `Pin&` w `Nrf24`. Error List wyświetlał dodatkowo `required from here` jako 1 Error mimo poprawnego builda; nie jest to diagnostyka błędu kompilacji.
+- Przyczyną są cztery ustawienia `PackStructureMembers=True` w `.cppproj` (C i C++, Debug i Release). Ustawiono `False` w obu językach i konfiguracjach, bez zmieniania referencji i API radia. Protokoły bajtowe nie powinny polegać na globalnym `-fpack-struct`.
+- Nie zmieniono `-std=c++11`, integracji F12 ani Post-Build. Poprawka konfiguracyjna wymaga sprawdzenia w Microchip Studio po czystej przebudowie.
