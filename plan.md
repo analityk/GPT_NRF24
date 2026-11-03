@@ -45,7 +45,7 @@ Uruchomić sprzętowe SPI mode 0, bezpieczny zegar, GPIO dla CE/CSN. Udostępni�
 
 ## 4. Test jednostronny
 
-Dodano diagnostyczny RAW32 ping-pong bez protokołu v1: identyczny firmware, inicjator według zatrzaśniętego ADC0 (GND vs 3,3 V), odbiorca odsyła sprawdzony surowy payload. Oddzielna warstwa PHY odpowiada za przełączanie CE/PRX/PTX, ACK i timeouty. Test modelowy (g++ C++11) wykonany; **weryfikacja fizyczna pozostaje otwarta**.
+Dodano diagnostyczny RAW32 ping-pong bez protokołu v1: identyczny firmware, inicjator według zatrzaśniętego ADC0 (GND vs 3,3 V), odbiorca odsyła sprawdzony surowy payload. Oddzielna warstwa PHY odpowiada za przełączanie CE/PRX/PTX, ACK i timeouty. Test modelowy (g++ C++11) wykonany; **weryfikacja fizyczna zaliczona 2026-11-03**: zrzut COM10/COM11, zgodne SEQ 000B–0019, ACK/REPLY/RX=OK i ARC=00. Awaryjne MAX_RT oraz odzyskiwanie po zaniku węzła pozostają do testów.
 Na czas testu jedną płytkę ustawić w RX, drugą w TX (nie utrwalać ról). Przesłać znaną ramkę z licznikiem, zweryfikować payload na UART odbiorcy i TX_DS lub MAX_RT nadawcy. Powtórzyć w przeciwnym kierunku oraz bez odbiorcy. Bramka: rzeczywisty transfer A→B i B→A.
 
 ## 5. Protokół danych

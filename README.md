@@ -115,3 +115,7 @@ Scenariusze sprzętowe: uruchomić obie płytki, odłączyć zasilanie B (A powi
 
 Na hoście dodano `tests/nrf24_phy_test.cpp` i `tests/rf_raw_pattern_test.cpp`; testy pomocnicze uruchomiono przez `g++ -std=c++11 -Wall -Wextra -Werror -pedantic` na odpowiednikach bieżącej logiki PHY i wzorca. Kompilacja AVR i fizyczny transfer RF nie zostały jeszcze zweryfikowane.
 
+
+### Potwierdzenie RAW32 na fizycznych płytkach (2026-11-03)
+
+Właściciel potwierdził działającą wymianę A→B→A na RF-Nano, COM10/COM11. Oba terminale pokazują zgodne kolejne `SEQ=000B..0019`, odpowiednio `A TX=ACK ARC=00 REPLY=OK RD=1` oraz `B RX=OK TX=ACK ARC=00 RD=1`. **Fizyczny test dwukierunkowych surowych 32-bajtowych pakietów jest zaliczony.** Opis wcześniejszego etapu wymagającego testu należy traktować jako instrukcję reprodukcji, nie aktualny brak potwierdzenia. Do przetestowania pozostają MAX_RT przy zaniku drugiego urządzenia, recovery, dalsze obciążenia oraz właściwy protokół i UART↔RF.

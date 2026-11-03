@@ -74,3 +74,10 @@ Przyszłe wpisy powinny zawierać datę, zakres faktycznie wykonanej zmiany, com
 - Dodano `tests/nrf24_phy_test.cpp` i `tests/rf_raw_pattern_test.cpp`. Lokalnie uruchomiono równoważne testy modelowe g++ C++11 z `-Wall -Wextra -Werror -pedantic`: PASS dla ACK, MAX_RT, timeoutu, błędu SPI, odbioru FIFO, wszystkich bajtów wzorca (mutacje) i progu ADC.
 - Test radiowy wykorzystuje sprzętowe CRC16 i auto-ACK z poprzedniej konfiguracji nRF. Stałe opóźnienia testowe są świadomie częścią diagnostyki, nie przyszłego scheduler/MAC.
 - **Nie wykonano kompilacji AVR ani próby dwóch fizycznych radii dla nowego wsadu; brak potwierdzenia transmisji RF.** Zmiany nie dotyczą F12, Post-Build ani wyłączenia Pack Structure Members.
+
+## 2026-11-03 — fizyczna wymiana RAW32 A→B→A potwierdzona
+
+- Właściciel przesłał zrzut z jednocześnie otwartymi terminalami RealTerm: **COM10 = A (inicjator)**, **COM11 = B (odpowiadający)**, obie płytki RF-Nano z identycznym wsadem.
+- Widoczny wycinek kolejnych numerów ramki **000B–0019** jest zgodny po obu stronach. A raportuje `TX=ACK ARC=00 REPLY=OK RD=1`; B raportuje `RX=OK TX=ACK ARC=00 RD=1`. Potwierdza to nadanie i poprawne odebranie surowych 32 B A→B, przetworzenie wzorca przez B, nadanie odpowiedzi B→A oraz jej zweryfikowanie przez A. Sprzętowe potwierdzenia, RX_DR i przełączanie PTX/PRX działają dla pokazanego przebiegu.
+- W widocznym fragmencie nie odnotowano retransmisji ani błędnych pakietów (`ARC=00`, `REPLY=OK`, `RX=OK`). Nie oznacza to zmierzonego PER=0 w długim okresie ani odporności na zakłócenia.
+- **Etap fizycznego testu dwukierunkowego RAW32 zaliczony.** Nadal brak protokołu v1, mostu UART↔RF, discovery, docelowego arbitrażu, testów `MAX_RT` przy odłączeniu odbiorcy i automatycznego odzyskiwania łączności. Dalsze testy awaryjne pozostają otwarte.
