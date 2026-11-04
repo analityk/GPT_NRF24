@@ -1,4 +1,20 @@
-**NAJNOWSZY PUNKT KONTYNUACJI: 2026-11-04, eksperyment `experiment/pp-recovery-v2`.**
+**NAJNOWSZY PUNKT KONTYNUACJI: 2026-11-04, eksperyment `experiment/pp-recovery-ack-fix`.**
+Odizolowana gałąź wychodzi z `experiment/pp-recovery-v2` i poprawia
+transport Go-back-N po resecie B przy pełnym obciążeniu A. Dwie zmiany
+przenośnego API: (1) przy zerowym `RX_CREDIT` nie wolno ponawiać
+DATA — oczekujące bajty pozostają w pamięci, a IDLE nadal niesie ACK;
+(2) odbiorca napotykający lukę sekwencji ustawia istniejący bit `URGENT`
+w nagłówku DATA/IDLE, informując nadawcę, by bezzwłocznie ponowił od
+`RX_LAST+1`. Nadawca reaguje najwyżej raz na daną lukę mimo opóźnionych
+ACK Payload. **Nie ma dodatkowych bajtów radiowych**, nie zmieniono PHY,
+konfiguracji 1Mb/s, programu main, A0, F7/F12, przechowywania pakietów
+ani statusów hosta. Testy hostowe PASS; **wymagana kompilacja AVR oraz
+fizyczny test z resetem B przy nasyconym A**. Wcześniejsze spadki do
+~5,5 kB/s i `ret≈B bad≈230/s` są dowodem problemu, NIE dowodem naprawy.
+`main`, `checkpoint/pp-2026-11-04` oraz poprzednia gałąź testowa
+pozostają nietknięte.
+
+**Wcześniejszy punkt kontynuacji: 2026-11-04, `experiment/pp-recovery-v2`.**
 Przenośne `pp_recovery_control.h` + `host_flow_status.h` oddzielają zanik
 łączności od utraty RAM partnera. Prawidłowa ramka z dotychczasowym SID
 przywraca ten sam transport bez rekey; po 3×1,6 ms ciszy SUSPECT, po 1 s

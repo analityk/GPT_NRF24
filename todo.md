@@ -1,5 +1,31 @@
 # TODO — aktywny transport dwukierunkowy UART / ACK Payload
 
+## Test warstwy transportowej po resecie B — `experiment/pp-recovery-ack-fix`
+
+- [x] Zidentyfikowano dwa miejsca wzmacniające problem w przenośnym
+  `UartReliableStream`: ponowienia DATA przy `RX_CREDIT=0` oraz brak
+  szybkiej informacji o luce, pomimo stale powracającego `RX_LAST`.
+- [x] Przy zerowym kredycie DATA/replay czeka w istniejącym cache;
+  IDLE nadal przesyła ACK i kredyt zwrotny.
+- [x] Wykorzystano istniejący bit `URGENT` w MAC jako prośbę o ponowienie
+  od `RX_LAST+1` przy luce odbiorcy; ograniczenie do jednego wyzwolenia
+  na konkretny brakujący segment, aby opóźnione ACK Payload nie tworzyły
+  nowych burz retransmisji. Nie dodano bajtów do 8B nagłówka/24B BODY.
+- [x] Lokalne testy C++11: luka 1. pakietu po rekey, utrata środkowego,
+  powtórzone NACK, zerowy kredyt i wznowienie bez utraty bufora,
+  B resetowany przy stałym nasyceniu A. `sh tests/run_host_tests.sh` PASS.
+- [ ] Kompilacja AVR-GCC (lokalnego `avr-g++` brak); F7 i ręczne F12 na
+  **obu** płytkach. Zestawić `A up=1`, `B up=1`, identyczny SID.
+- [ ] **Sprzętowy odbiór poprawki**: bez ekranowania odczekać ≥10 s
+  na ~14–15 kB/s, resetować TYLKO B z A0=3,3V, potem odczekać ≥15 s.
+  `A ret` i `B bad` powinny spaść do wartości bliskich zera, `cps`
+  powinno wrócić w okolice początkowego tempa. Osobno reset A
+  (A0=GND), potem oba. Porównać obie strony, nowe `sid`, `up=1`.
+- [ ] Jeśli 5,5 kB/s i `ret≈bad≈230/s` pozostaną, zebrać obydwa
+  zrzuty po 10–15 s z `A ack/win` i `B lg/ls/rf/af`. Wtedy izolować
+  sprzętową kolejkę ACK Payload nRF24; hostowy model nie odwzorowuje
+  jej rzeczywistych wyścigów czasowych.
+
 ## Wznowienie PP v2 — gałąź `experiment/pp-recovery-v2`
 
 - [x] Oddzielono milczenie radia od potwierdzonej zmiany tożsamości sesji:

@@ -390,3 +390,30 @@ Przyszłe wpisy powinny zawierać datę, zakres faktycznie wykonanej zmiany, com
   z `main` także na `experiment/**`, żeby eksperyment zidentyfikował
   niepowodzenie AVR-GCC PRZED ręcznym flashowaniem; produkcyjna gałąź
   nadal jest niezależna. Wyniku CI nie uznawać za próbę radiową.
+
+## 2026-11-04 — naprawa transportu PP po utracie ACK, test do wykonania na RF-Nano
+
+- Po pokazanych przez właściciela restartach pojedynczych płytek
+  zauważono stan A `cps≈5544, ret≈230/s`, B `bad≈230/s`, bez dużej
+  wartości ARC/MAX, a po resecie A również `cps≈14880, ret=0`.
+  To wskazuje na pętlę brakującego segmentu i powtarzanych prób;
+  zależność od resetu B jest obserwacją sprzętową, przyczyna wymaga
+  potwierdzenia poprawki na płytkach.
+- Na osobnej gałęzi `experiment/pp-recovery-ack-fix` poprawiono
+  przenośny `UartReliableStream`: powtórka wcześniej mogła omijać
+  `RX_CREDIT=0`, choć odbiorca nie mógł przyjąć segmentu. Teraz
+  pozostaje samo IDLE/ACK, a pakiet nie jest usuwany ani nadpisywany.
+- Odbiorca Go-back-N oznacza brakujący segment istniejącym bitem
+  `PairedFrame::URGENT`, a nadawca po `RX_LAST` dostaje jeden natychmiastowy
+  impuls replay na dany brakujący numer; starsze skopiowane ACK Payload
+  nie wyzwalają replay bez końca. Semantyka bidirectional, 8B header,
+  24B opaque BODY i WINDOW4 bez zmian; PHY i diagnostyki nie rozbudowywano.
+- Nowe testy hostowe: `pp_credit_stall_test`, `pp_fast_retransmit_test`,
+  `pp_rekey_full_load_test` oraz dostosowanie dwóch istniejących testów
+  do inicjalnego kredytu zero. **Wszystkie 21 testów hostowych PASS**
+  przez `sh tests/run_host_tests.sh` z g++ C++11 i `-Werror`.
+  Model nasyconego radia nie symuluje wiernie kolejki ACK Payload
+  nRF24, zatem sam nie odtwarza fizycznego spowolnienia.
+- Lokalnego `avr-g++` i pary RF-Nano brak. Cross-build AVR, F7/F12 oraz
+  test „reset samego B pod pełnym obciążeniem” pozostają otwarte.
+  Główna gałąź i poprzednie eksperymenty bez zmian.

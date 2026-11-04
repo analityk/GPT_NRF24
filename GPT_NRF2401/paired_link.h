@@ -47,7 +47,8 @@ public:
     // the cumulative acceptance ACK. BODY contains only user bytes.
     PairedFrame::Error makeStream(uint8_t seq,uint8_t ack,uint8_t credit,
                          const uint8_t* data,uint8_t length,
-                         uint8_t* out,uint8_t& width) {
+                         uint8_t* out,uint8_t& width,
+                         bool missingPrefix=false) {
         PairedFrame::Header h;
         h.txSeq=seq;h.rxLast=ack;
         h.lossAB=isA_?remoteLoss_:localLoss_;
@@ -55,6 +56,9 @@ public:
         h.arcLast=arc_;h.rxDrop=localDrops_;h.rxCredit=credit;
         h.flags=static_cast<uint8_t>(length?PairedFrame::Kind::DATA:
                                            PairedFrame::Kind::IDLE);
+        // The existing URGENT bit requests the missing cumulative-ACK
+        // successor; it adds no bytes to the over-the-air header.
+        if(missingPrefix)h.flags|=PairedFrame::URGENT;
         h.sessionId=sid_;
         const PairedFrame::Error e=PairedFrame::encode(
             h,data,length,out,width);

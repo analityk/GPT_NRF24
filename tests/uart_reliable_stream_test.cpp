@@ -162,6 +162,8 @@ int main() {
     e.stream.disconnect();
     e.link.configure(true,0);
     e.session(0x1002);f.session(0x1002);
+    // Replay only after the new peer advertises real RX headroom.
+    f.make();(void)e.incoming(f);
     e.make();
     PairedFrame::View v;
     assert(PairedFrame::decode(e.raw,e.width,v)==PairedFrame::Error::OK);
