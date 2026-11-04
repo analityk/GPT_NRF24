@@ -8,8 +8,8 @@ A/PTX stale inicjuje transmisje, B/PRX odpowiada uprzednio przygotowanym sprzęt
 
 | Offset | Pole | Znaczenie |
 |---|---|---|
-| 0 | `TX_SEQ` | numer nowej ramki RF modulo256 (nie aplikacyjny segment UART) |
-| 1 | `RX_LAST` | numer ostatniej poprawnej ramki partnera, **nie gwarancja wpisania do UART** |
+| 0 | `TX_SEQ` | DATA: numer segmentu użytkownika modulo256, bez zmiany przy retry; IDLE: bieżący numer bez nowego segmentu |
+| 1 | `RX_LAST` | kumulacyjny ACK ostatniego kolejnego segmentu **zaakceptowanego do UART TX** partnera; `0xFF` przed pierwszym przyjęciem |
 | 2 | `LOSS_AB/LOSS_BA` | 2 niezależne czterobitowe liczniki wykrytych luk |
 | 3 | `ARC_LAST/RX_DROP` | 2 czterobitowe wskaźniki stanu |
 | 4 | `RX_CREDIT` | wolne miejsce u odbiorcy w jednostkach pełnych 24B, obecnie `UART::freeSpace()/24` |
@@ -21,19 +21,20 @@ Kredyt jest tylko wskazówką dla nadawcy; wiarygodnym testem przyjęcia jest `U
 
 ## Usługa `UartReliableStream` (opcjonalna, obecnie wybrana w main)
 
-W każdej ramce `DATA` w stanie ACTIVE:
+W stanie ACTIVE pola sterujące znajdują się **wyłącznie w ośmiobajtowym nagłówku MAC**, nie w 24B BODY:
 
-| Offset BODY | Pole | Znaczenie |
-|---|---|---|
-| 0 | `DATA_SEQ` | numer bieżącego niezależnego segmentu danych, modulo256; nie zwiększa się przy retry |
-| 1 | `ACK_SEQ` | ostatni kolejny segment partnera **przyjęty atomowo do UART TX** |
-| 2..23 | `USER` | 0–22 bajty dowolnych danych UART, także NUL, CR/LF i 0xFF |
+| Pole MAC | Rola w aktywnym strumieniu |
+|---|---|
+| `TX_SEQ` | Numer nowego segmentu danych (modulo256), powtórzony bez zmian przy retransmisji |
+| `RX_LAST` | APP_ACK: ostatni numer segmentu partnera zaakceptowany w całości do UART TX |
+| `RX_CREDIT` | Wolne miejsce na segmenty u odbiorcy; nie zastępuje fizycznej kontroli przyjęcia |
+| `BODY[0..23]` | **0–24 bajty nieinterpretowanego UART**, bez DATA_SEQ ani ACK_SEQ |
 
-Ramka bez nowych danych nadal ma `TYPE=DATA`, 2-bajtowy BODY oraz radio DPL=10 B. Dzięki temu każdy następny trigger sprzętowego ACK niesie również app ACK. Nagłówek linku pozostaje **bez zmian** i nadal raportuje fizyczne TX_SEQ/RX_LAST; usługa posiada osobne, aplikacyjne DATA_SEQ/ACK_SEQ.
+Jeśli nie ma porcji użytkownika, `PairedLink::makeStream` tworzy ramkę `IDLE` **8 B DPL**. Nie nadaje wtedy nowego DATA_SEQ, ale wysyła aktualny `RX_LAST` i `RX_CREDIT` w nagłówku. Pusta ramka nadal wyzwala sprzętowy ACK Payload w drugim kierunku. Przy pełnym DATA wielkość RF payloadu wynosi 32 B (8+24).
 
-Nadawca trzyma do **czterech niepotwierdzonych segmentów** (4×22B) w stałym buforze. Numer `DATA_SEQ` jest przydzielany każdej nowej porcji, a `ACK_SEQ` potwierdza **cały ciąg kolejno przyjętych segmentów** (cumulative ACK). W czasie nadejścia spóźnionego ACK inne ramki mogą przenosić nowe DATA. Przy braku postępu przez 8 własnych wymian nadajnik wykonuje **Go-back-N**, zaczynając od najstarszego niepotwierdzonego segmentu. Odbiornik przyjmuje tylko następny oczekiwany numer; przyszłe numery po luce są odrzucane i retransmitowane. Pełny UART TX nie powoduje aplikacyjnego ACK. Duplikaty segmentów nie wypisują bajtów drugi raz w obrębie danej sesji.
+Nadawca trzyma do **czterech niepotwierdzonych segmentów** (4×24B) w stałym buforze. Numer `DATA_SEQ` jest przydzielany każdej nowej porcji, a `ACK_SEQ` potwierdza **cały ciąg kolejno przyjętych segmentów** (cumulative ACK). W czasie nadejścia spóźnionego ACK inne ramki mogą przenosić nowe DATA. Przy braku postępu przez 8 własnych wymian nadajnik wykonuje **Go-back-N**, zaczynając od najstarszego niepotwierdzonego segmentu. Odbiornik przyjmuje tylko następny oczekiwany numer; przyszłe numery po luce są odrzucane i retransmitowane. Pełny UART TX nie powoduje aplikacyjnego ACK. Duplikaty segmentów nie wypisują bajtów drugi raz w obrębie danej sesji.
 
-**Metadane B w ACK Payload są przygotowane przed odbiorem aktualnej ramki A**, zatem informacja w nich jest opóźniona co najmniej o jedną transakcję. Nie można na ich podstawie usuwać segmentu przed sprawdzeniem `ACK_SEQ` w aktualnej sesji.
+**Metadane B w ACK Payload są przygotowane przed odbiorem aktualnej ramki A**, zatem informacja w nich jest opóźniona co najmniej o jedną transakcję. Nie można na ich podstawie usuwać segmentu przed sprawdzeniem `RX_LAST` w aktualnej sesji.
 
 `beginSession(sid)` zeruje numery, ale **nie wyrzuca niepotwierdzonego segmentu** pobranego z UART RX. Na MCU, który nie był resetowany, porcja może zostać wznowiona po nowym SID. Reset MCU lokalnego kasuje RAM, zaś potwierdzony wcześniej i wypisany do UART segment może zostać powtórzony po zmianie sesji, jeśli jego ACK zaginął. Dlatego dokładnie-raz **ponad resetem** wymaga trwałej wyższej warstwy — nie obiecujemy go teraz.
 
@@ -43,7 +44,7 @@ HELLO/BEACON/WELCOME/READY/READY_ACK to osobna maszyna `PairedSession` z trwał�
 
 ## Czas, sterowanie i pamięć
 
-Rola A wyzwala odpowiedź B **w każdej kolejnej iteracji, nawet bez danych**. Nie ma sztucznego oczekiwania 10 ms ani 20/25 ms; pozostaje wyłącznie ochrona czasowa PHY (~260 µs między zakończeniem a kolejnym CE), transmisja SPI i rzeczywisty czas RF/ACK/retry. W stanie IDLE ramka usługowa ma 10 B na radiu (8B MAC + 2B transport), w pełnym DATA 32 B. Timer1 2MHz służy do timeoutów sprzętowych, a nie synchronizacji obu MCU. Dwa kierunki współdzielą jedną wymianę Enhanced ShockBurst; **okno transportowe = 4** na kierunek, a nie dawne 1. Okno nie narzuca semantyki plikowej, szyfrowania ani BULK.
+Rola A wyzwala odpowiedź B **w każdej kolejnej iteracji, nawet bez danych**. Nie ma sztucznego oczekiwania 10 ms ani 20/25 ms; pozostaje wyłącznie ochrona czasowa PHY (~260 µs między zakończeniem a kolejnym CE), transmisja SPI i rzeczywisty czas RF/ACK/retry. W stanie IDLE ramka usługowa ma 8 B na radiu (wyłącznie MAC), w pełnym DATA 32 B. Timer1 2MHz służy do timeoutów sprzętowych, a nie synchronizacji obu MCU. Dwa kierunki współdzielą jedną wymianę Enhanced ShockBurst; **okno transportowe = 4** na kierunek, a nie dawne 1. Okno nie narzuca semantyki plikowej, szyfrowania ani BULK.
 
 UART RX/TX po 127 bajtów użytecznych, 115200 8N1, brak RTT/CTS. Bez sprzętowego flow control bardzo szybki plik lub długa przerwa RF mogą przepełnić wejściowy ring. `RX_CREDIT` gwarantuje tylko, że nowy segment nie zostanie świadomie przyjęty przez przepełniony **wyjściowy** UART TX. Nie przywraca danych zgubionych przed odbiorem z CH340.
 
@@ -70,3 +71,9 @@ Przed modyfikacją rdzenia: sprawdzić RealTerm `Delays=1,0` (1ms na znak, bez d
 Zmiana obejmuje **wyłącznie implementację usługi UART w opaque BODY**, nie 8-bajtowy nagłówek, SID ani rolę nRF. `DATA_SEQ` oznacza kolejne nowo pobrane z UART porcje, `ACK_SEQ` oznacza ostatnią **kolejną poprawnie przyjętą do UART TX** porcję od partnera. Każda wymiana nRF może nieść nową porcję A→B i B→A niezależnie od opóźnienia potwierdzeń. Odbiornik stosuje prosty Go-back-N (bez bufora out-of-order): pierwsza luka blokuje przyjęcie dalszych numerów do czasu retransmisji. Każde `UART::writeAll` jest atomowe; odmowa powoduje ponowienie, a nie ACK. **Okno 4** ogranicza zapotrzebowanie SRAM do 88B cache węzła, a ogólny firmware po cross-buildzie AVR ma `.data=96B`, `.bss=591B` (687B stałego SRAM, bez stosu).
 
 Model 600 transakcji/s i 19 B wejścia/transakcję na każdą stronę (11 400 B/stronę) uzyskuje 0 przepełnień RX na A i B przy bezbłędnym RF; przeciążenie 24 B/transakcję prowadzi do przepełnień. **To potwierdza architekturę potoku, lecz nie dowodzi wydajności na fizycznych dwóch RF-Nano.** Trzeba zmierzyć pełny dwukierunkowy UART z `Delays=0`, osobno liczniki RX overflow i DOR0 oraz rzeczywistą wydajność nowego MCU/PHY. Dokładnie-raz przez twardy reset obu uC nadal nie jest obiecane.
+
+## Rozdział odpowiedzialności — korekta 2026-11-04
+
+Kod `UartReliableStream` zachowuje WINDOW=4 i Go-back-N, ale nie zapisuje już żadnych danych kontrolnych w BODY. `PairedLink::makeStream/observeStream` dostarcza i odczytuje DATA_SEQ oraz APP_ACK w **TX_SEQ/RX_LAST**, a ramki IDLE pozostają pełnoprawnym wyzwalaczem sprzętowego ACK Payload. `observeStream` nie filtruje powtórzonego DATA przed analizą jego świeższego ACK; deduplikację oryginalnych bajtów UART wykonuje wyłącznie transport. `PairedLink` rozróżnia odbiór fizycznej ramki od obserwacji **luk w numeracji segmentów**. To świadomy kompromis: nie da się jednocześnie numerować w TX_SEQ wszystkich pustych wymian i danych/ponowień jako tych samych numerów; liczniki jakości fizycznej pozostają dostępne poprzez ARC/MAX_RT, statystyki lokalne i raporty kontrolne. Nie używać starego opisu `TX_SEQ` jako licznika każdego RF heartbeat.
+
+F7/F12 pozostaje ręczne, brak Post-Build flash. Host i AVR-GCC PASS; **brak jeszcze fizycznego testu nowego 24B transportu**.

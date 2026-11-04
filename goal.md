@@ -11,7 +11,7 @@ Dwie RF-Nano z tym samym firmware komunikują się poprzez nRF24L01+ w układzie
 ## Aktywny etap 2026-11-04 — nowy UART ↔ RF ↔ UART
 
 - Odbieranie arbitralnych bajtów z UART0 A i B oraz dostarczanie na przeciwny UART, bez dodatkowych logów i interpretacji.
-- `uart_reliable_stream.h` jako niezależny transport stop-and-wait (22 bajty UART + 2 bajty sekwencji/ACK w BODY 24 B), z własnym ACK po przyjęciu do TX UART.
+- `uart_reliable_stream.h` jako niezależny transport WINDOW=4 z **24 bajtami UART w BODY** i sekwencją/ACK umieszczonymi w ośmiobajtowym nagłówku linku, z ACK po przyjęciu do TX UART.
 - Kredyty oparte na wolnym miejscu kolejki docelowej, odrzucanie duplikatów i powtórzenia, zgodne z ACK Payload i zmianą sesji.
 - Test hostowy 4096 B na kierunek z symulowanymi stratami i opóźnieniem ACK: **PASS**. Cross-kompilacja ATmega328P AVR-GCC: **PASS**.
 - **Odbiór sprzętowy NOWEGO mostu UART pozostaje otwarty.** Nie wolno przepisywać wyników starszego firmware jako dowodu osiągów nowego.
@@ -22,4 +22,4 @@ F7 kompiluje, F12 ręcznie wgrywa; nigdy nie przywracać automatycznego flashowa
 
 ## Decyzja o ciągłym ping-pongu i potokowaniu — 2026-11-04
 
-Warstwa nRF ma aktywnie wymieniać ramki **bez przerwy także przy braku ruchu UART**, aby nowa wiadomość nie musiała czekać na 10ms polling. Sprzętowy ACK Payload jest wykorzystywany na każdej udanej wymianie, a osobne APP_ACK to zawsze dane piggyback w 24B BODY. Poprzedni stop-and-wait został zastąpiony oknem **4 segmentów po 22B na kierunek** (plus retransmisja Go-back-N), bez modyfikacji 8B rdzenia, SID i fizycznych ról. Cel: przy ciągłym ruchu osiągnąć docelowo limit UART 115200 w obu kierunkach, na ile pozwoli rzeczywisty 1 Mb/s link i CPU; **nowy goodput fizyczny wymaga zmierzenia**. Niekontrolowany ingress większy od zdolności przesyłu nadal wymaga flow-control.
+Warstwa nRF ma aktywnie wymieniać ramki **bez przerwy także przy braku ruchu UART**, aby nowa wiadomość nie musiała czekać na 10ms polling. Sprzętowy ACK Payload jest wykorzystywany na każdej udanej wymianie, a osobne APP_ACK podróżuje w **RX_LAST nagłówka**, nie w BODY. Poprzedni stop-and-wait został zastąpiony oknem **4 segmentów po 24B na kierunek** (plus retransmisja Go-back-N), z semantyką TX_SEQ/RX_LAST powiązaną z przyjętymi segmentami, SID i fizycznych ról. Cel: przy ciągłym ruchu osiągnąć docelowo limit UART 115200 w obu kierunkach, na ile pozwoli rzeczywisty 1 Mb/s link i CPU; **nowy goodput fizyczny wymaga zmierzenia**. Niekontrolowany ingress większy od zdolności przesyłu nadal wymaga flow-control.

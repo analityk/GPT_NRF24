@@ -1,6 +1,6 @@
 # Migracja / punkt kontynuacji GPT_NRF24
 
-**Aktualny stan: 2026-11-04 — jeden aktywny firmware z ciągłym ping-pongiem DATA↔ACK Payload i 4-segmentowym, dwukierunkowym transportem UART. Poprzedni stop-and-wait działał sprzętowo w jednym kierunku, lecz ubytki pojawiały się przy dwóch równoczesnych nadawcach. Nowe WINDOW=4: hostowe testy i AVR build PASS; wymaga ponownego testu fizycznego obu kierunków.**
+**Aktualny stan: 2026-11-04 — ciągły sprzętowy ping-pong DATA↔ACK Payload, WINDOW=4 w obu kierunkach, pełne 24B danych UART na ramkę (bez preambuły BODY), DATA_SEQ/APP_ACK w MAC TX_SEQ/RX_LAST. Host i AVR-GCC PASS, fizyczny test tego nowego formatu jeszcze otwarty.**
 
 ## Źródło prawdy
 
@@ -83,3 +83,11 @@ Na RF-Nano nowy UART bridge jest **sprawdzony z jednym kierunkiem**. Jednoczesne
 W teście nowej regresji odkryto błąd renumeracji oczekujących segmentów przy rekey po wzroście baseSeq: indeksowanie cache według starego seq%4 zgubiłoby porządek. Poprawiono w warstwie `UartReliableStream` przez `headIndex_` i offset od najstarszego DATA. Testy hostowe PASS, w tym nowy `uart_pipeline_rekey_test.cpp` z 3 zaległymi segmentami i utraconym pierwszym pakietem, `uart_unthrottled_ingress_test.cpp`: **19 B/wymianę ×600=11400 B/stronę bez strat w modelu**, 24B/wymianę z overflow. Cross-build AVR PASS: `.text=10858B, .data=96B, .bss=591B`, 687B statycznego SRAM. Pamiętać, że są to wyłącznie wyniki host i kompilatora, NIE nowego pomiaru na dwóch RF-Nano.
 
 **Następny sprzętowy krok:** po F7/ręcznym F12 obu płyt RealTerm oba COM 115200 8N1, local echo OFF, dwa pliki przy `Delays=0,0` równocześnie, binarny Capture i porównanie SHA256/byte count. Potem pomiar rzeczywistego goodput i liczniki USART RX overflow vs DOR0 przy ewentualnym dalszym ubytku. Z samego UART bez RTS/CTS nie ma absolutnej bezstratności, gdy oferowane źródło jest szybsze niż realne PHY/CPU. `Delays=1ms/char` w poprzednim eksperymencie sztucznie obcinał do ~1000 B/s na kanał i nie testował docelowych ~11,52 kB/s.
+
+## Warstwowa korekta nagłówka 8 B i pełnego 24 B BODY — 2026-11-04
+
+Użytkownik zgłosił, że nawet po poprzedniej zmianie na WINDOW=4 dwukierunkowe wysyłanie z `Delays=0,0` nie działa jeszcze idealnie; zażądał przede wszystkim **stałego DATA↔ACK ping-ponga i braku metadanych w 24B BODY**. Zweryfikowano kod: A nie czeka na UART, wysyła również IDLE, przy `PHY` istnieje jedynie strażnik 130µs (260 taktów Timer1 2MHz), CE15µs, rzeczywisty czas RF/ACK i retransmisje. **Brak sztucznych pauz aplikacyjnych**.
+
+Zmiana warstwowa: `PairedLink::makeStream/observeStream` i `UartReliableStream` używają TX_SEQ jako numeru nowego segmentu 24B oraz RX_LAST jako jego kumulacyjnego ACK po **atomowym przyjęciu do UART TX**. Payload `BODY[0..23]` jest całkowicie nieinterpretowany przez PHY/MAC; `UartReliableStream` traktuje go jako 0..24B bajtów UART, bez wtórnego dwubajtowego nagłówka. Ramka bez danych jest `IDLE` o długości 8B DPL, wysyła ACK i kredyty. Ponowiony DATA zachowuje numer segmentu, ale może przynosić nowy ACK — nie filtrować na poziomie `PairedLink`. Usunięto starsze, sprzeczne API `make/receive` pozostawione z eksperymentów, testy linku są na nowym kontrakcie. `LOSS` może teraz mierzyć obserwowane luki segmentów, **nie liczbę wszystkich fizycznych ramek** (IDLE nie zmienia TX_SEQ), a ARC/MAX pozostają metrykami radia.
+
+WINDOW=4×24B, Go-back-N, SID16, EEPROM, 1Mb/s, SPI8 MHz, DPL8..32 i ręczne F7/F12 są bez zmian. Testy hostowe + cross AVR PASS: full-duplex 4096B/kierunek przy modelowanych stratach, pełne 24B, IDLE8B, duplikat DATA z nowszym ACK, rekey z trzema segmentami, 8bit wrap, UART full i unthrottled ingress. **Nowy format nie ma jeszcze potwierdzenia fizycznego**. Podczas kolejnego testu RealTerm `Delays=0,0` w obie strony, binarny capture i porównanie plików, w razie strat diagnoza osobnych UART rx_buffer_full/DOR0 i nRF MAX_RT/ARC. Wynik historycznych 612–613/s nie jest gwarancją w tej wersji.
