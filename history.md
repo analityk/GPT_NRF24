@@ -510,3 +510,23 @@ Przyszłe wpisy powinny zawierać datę, zakres faktycznie wykonanej zmiany, com
   spowodowały w tej próbie trwałego zaniku RF ani zimnej negocjacji.
   Nie jest to jeszcze test długiej utraty zasięgu lub integralności
   strumienia bajtów.
+
+## 2026-11-04 — ręczna próba dłuższego odstępu między wymianami PP
+
+- Właściciel zmienił **lokalnie**, wyłącznie dla diagnostyki,
+  warunek w `NrfAckPayloadPhy::transfer` z `260UL` na `1300UL`
+  taktów Timer1 (z 130 µs na 650 µs od **końca poprzedniej wymiany**
+  do kolejnego impulsu CE). Zrzuty: `obraz(20261104-223914).png`,
+  `obraz(20261104-223959).png`, `obraz(20261104-224128).png`.
+- Po wgraniu tej próby oba urządzenia ustabilizowały się na
+  `sid=12126`, `up=1`, około **12 408 B/s**, `ret=bad=0`,
+  `A arc=0`, `win=1`. Wcześniejszy wariant 2 Mb/s z krótszym
+  odstępem osiągał około 14,7 kB/s.
+- Różnica ~0,31 ms na skuteczny segment 24 B mimo podwyższenia
+  progu o 0,52 ms sugeruje, że przygotowanie kolejnego pakietu już
+  częściowo wypełnia odstęp. **Nie dowodzi**, że pierwotne 130 µs
+  blokuje wykonanie przy pełnej prędkości. Warunek `lastCompleted_`
+  sprawdza upływ czasu, a nie wykonuje zawsze pełnego opóźnienia.
+- Eksperyment pozostaje lokalną obserwacją użytkownika; w repozytorium
+  nie zmieniano wartości czasowych ani kodu PHY. Następny krok przed
+  optymalizacją to pomiar rzeczywistego czasu oczekiwania na warunek.

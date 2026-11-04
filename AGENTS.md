@@ -24,6 +24,32 @@ Instrukcje muszą być samowystarczalne. Fakty wymagające zachowania należy za
 - **Zależności:** żadnych nowych frameworków lub bibliotek bez rzeczywistej potrzeby, uzasadnienia kosztu pamięci i zgodności z kompilatorem AVR.
 - **Układ danych i ABI:** nie włączać globalnego `Pack Structure Members` / `-fpack-struct` dla C/C++. Formaty binarne radia i pamięci trwałej kodować jawnie bajtami; nie rzutować buforów na spakowane typy C++.
 
+## Bezwzględny zakaz magicznych liczb w kodzie
+
+- **Właściciel zabrania stosowania magicznych liczb.** Nie umieszczaj
+  nienazwanych literałów liczbowych określających działanie programu
+  w kodzie produkcyjnym ani w testach: obejmuje to liczby dziesiętne,
+  szesnastkowe, maski bitowe, rozmiary ramek i buforów, indeksy pól,
+  adresy rejestrów, wartości konfiguracyjne, czasy, timeouty, częstotliwości
+  oraz limity ponowień. **Komentarz objaśniający liczbę nie jest wyjątkiem**
+  i nie zastępuje nazwy.
+- **Preferowany zapis: `#define NAZWA_PARAMETRU 123`.** Stosuj jednoznaczne,
+  opisowe nazwy z prefiksem odpowiedzialnej warstwy i jednostką tam,
+  gdzie to istotne, np. `#define NRF24_CE_PULSE_US 15U`,
+  `#define NRF24_TRANSFER_TIMEOUT_TICKS 16000UL` lub
+  `#define NRF24_IRQ_TERMINAL_MASK 0x30U`. Definicja ma znajdować się
+  we właściwym module albo współdzielonym nagłówku — jedno źródło prawdy,
+  bez kopiowania tych samych wartości w kilku miejscach.
+- Alternatywą jest **nazwana stała** (`const` / `static constexpr`) tylko
+  wtedy, gdy wartość rzeczywiście ma charakter stałej, a jawny typ lub
+  zasięg C++ przynosi korzyść. Parametr zmienny lub konfigurowalny
+  powinien mieć nazwany punkt konfiguracji, a nie ukryty literał.
+- Przed ukończeniem każdej zmiany programistycznej sprawdź cały
+  modyfikowany fragment i usuń z niego magiczne liczby. Nazwane definicje
+  muszą pozwalać zrozumieć kod bez szukania komentarza lub noty
+  katalogowej. Neutralne operacje języka, takie jak wyzerowanie licznika
+  czy zwiększenie go o jeden, nie są parametrami sprzętu ani protokołu.
+
 ## Fizyka łącza — sedno projektu
 
 nRF24L01+ jest radiem **półdupleksowym**. Jednoczesne użytkowanie dwóch kierunków komunikacji ma zapewniać **logiczny full duplex**, realizowany przez sterowanie nadawaniem i odbiorem, koordynację transmisji i obsługę kolizji. Nie należy przedstawiać tego jako fizycznego jednoczesnego TX/RX.
