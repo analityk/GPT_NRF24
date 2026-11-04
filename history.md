@@ -530,3 +530,30 @@ Przyszłe wpisy powinny zawierać datę, zakres faktycznie wykonanej zmiany, com
 - Eksperyment pozostaje lokalną obserwacją użytkownika; w repozytorium
   nie zmieniano wartości czasowych ani kodu PHY. Następny krok przed
   optymalizacją to pomiar rzeczywistego czasu oczekiwania na warunek.
+
+## 2026-11-05 — pierwsza potwierdzona i zaakceptowana wersja PP
+
+- **Właściciel zaakceptował bieżący protokół PP jako technicznie
+  poprawną bazę produkcyjną**, pomimo otwartej możliwości poprawy
+  przepustowości. Polecił scalić całe `experiment/pp-window-drain`
+  do `main` przed kolejnymi eksperymentami. Wcześniejsze gałęzie mają
+  pozostać nienaruszone.
+- **Identyfikator wersji firmware przetestowanej na dwóch RF-Nano:**
+  `ff087b5f3640e9f606b4db8d25f4d02dc7a8ee27` — ostatnia zmiana
+  kodu przed późniejszymi commitami dokumentacji na tej samej gałęzi.
+  Ustalenie to dotyczy kodu repozytorium; niezacommitowane lokalne
+  modyfikacje użytkownika (1/2 Mb/s, dłuższy odstęp 1300 taktów) były
+  jednorazowymi próbami, nie częścią tej bazy.
+- Dowody odbioru: start B→A oraz osobne resety B i A, każdorazowo
+  wspólny SID i stabilne ~14,7 kB/s przy `ret=bad=0` bez ręcznego `w/s`;
+  dodatkowo próba w metalizowanych torebkach pokazuje ciepłe wznowienie
+  `SUSPECT→HEALTHY` bez utraty SID. `sh tests/run_host_tests.sh`:
+  **23/23 PASS**, powtórzone przed scaleniem 2026-11-05.
+- Granice potwierdzenia: brak formalnego wyniku kompilacji AVR-GCC,
+  pomiaru rzeczywistych bajtów UART przy nadmiarowym napływie,
+  gwarancji exactly-once przez reset i testu wielosekundowego
+  całkowitego zaniku radia. Akceptacja nie usuwa tych ograniczeń.
+- Właściciel wskazał nową, stałą gałąź **`testy`** wychodzącą z
+  zaakceptowanego `main` jako jedyne miejsce dalszych eksperymentów.
+  Prace nad maszyną stanów PHY wolno zacząć dopiero po zakończeniu
+  operacji repozytorium i następnym poleceniu właściciela.

@@ -1,4 +1,23 @@
-**NAJNOWSZY PUNKT KONTYNUACJI: 2026-11-04, test fizyczny `experiment/pp-window-drain`.**
+**NAJNOWSZY PUNKT KONTYNUACJI: 2026-11-05 — pierwszy zaakceptowany punkt PP.**
+Właściciel zaakceptował `experiment/pp-window-drain` jako pierwszą
+technicznie działającą wersję PP do przeniesienia do `main`.
+Wersja kodu firmware (przed późniejszymi zmianami tylko dokumentacji):
+GitHub `ff087b5f3640e9f606b4db8d25f4d02dc7a8ee27`.
+Wszystkie 23 testy hostowe PASS; fizycznie potwierdzono start B→A,
+samotny reset B i samotny reset A z powrotem do ~14,7 kB/s i zerowymi
+`ret/bad`, a także ciepłe wznowienie bez zmiany SID podczas osłabienia
+łączności metalizowanymi torebkami. Nie potwierdzono binarnej
+bezstratności UART ani dokładnie jednokrotnego doręczenia przez reset;
+lokalne próby zmiany szybkości RF i odstępu do 1300 taktów nie są
+częścią zaakceptowanego kodu repozytorium.
+Do dalszej pracy właściciel wskazał **jedną gałąź `testy`**, utworzoną
+od zaakceptowanego `main`; wcześniejszych branchy nie usuwać.
+**Zatrzymać się po uporządkowaniu repozytorium.** Dopiero po następnym
+poleceniu właściciela rozwijać na `testy` nieblokującą maszynę stanów
+PHY, z zachowaniem cache czterech segmentów, warstwy ACK i testów
+odzyskiwania.
+
+**Poprzedni punkt kontynuacji: 2026-11-04, test fizyczny `experiment/pp-window-drain`.**
 Właściciel uruchomił rzeczywiste RF-Nano kolejno B→A, następnie osobno
 zresetował B i osobno A. Na trzech zrzutach RealTerm obie strony
 uzgadniają wspólny SID i wracają do ~14,7 kB/s z `ret=bad=0`:

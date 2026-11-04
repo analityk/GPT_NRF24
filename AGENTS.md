@@ -73,6 +73,12 @@ W `main` utrzymujemy jeden program `GPT_NRF2401/main.cpp`. Kodek (`paired_frame.
 
 ## Polityka gałęzi Git — obowiązkowa zgoda właściciela
 
+- **Uzgodniony układ od 2026-11-05:** `main` przechowuje pierwszą
+  zaakceptowaną sprzętowo wersję PP z automatycznym odzyskiwaniem;
+  istniejąca odtąd gałąź o dokładnej nazwie **`testy`** służy do
+  kolejnych eksperymentów i optymalizacji. Dalsze iteracje prowadź
+  na `testy`, a przeniesienie ich do `main` wymaga ponownej decyzji
+  właściciela po testach. Wcześniejsze branche zachowaj bez usuwania.
 - **Jedno zadanie, jedna gałąź robocza.** Kolejne diagnozy, poprawki,
   nieudane próby i testy tego samego problemu wykonuj na tej samej
   gałęzi. Do zachowania historii i powrotu do poprzedniej wersji służą

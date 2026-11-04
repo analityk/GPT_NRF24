@@ -1,5 +1,18 @@
 # TODO — aktywny transport dwukierunkowy UART / ACK Payload
 
+## Pierwsza zaakceptowana wersja PP i dalsze eksperymenty — 2026-11-05
+
+- [x] Wersja `pp-window-drain`: 23/23 testy hostowe PASS i pozytywne
+  próby dwóch RF-Nano po uruchomieniu B→A, resecie B i resecie A.
+  Właściciel zaakceptował ją jako bazę `main`.
+- [ ] **Po następnym poleceniu właściciela, tylko na gałęzi `testy`:**
+  wydzielić nieblokującą obsługę PHY i przygotowywanie następnej ramki
+  równolegle z trwającą transmisją. Zachować obecne Go-back-N WINDOW4,
+  sesje, kredyty, replay i niezawodność; zmierzyć czas obsługi bez
+  nienazwanych liczb i bez zwiększania zużycia SRAM bez uzasadnienia.
+- [ ] Potwierdzić na sprzęcie każdą przyszłą optymalizację przed
+  rozważeniem kolejnego przeniesienia jej do `main`.
+
 ## Automatyczne wygaszanie lawiny Go-back-N — `experiment/pp-window-drain`
 
 - [x] Test sprzętowy na `pp-rekey-replay`: po otwarciu B przy pracującym
