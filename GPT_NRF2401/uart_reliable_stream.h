@@ -19,7 +19,7 @@ public:
     static const uint8_t REPLAY_AFTER=8; // multiple queued RF/ACK turns
 
     explicit UartReliableStream(Port& port)
-       :port_(port),session_(0),baseSeq_(0),nextSeq_(0),
+       :port_(port),session_(0),baseSeq_(0),nextSeq_(0),headIndex_(0),
         recvNext_(0),outstanding_(0),replayCount_(0),replaySeq_(0),
         noAckTurns_(0),acceptedBytes_(0),acknowledgedBytes_(0),
         duplicates_(0),blocked_(0),badFrames_(0),retransmits_(0) {
@@ -138,8 +138,12 @@ public:
     }
 
 private:
-    static uint8_t slotIndex(uint8_t seq) {
-        return static_cast<uint8_t>(seq%WINDOW);
+    // Physical slots follow the oldest unacknowledged DATA, not the
+    // current 8-bit wire sequence. This preserves all pending bytes on
+    // session reset even when the old sendBase had wrapped or advanced.
+    uint8_t slotIndex(uint8_t seq) const {
+        const uint8_t offset=static_cast<uint8_t>(seq-baseSeq_);
+        return static_cast<uint8_t>((headIndex_+offset)%WINDOW);
     }
     void acceptAck(uint8_t ack) {
         if(!outstanding_)return;
@@ -153,6 +157,7 @@ private:
                 acknowledgedBytes_+slotLength_[slot]);
             slotLength_[slot]=0;
         }
+        headIndex_=static_cast<uint8_t>((headIndex_+n)%WINDOW);
         baseSeq_=static_cast<uint8_t>(baseSeq_+n);
         outstanding_=static_cast<uint8_t>(outstanding_-n);
         noAckTurns_=0;
@@ -163,7 +168,7 @@ private:
     }
     Port& port_;
     uint16_t session_;
-    uint8_t baseSeq_,nextSeq_,recvNext_,outstanding_;
+    uint8_t baseSeq_,nextSeq_,headIndex_,recvNext_,outstanding_;
     uint8_t replayCount_,replaySeq_,noAckTurns_;
     uint8_t slots_[WINDOW][MAX_USER_BYTES];
     uint8_t slotLength_[WINDOW];

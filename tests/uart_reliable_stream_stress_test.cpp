@@ -99,7 +99,8 @@ int main(){
            b.transport.acknowledgedBytes()==COUNT);
     assert(a.transport.acceptedBytes()==COUNT &&
            b.transport.acceptedBytes()==COUNT);
-    // Duplicate retransmissions should be observed at both ends.
-    assert(a.transport.duplicates()>0 || b.transport.duplicates()>0);
+    // Loss triggers bounded Go-back-N retransmissions. A recovered
+    // missing packet may arrive without any duplicate reaching the sink.
+    assert(a.transport.retransmits()>0 || b.transport.retransmits()>0);
     // Application accepted bytes exactly once despite RF losses.
 }

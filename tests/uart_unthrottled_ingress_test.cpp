@@ -85,17 +85,23 @@ int main() {
     assert(paced.lostA==0 && paced.lostB==0);
     assert(paced.forwardedA>0 && paced.forwardedB>0);
 
-    // Supply full-rate UART to both pins. The currently implemented
-    // stop-and-wait (window=1) cannot keep up; overflow is deterministic
-    // even with PERFECT RF and no CPU delays beyond each exchange.
-    const Result flooded=run(19,600);
-    assert(flooded.inputA==11400 && flooded.inputB==11400);
+    // Window=4 pipelines outgoing segments without waiting for a single
+    // prior ACK. Test offered load below the theoretical ~22B/exchange
+    // upper bound, then an overload impossible even for perfect RF.
+    const Result streaming=run(16,600);
+    assert(streaming.inputA==9600 && streaming.inputB==9600);
+    assert(streaming.lostA==0 && streaming.lostB==0);
+    const Result flooded=run(24,600);
+    assert(flooded.inputA==14400 && flooded.inputB==14400);
     assert(flooded.lostA>0 && flooded.lostB>0);
     std::printf("UART offered-load model: paced(3/exchange) drops A=%lu B=%lu, "
-                "flooded(19/exchange) offered A=%lu B=%lu, "
+                "streaming(16/exchange) drops A=%lu B=%lu, "
+                "flooded(24/exchange) offered A=%lu B=%lu, "
                 "drops A=%lu B=%lu, UART TX emitted A=%lu B=%lu\\n",
                 static_cast<unsigned long>(paced.lostA),
                 static_cast<unsigned long>(paced.lostB),
+                static_cast<unsigned long>(streaming.lostA),
+                static_cast<unsigned long>(streaming.lostB),
                 static_cast<unsigned long>(flooded.inputA),
                 static_cast<unsigned long>(flooded.inputB),
                 static_cast<unsigned long>(flooded.lostA),

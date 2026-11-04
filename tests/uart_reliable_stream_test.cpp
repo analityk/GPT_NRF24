@@ -87,9 +87,12 @@ int main() {
     Node c(true),d(false);connect(c,d,0x5656);
     c.port.input(0x42);
     c.make();(void)d.incoming(c);
+    assert(d.stream.acceptedBytes()==1);
+    // Until the ACK arrives we send short STATUS frames; the next user
+    // DATA can be placed into another window slot, not blocked.
     c.make();(void)d.incoming(c);
-    assert(d.stream.acceptedBytes()==1 && d.stream.duplicates()==1);
-    // The next frame has the application ACK of accepted byte.
+    assert(d.stream.acceptedBytes()==1 && d.stream.duplicates()==0);
+    // The next frame has the cumulative application ACK.
     d.make();(void)c.incoming(d);
     assert(c.stream.acknowledgedBytes()==1 && !c.stream.hasPending());
 
@@ -104,7 +107,11 @@ int main() {
         uint8_t dummy;
         assert(y.port.out.pop(dummy));
     }
-    x.make();(void)y.incoming(x);
+    // No premature ACK; eventually the bounded Go-back-N timeout
+    // resends exactly the same segment after sink headroom is restored.
+    for(unsigned i=0;i<16 && y.stream.acceptedBytes()==0;++i) {
+        x.make();(void)y.incoming(x);
+    }
     assert(y.stream.acceptedBytes()==22);
     assert(y.port.out.available()==122);
     // Clear old sentinel then check the precise payload.
