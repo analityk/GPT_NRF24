@@ -1,31 +1,28 @@
-# TODO — aktywny rdzeń P2P nRF24
+# TODO — aktywny transport RF-Nano
 
-## Zaliczone
+## Zaliczone sprzętowo
 
-- [x] Sprzętowy DATA A→B / ACK Payload B→A z identycznym firmware na obu płytkach.
-- [x] Format 8 B nagłówka + 0–24 B nieinterpretowanych danych, DPL 8–32 B, kodowanie niezależne od ABI.
-- [x] Numeracja w obu kierunkach i diagnostyka: TX_SEQ, RX_LAST, LOSS_AB/LOSS_BA, ARC_LAST, RX_DROP, RX_CREDIT, FLAGS, SESSION_ID16.
-- [x] Test sprzętowy: około **625 wymian/s**, wzorzec 24 B na kierunek, bez widocznych ARC/MAX/BAD/IO/GAP/DROP/FULL w zarejestrowanych oknach.
-- [x] Uporządkowanie repozytorium do jednego aktywnego firmware i przegląd zależności; poprzednie etapy zachowane w gałęzi `archive/pre-paired-core-cleanup-2026-11-03`.
-- [x] Testy hostowe i kompilacja AVR w CI (bez uruchamiania F12 automatycznie).
+- [x] Pełny dwukierunkowy DATA↔ACK Payload (poprzedni test ~625 wymian/s).
+- [x] Handshake SID16 i automatyczne wznowienie po pojedynczym resecie A/B oraz jednoczesnym obu (poprzedni firmware ~612–613 wymian/s).
+- [x] Jeden projekt, jeden firmware, stałe bufory i brak Post-Build flashing.
 
-## Do zrobienia — bieżący protokół
+## Gotowe w kodzie, do odebrania fizycznie
 
-- [x] Kod negocjacji `SESSION_ID16` z epokami EEPROM i próbami, BEACON/HELLO/WELCOME/READY/READY_ACK, automatyczny rekey A/B po timeoutach, testy hostowe i kompilacja AVR.
-- [x] **Fizycznie potwierdzony handshake i dwa pojedyncze resety:** A i B automatycznie wracają do zgodnego niezerowego SID i ST=4. Po resecie B wspólny SID=12715, po resecie A wspólny SID=16598; działający peer zwiększa R do 1, restartujący wraca z R=0. Stabilnie 612–613 wymian/s (2026-11-04).
-- [x] **Jednoczesny restart obu RF-Nano potwierdzony**: dwa komunikaty startowe, nowy wspólny SID=13618 (poprzednio 16598), ST=4 i R=0 na obu, ~612–613 wymian/s po recovery (2026-11-04).
-- [x] Implementacja unieważniania starych ACK Payload na zmianie epoki, odrzucania opóźnionych BEACON i duplikatów, stabilnego DISCOVER podczas braku partnera; testy hostowe PASS.
-- [x] Model pełnego potoku ACK Payload z opóźnioną odpowiedzią: sparowanie, 300 wymian, restart A/B/obu, utracone ramki i ACK oraz ponowne negocjacje; `tests/paired_session_pipeline_test.cpp`, host PASS.
-- [ ] Zweryfikować fizycznie błędy `MAX_RT`, chwilowe rozłączenie RF, opóźnione ACK i zachowanie FIFO przy resetach. Potwierdzić, że nie występują trwałe dwie różne aktywne sesje.
-- [ ] Powiązać `RX_CREDIT` i `RX_DROP` z realnym odbiorcą danych (w tym obsługa kredytów in-flight), bez modyfikowania znaczenia BODY.
-- [ ] Sprawdzić sprzętowo ramki IDLE (8 B) i krótsze DATA (9–31 B), przepełnienia FIFO oraz diagnostykę przy spadającej jakości zasięgu.
-- [ ] Zmierzyć rozkład rzeczywistej latencji pojedynczej wymiany i goodput po dołożeniu rzeczywistego sinku; 625/s oznacza średnią repetycję, nie pomiar latency.
-- [x] Zarejestrowano fizyczny pojedynczy RESET A i B oraz sprzętowe niepowodzenia ACK po zniknięciu partnera: MAX=110 z ARC=330 i MAX=219 z ARC=657; po restarcie wznowiono transmisję.
-- [ ] Zmierzyć i zweryfikować pozostałe przypadki: długotrwała utrata zasięgu, zniekształcenia, duplikaty, zawijanie 4-bitowych liczników oraz reset jednoczesny.
-- [ ] Po zakończeniu rdzenia zaprojektować opcjonalne usługi UART/pliki/wiadomości i ochronę danych *ponad* opaque BODY — poza zakresem aktualnego porządkowania.
+- [x] `UartReliableStream` z 22 B danych + 2 B app SEQ/ACK, transparentny binary UART na obu terminalach.
+- [x] Aplikacyjne ACK, ponowienia, deduplikacja, atomowe wstawianie do UART TX, prawdziwe `RX_CREDIT` z `UART::freeSpace()`.
+- [x] Zachowanie segmentu oczekującego na ACK przy rekey (gdy lokalny MCU nie zresetowany), rozdzielne sekwencje RF i stream.
+- [x] CI host: testy opóźnienia sprzętowego ACK Payload, 4096 B w obie strony z symulowanymi stratami, napełnienia buforów i rollover numerów; AVR-GCC build PASS.
+- [ ] **F7/F12, oba RF-Nano:** RealTerm A→B `ala ma kota`, B→A `12345`; bez logów i local echo. Potem równoczesne wiadomości i tekst dłuższy niż 22B.
+- [ ] Przechwycić obustronne dane binarne do plików, porównać rozmiar i SHA-256, przetestować TX RX queue full, duplikaty i retry na fizycznych płytkach.
+- [ ] Sprawdzić fizycznie ponowną negocjację SID podczas danych w locie, także reset jednej i obu ATmeg. **Uwaga:** niemożliwa gwarancja exactly-once przy resecie sinku bez trwałego journalu.
+- [ ] Zmierzyć rzeczywisty goodput i latencję dla stop-and-wait 22B; historyczne 612–613 raw wymian/s nie jest wynikiem nowego UART.
 
-## Stan
+## Kolejne warstwy, nie teraz
 
-Rdzeń 8+24 fizycznie przetestowany w nominalnych warunkach. **Powrót po pojedynczym resecie A/B jest zaliczony sprzętowo; reset jednoczesny i pełna kontrola przepływu pozostają otwarte.** Jeden projekt, jeden `main.cpp`, ręczne F7/F12.
+- [ ] Pełna regulacja tempa wejścia UART/CH340 (RTS/CTS lub inny uzgodniony mechanizm) dla niekontrolowanego flood; obecnie 127 B RX może się przepełnić.
+- [ ] Transport z oknem większym niż 1 i ewentualny BURST/FLEX dla wyższej przepustowości.
+- [ ] Opcjonalna trwała identyfikacja DEVICE_ID/PAIR_ID oddzielna od losowo/epokowo zmiennego SID.
 
-- [ ] Podczas projektowania parowania rozważyć **niezmienny identyfikator urządzenia/pary zapisany w EEPROM**, odrębny od zmiennego SID16 konkretnej sesji. Nie naruszać ochrony przed zaległym ACK Payload po restarcie.
+## Status
+
+**Implementacja nowego mostu kompletna, testy hostowe i build AVR zaliczone; fizyczny test tej wersji oczekuje na wynik użytkownika.**

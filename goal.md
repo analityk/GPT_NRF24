@@ -1,27 +1,21 @@
-# Cel GPT_NRF24 — pojedynczy dwuwęzłowy rdzeń radiowy
+# Cel GPT_NRF24 — dwuwęzłowy szybki rdzeń z opcjonalnymi usługami
 
-## Cel bieżącego etapu
+Dwie RF-Nano z tym samym firmware komunikują się poprzez nRF24L01+ w układzie A/PTX DATA i B/PRX ACK Payload. Warstwy PHY, łącza i negocjacji sesji nie interpretują 24-bajtowego BODY. Priorytet: szybkie wymiany z pełną diagnostyką i poprawną rekonwergencją po resetach, bez dynamicznej alokacji, na ATmega328P 2 KB SRAM.
 
-Dwa identyczne RF-Nano (ATmega328P + nRF24L01+) wymieniają pakiety nRF24L01+ **DATA ↔ sprzętowy ACK Payload**, tworząc dwa logiczne kierunki komunikacji na fizycznie półdupleksowym radiu. Jeden firmware wybiera rolę lokalnie przez ADC0: A/PTX albo B/PRX. Ramka ma 8 B diagnostycznego nagłówka oraz 0–24 bajty **nieinterpretowanego BODY**.
+## Kamienie milowe potwierdzone na urządzeniach
 
-Rdzeń powinien poprawnie raportować sekwencje, braki, retransmisje sprzętowe, zapełnienie bufora i stan sesji, rozdzielając potwierdzenie sprzętowe od dostarczenia aplikacyjnego. Nie może uzależniać przepustowości od arbitralnych, wielomilisekundowych opóźnień. Musi działać przy ograniczeniach 2 KB SRAM, bez dynamicznej alokacji.
+- Około **625 wymian/s** z 8+24 B testowego BODY na kierunek, bez negocjacji SID.
+- Około **612–613 wymian/s** przy negocjowanej sesji; poprawne negocjowanie nowego SID po resecie A, B i obu płyt.
+- Poprzedni, **odrębny** most UART po starym formacie został fizycznie potwierdzony i zachowany w historii, ale nie jest obecnym kodem.
 
-## Potwierdzone wyniki fizyczne
+## Aktywny etap 2026-11-04 — nowy UART ↔ RF ↔ UART
 
-- Dwa RF-Nano, firmware 8+24 B: około **625 wymian DATA/ACK Payload na sekundę**, przy braku widocznych błędów w zarejestrowanym teście; 24 bajty testowego BODY w każdym kierunku = około **15 kB/s/kierunek**.
-- Niezależnie przetestowano wcześniej UART bridge starego formatu i benchmark 32+32 B (540 wymian/s). Oba programy są w gałęzi archiwalnej, nie w aktualnej kompilacji.
+- Odbieranie arbitralnych bajtów z UART0 A i B oraz dostarczanie na przeciwny UART, bez dodatkowych logów i interpretacji.
+- `uart_reliable_stream.h` jako niezależny transport stop-and-wait (22 bajty UART + 2 bajty sekwencji/ACK w BODY 24 B), z własnym ACK po przyjęciu do TX UART.
+- Kredyty oparte na wolnym miejscu kolejki docelowej, odrzucanie duplikatów i powtórzenia, zgodne z ACK Payload i zmianą sesji.
+- Test hostowy 4096 B na kierunek z symulowanymi stratami i opóźnieniem ACK: **PASS**. Cross-kompilacja ATmega328P AVR-GCC: **PASS**.
+- **Odbiór sprzętowy NOWEGO mostu UART pozostaje otwarty.** Nie wolno przepisywać wyników starszego firmware jako dowodu osiągów nowego.
 
-## Jeszcze nieukończone
+Nie implementujemy teraz plikowego protokołu aplikacyjnego, szyfrowania ani wielowęzłowego MAC. Warunek następnego odbioru: krótkie i dłuższe wiadomości w obu kierunkach w RealTerm, bez lokalnego echa i bez diagnostycznego tekstu, poprawne przenoszenie danych po ponownym zestawieniu sesji. Bezstratność przy nieograniczonym UART flood wymaga osobnego rozwiązania kontroli przepływu, obecny CH340 nie ma w projekcie aktywnego RTS/CTS.
 
-- Negocjowanie i utrzymywanie identyfikatora sesji oraz automatyczne odzyskiwanie po resecie **zaimplementowano i sprawdzono hostowo/AVR (2026-11-04)**. Pozostaje **obowiązkowy test fizyczny** resetów obu RF-Nano; to nie jest jeszcze potwierdzony wynik sprzętowy.
-- Udostępnianie odbiorcom z prawdziwą pamięcią właściwych `RX_CREDIT` i `RX_DROP`, diagnostyka utraty/zwłoki w obu kierunkach.
-- Test dynamicznych, krótkich IDLE i CONTROL w realnym radiu oraz dokładne pomiary latencji, jittera i obciążenia.
-- Możliwość podłączenia usług nad nieinterpretowanym BODY (np. UART, pliki, komunikaty, ewentualnie szyfrowane dane) przez osobne kontrakty. W tej fazie nie implementujemy ani nie definiujemy jeszcze szczegółów tych usług.
-
-**Warunek zaliczenia bieżącego rdzenia:** dwukierunkowe DATA↔ACK Payload, wiarygodne metadane i automatyczne odzyskiwanie sesji w rzeczywistym sprzęcie. Obecny test **potwierdza szybki transfer i podstawową diagnostykę**, nie potwierdza jeszcze pełnej odporności na restarty i przeciążenia.
-
-Zachowujemy manualne F7/F12 w Microchip Studio oraz jeden aktualny program; historia wcześniejszych etapów znajduje się w `history.md`.
-
-## Potwierdzenie kolejnego kamienia milowego (2026-11-04)
-
-Zaliczone fizycznie: handshake i wznowienie pracy po **oddzielnych restartach A i B**, wspólne niezerowe SID (`12715` i `16598`), `ST=4`, około 612–613 wymian/s. Test jednoczesnego restartu obu płytek oraz odzyskania po dłuższej utracie zasięgu pozostaje do wykonania. Spadek względem wcześniejszych 625/s wynosi około 2%; nie jest to izolowany pomiar obciążenia MCU.
+F7 kompiluje, F12 ręcznie wgrywa; nigdy nie przywracać automatycznego flashowania Post-Build.

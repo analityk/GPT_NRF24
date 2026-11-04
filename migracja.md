@@ -1,6 +1,6 @@
 # Migracja / punkt kontynuacji GPT_NRF24
 
-**Aktualny stan: 2026-11-04 — jeden aktywny rdzeń 8+24 B z hardware ACK Payload i nowym handshake SID16 (host+AVR PASS, fizyczny test sesji otwarty).**
+**Aktualny stan: 2026-11-04 — jeden aktywny firmware: dwukierunkowy binarny UART↔nRF24↔UART przez hardware ACK Payload, z SID16 i 22-bajtowymi segmentami transportowymi. Hostowe testy i AVR build PASS; fizyczny test tego nowego UART pozostaje do wykonania.**
 
 ## Źródło prawdy
 
@@ -59,3 +59,11 @@ W porównaniu z 625 wymian/s poprzedniego programu narzut przy zdrowej sesji wyn
 Dodatkowy zrzut dwóch RealTerm pokazuje **obydwa** bannery startowe oraz wznowienie w nowej wspólnej sesji `SID=13618` (wcześniej `16598`), `ST=4 R=0` po obu stronach, stabilne ~612–613 wymian/s bez widocznych błędów. Tym samym sprzętowo potwierdzono restart A, B oraz obu naraz. Nadal brak próby rzeczywistej izolowanej utraty zasilania radia, co jest osobnym scenariuszem.
 
 Użytkownik rozważa stały „SSID/SID” po resecie. **Nie utrwalać SID sesji bez projektu ochrony przed starą ramką/ACK Payload.** Obecny SID16 jest celowo zmienny: `PairedSession::derive()` liczy CRC16 z 32-bitowych epok obu płyt zapisanych przez `BootEpoch::advance()` w EEPROM oraz 16-bitowych prób. Propozycja: trwałe `device_id`/`pair_id` zapisane przy parowaniu w EEPROM i wyświetlane niezależnie od `SID`; sesyjny SID nadal zmienny. Nie zaimplementowano tego pomysłu, brak zmian firmware.
+
+## Aktywny UART↔RF↔UART po negocjacji sesji — 2026-11-04
+
+Właściciel zamówił realny transfer użytecznych bajtów z UART obu RF-Nano do UART partnera. Zaimplementowano odrębną od PHY i `PairedLink` klasę `GPT_NRF2401/uart_reliable_stream.h` (port-adapter UART jako szablon, testowalny hostowo). W 24B opaque BODY: `DATA_SEQ` (1B), `ACK_SEQ` (1B), do **22B dowolnego strumienia UART**. Nie naruszono 8B nagłówka RF ani mechanizmu ACK Payload. Stop-and-wait niezależny w obu kierunkach zapewnia retry i deduplikację **wewnątrz aktywnej sesji**. Potwierdzenie aplikacyjne pojawia się dopiero po całkowitym `UART::writeAll()` do TX ring. `RX_CREDIT` to aktualne `UART::freeSpace()/24` zamiast testowego 1; nie usuwa strat wejścia przy CH340 flood bez RTS/CTS.
+
+Aktywny `GPT_NRF2401/main.cpp` nie wysyła **żadnego** tekstu diagnostycznego; USART0 w obu rolach przenosi wyłącznie użytkowe bajty. Handshake `PairedSession`, trwałe epoki EEPROM i automatyczny rekey zachowane. Niezatwierdzony segment pozostaje w RAM lokalnie działającej płytki przez renegocjację, ale nie ma gwarancji exactly-once po resecie odbiorcy bez trwałego journalu. W idle A wyzwala B ACK Payload co około 10 ms, pod obciążeniem bez opóźnień 20/25 ms.
+
+Hostowe testy `tests/uart_reliable_stream_test.cpp` i `tests/uart_reliable_stream_stress_test.cpp` PASS (w tym 4096B **w każdym kierunku** ze stratami i opóźnionymi ACK); cross AVR build nowej aplikacji PASS w GitHub Actions 2026-11-04. **Fizycznie nieprzetestowane jeszcze na obu RF-Nano** — poprzednie 612–613 wymian/s to inny firmware. Następna próba: F7 i ręcznie F12 na obu, A0=GND/VCC; RealTerm 115200 8N1, local echo OFF, wyślij krótkie i >22B teksty w obie strony, sprawdź brak dodatkowych bajtów, potem binarne capture. Bez przywracania Post-Build. `README.md`, `paired-core-v2.md`, `plan.md`, `todo.md`, `goal.md` zaktualizowane.

@@ -1,31 +1,27 @@
-# Plan rozwoju aktualnego rdzenia RF 8+24 B
+# Plan prac — rdzeń 8+24 B z ACK Payload i dwukierunkowy UART
 
-## Architektura
+## Granice warstw
 
-- **`Nrf24` / SPI / sprzęt:** kontrola rejestrów, FIFO, dynamicznych szerokości, CRC16/auto-ACK i timeoutów; nie interpretuje BODY.
-- **`NrfAckPayloadPhy`:** stabilna rola A/PTX, B/PRX, minimalne czasy radiowe, zdarzenia `TX_DS/MAX_RT/RX_DR`, przenoszenie ramek 8–32 B.
-- **`PairedFrame`:** jeden schemat 8 B nagłówka, do 24 B opaque BODY; niezależny od AVR, jawne kodowanie bajtów.
-- **`PairedLink`:** numeracja i statystyki dwóch kierunków, odrzucanie starych duplikatów i obcych sesji, kredyty i licznik odrzuceń.
-- **`PairedSession` i `EpochJournal`:** niezależny od platformy handshake, SID16 z pełnych nonce i trwały, rotacyjny licznik uruchomień w EEPROM; rekey/timeouty po stronie aplikacji, fizyczna ochrona FIFO w PHY.
-- **`main.cpp`:** tymczasowa aplikacja fizycznego testu rdzenia, odpowiada za testowe BODY i konsolę diagnostyczną, nie za transport plików.
+1. **PHY** — nRF24L01+, FIFO, zmienna długość 8..32 B, sprzętowe CRC/auto-ACK, SPI8 MHz.
+2. **Ramka i link** — `PairedFrame` (8B + opaque BODY do24B), `PairedLink` (diagnostyka obu kierunków, SID, RX_CREDIT).
+3. **Sesja** — `PairedSession` i `EpochJournal` z EEPROM; SID16 zmienia się po renegocjacji.
+4. **Opcjonalna usługa UART** — `UartReliableStream<Port>` (2B transportowe + 22B danych), niezależne app ACK w obu kierunkach, credit oparty na sinku. Nie zmienia formatu rdzenia.
+5. **Aplikacja** — jeden `main.cpp` łączy moduły; oba realne porty UART są **wyłącznie** strumieniem danych.
 
-## Ustalone wyniki
+## Wyniki już potwierdzone
 
-1. **DONE** — sprzętowy ping-pong pełnych DATA + ACK Payload, wcześniej 540/s.
-2. **DONE** — nowa ramka 8+24, 625 wymian/s na dwóch RF-Nano, w obserwowanych oknach zero widocznych błędów, statyczne bufory.
-3. **DONE** — jedna ścieżka aplikacyjna i projektowa, bez pozostawionych fragmentów historycznego firmware; starszy stan zapisany w gałęzi `archive/pre-paired-core-cleanup-2026-11-03`.
-4. **DONE** — hostowe testy kodeka/PHY/radia/USART i automatyczny cross-build AVR-GCC, bez automatycznego flashowania.
+- Na dwóch RF-Nano: ~625/s DATA↔ACK Payload, ~612–613/s z handshake, restarty A, B i obu.
+- W CI: hostowe testy UartReliableStream, w tym 4096 bajtów w każdą stronę z utratami ramek i ACK; kompilacja AVR dla aktywnego `main.cpp` PASS.
+- Nie zmieniać pinoutu, C++11, statycznych buforów, F7/F12 ani Post-Build.
 
-## Najbliższe kroki
+## Kolejność dalszego odbioru
 
-1. **ZAIMPLEMENTOWANE, HOST/AVR PASS; TEST FIZYCZNY OTWARTY:** `SESSION_ID16` z `boot_epoch32+attempt16` obu węzłów, komunikaty HELLO/BEACON/WELCOME/READY/READY_ACK, reakcje na restart, timeouty i czyszczenie FIFO. Najbliższy punkt odbioru: reset A/B/obu w RealTerm, zgodny niezerowy SID i ST=4.
-2. Poprawna kontrola przepływu: `RX_CREDIT` wynikające z rzeczywistego sinku, zapas na opóźniony ACK Payload, statusy przeciążenia; testy negatywne.
-3. Stan łącza i diagnostyka: rozdzielić hardware retry `ARC`, `MAX_RT`, luki w TX_SEQ, lokalne odrzucenia i timeouty; testować realną utratę łączności bez oszukiwania fizyki.
-4. Przełączenie na krótkie dynamiczne ramki IDLE/CONTROL w spoczynku; zmierzyć przepustowość, latencję i zużycie energii przy różnym obciążeniu.
-5. Dopiero po ukończeniu rdzenia dopuścić usługi transportowe nad BODY, nie ingerując w jego znaczenie z poziomu MAC/PHY.
+1. **TERAZ:** fizyczny test nowego mostu UART, text A→B, B→A, równocześnie i wiadomości >22 B; porównanie binary capture dla dłuższych strumieni.
+2. Ustalić i zmierzyć rzeczywisty UART goodput, latencję i zliczanie overflow w obu kierunkach. Użytkownik testuje RealTerm z kontrolowaną szybkością wysyłania.
+3. Zweryfikować retry aplikacyjne, utracony ACK Payload, stop przy pustym `RX_CREDIT` i odtworzenie sesji po resecie, bez mylenia sprzętowego ACK z dostarczeniem UART.
+4. Później: większe okno / selective repeat i BULK, jeśli wymagane przez pomiary. Obecna architektura pozwala rozbudować usługę bez modyfikacji `PairedFrame` i PHY.
+5. Oddzielnie: trwałe `DEVICE_ID`/`PAIR_ID` niezależne od zmieniającego się SID, jeśli projekt parowania tego wymaga.
 
-**Nie rozwijamy kilku alternatywnych firmware jednocześnie.** Jedyne aktywne źródło działania i specyfikacja to `main.cpp` i `paired-core-v2.md`. Dawne warianty są dostępne przez historię Git.
+## Ograniczenia
 
-## Obserwacja po wprowadzeniu negocjowanej sesji (2026-11-04)
-
-Obie pojedyncze próby resetu (A i B) zaliczone na dwóch RF-Nano: nowy wspólny SID, `ST=4`, wznowienie 612–613 wymian/s. Podczas nieobecności peer widać sprzętowe MAX_RT i komplet 3 retransmisji, więc opóźnienia resetowe wynikają także z fizyki i retransmisji RF. Następny etap: reset jednoczesny, test realnej przerwy w zasięgu oraz projekt niezależnej warstwy rzeczywistych kredytów sinku. W przypadku potrzeby optymalizacji ~2% różnicy do 625/s zastosować pomiar czasów MCU/PHY, nie arbitralne usuwanie opóźnień.
+W UART RX jest tylko 127 B i brak sprzętowego flow control. Przy przeciążeniu wejścia nie ma gwarancji bezstratności; kredyty chronią sink, nie zapobiegają utracie wejścia CH340→RX ISR. W trybie UART zrezygnowano z logów po tym samym COM. Pełne exactly-once przez reset własnego MCU wymaga trwałego transakcyjnego magazynu — obecny stop-and-wait zapewnia deduplikację **w obrębie sesji**, z zachowaniem oczekującego pakietu na żyjącym nadajniku.
