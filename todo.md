@@ -26,3 +26,12 @@
 ## Status
 
 **Implementacja nowego mostu kompletna, testy hostowe i build AVR zaliczone; fizyczny test tej wersji oczekuje na wynik użytkownika.**
+
+## Diagnostyka zgłoszonych ubytków w obustronnym UART flood — 2026-11-04
+
+- [x] Zweryfikowano w kodzie, że USART RX i TX to osobne asynchroniczne ISR i osobne kolejki, nie half-duplex.
+- [x] Dodano `uart_unthrottled_ingress_test.cpp`: symulacja bez RTS/CTS dowodzi przepełnienia RX na obu węzłach przy 19B/wymianę, brak strat przy 3B/wymianę, nawet z idealnym RF; host PASS.
+- [ ] Na obu RF-Nano powtórzyć transfer z `RealTerm Delays` **1 ms/char, 0 ms/line** (pierwsze pole), porównać pełne pliki w capture; ewentualnie stopniowo zmniejszać przerwę.
+- [ ] Rozdzielić w diagnostyce przyczynę: `uart.counters().rx_buffer_full` kontra `rx_overrun` i `rx_framing`, transport `blocked` / `badFrames` oraz rzeczywiste wymiany RF. Nie mieszać logów z binarnym UART.
+- [ ] Rozwinąć transport w wielokrotnego użytku pipeline/window >=2, aby stop-and-wait nie ograniczał nominalnego strumienia; zachować deduplikację, SID, transparentne BODY, kompatybilność z ograniczonym SRAM i testy loss/retry.
+- [ ] Rozwiązać nadmiarową prędkość wejścia przez wspierany mechanizm kontroli przepływu lub zewnętrzne tempo nadawcy. **Nie przypisywać gwarancji bezstratności jedynie większemu ringowi.**

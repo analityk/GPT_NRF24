@@ -56,3 +56,11 @@ UART RX/TX po 127 bajtów użytecznych, 115200 8N1, brak RTT/CTS. Bez sprzętowe
 - Sprzęt: wcześniej 625/s z formatem 8+24, ~612–613/s z handshake, resety A/B/obu. **Nowego UART↔UART należy przetestować oddzielnie** — jest nowym transportem i jego goodput pozostaje niezmierzony.
 
 Dane sprzętowe: Nordic nRF24L01+ Product Specification v1.0, https://cdn.sparkfun.com/assets/3/d/8/5/1/nRF24L01P_Product_Specification_1_0.pdf
+
+## Równoczesny UART flood — ograniczenie obowiązującej wersji
+
+Użytkownik potwierdził transfer UART jednym kierunkiem, ale zgłosił ubytki, gdy oba RealTerm wysyłają pliki jednocześnie. UART ATmegi pracuje asynchronicznie pełnodupleksowo, z ISR RX/UDRE i dwoma ringami 127B. PHY zachowuje sprzętowy ACK Payload, lecz transport **stop-and-wait** czeka na aplikacyjny ACK, co ogranicza generowanie nowych 22-bajtowych segmentów; ACK z B jest dodatkowo opóźniony o wymianę. Z referencyjnym ~613 wymian/s wynika orientacyjnie `22×613/2 ≈ 6,74 kB/s/kierunek`, wobec `115200/10 = 11,52 kB/s/kierunek` na wejściu UART. Przy maksymalnym źródle i zerowej kontroli przepływu ring 127B może przepełnić się w ~27ms. Pełna dwukierunkowa wymiana 32B+32B radiowo trwa dłużej niż 32B+10B z małym ACK przy jednym kierunku.
+
+Dotychczasowy test hostowy 4096B/kierunek był ograniczony do 3B/wymianę i pauzował na zapełnieniu wejścia (symulował flow control). Nowy `tests/uart_unthrottled_ingress_test.cpp` używa realnego kodu transportu, dwóch ByteRing<128> RX/TX na stronę, opóźnienia ACK, nieograniczonych producentów wejścia i sztucznie idealnej RF: 3B/wymianę bez overflow, **19B/wymianę powoduje utratę na obu UART RX**. Nie jest to pomiar rzeczywistych wartości sprzętowych; na urządzeniach nie odczytano jeszcze `rx_buffer_full` ani `rx_overrun`. Pierwszy jest overflow ring, drugi DOR0 hardware. `blocked` w transporcie oznacza nieprzyjęty segment przy pełnym UART TX — niekoniecznie utratę danych.
+
+Przed modyfikacją rdzenia: sprawdzić RealTerm `Delays=1,0` (1ms na znak, bez drugiego delay) i pliki capture; następnie projektować mechanizm window>=2 oraz niezależne ograniczanie ingress, ponieważ większy bufor bez kontroli przepływu nie gwarantuje transferu bez strat. `SESSION_ID` i 8B nagłówka nie wymagają zmian. **W tej aktualizacji żadnej produkcyjnej warstwy RF/UART nie modyfikowano.**

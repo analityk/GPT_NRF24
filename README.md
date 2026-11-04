@@ -48,3 +48,11 @@ Stop-and-wait jest **wersją funkcjonalną**, nie maksymalnie wydajnym BULK ani 
 **Historyczne pomiary sprzętowe (inny firmware):** rdzeń 8+24 B bez handshake'u około 625 wymian/s; z handshake'em około 612–613 wymian/s, automatyczny powrót po resetach A, B i obu płyt. Nie są to pomiary nowej usługi UART. Wcześniejsze implementacje zachowane w gałęzi [archive/pre-paired-core-cleanup-2026-11-03](https://github.com/analityk/GPT_NRF24/tree/archive/pre-paired-core-cleanup-2026-11-03).
 
 Szczegóły formatu i semantyki: [paired-core-v2.md](paired-core-v2.md). Historia fizycznych prób: [history.md](history.md). Bieżące zadania: [todo.md](todo.md).
+
+## Uwaga po pierwszym sprzętowym teście dwukierunkowego UART (2026-11-04)
+
+Wysłanie pliku **w jednym kierunku działa**. Równoczesny intensywny transfer w obu kierunkach ujawnił **zgłaszane ubytki bajtów**; NIE zaliczono bezstratnego dwukierunkowego flood. USART ATmega jest pełnodupleksowy i asynchroniczny — problemem może być przeciążenie wejściowych kolejek 127 B, gdy transport stop-and-wait przesyła najwyżej 22 B/segment i czeka na aplikacyjne ACK. Przy referencyjnych ~613 wymian/s przybliżony limit stop-and-wait to ~6,7 kB/s/kierunek, niższy niż pełne 115200 8N1 (~11,52 kB/s); aktualnej rzeczywistej prędkości nie zmierzono.
+
+**Próba rozstrzygająca:** w RealTerm ustaw dla OBU nadawców w zakładce Send / Dump File / `Delays` **pierwsze pole = 1** (1 ms na znak), **drugie = 0** (brak dodatkowej przerwy na koniec linii). Wyślij oba pliki i porównaj binarny capture z oryginałami. Gdy to działa, zmniejszaj pierwszy delay, aby wyznaczyć granicę obecnego transportu. `Delays=0,10` z pokazanego eksperymentu to 0ms na znak i 10ms po linii: może nadal pozwalać długim liniom zapełnić 127B RX ring.
+
+Nowy `tests/uart_unthrottled_ingress_test.cpp` jest powtarzalną regresją tego przypadku: symuluje UART bez RTS/CTS przy 3 i 19 B/iterację RF, z rzeczywistym `UartReliableStream` i opóźnionym ACK. Przy 19 B/iterację przepełnia oba wejścia nawet bez błędów radia, przy 3 B nie. Dotychczasowy stress test 4096B na kierunek **sztucznie zwalniał wejście**, więc nie udowadniał odporności na flood. Nie zmieniono jeszcze transportu produkcyjnego; do poprawy architektonicznej potrzebne większe okno lub flow-control, najlepiej oba.
