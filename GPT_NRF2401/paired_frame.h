@@ -11,6 +11,8 @@ namespace PairedFrame {
     enum class Kind : uint8_t { DATA=0, IDLE=1, CONTROL=2, EXT=3 };
     enum class Error : uint8_t { OK, NULL_BUFFER, BAD_LENGTH, BAD_TYPE };
     enum Flag : uint8_t {
+        // On DATA/IDLE: receiver requests fast Go-back-N replay starting
+        // at RX_LAST+1. No extra packet bytes or transport payload header.
         URGENT=0x04, PAUSE=0x08, RESYNC=0x10,
         WANT_PTX=0x20, OVERFLOW=0x40, REPORT=0x80
     };

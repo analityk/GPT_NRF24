@@ -1,3 +1,17 @@
+> **AKTUALNA GAŁĄŹ TESTOWA:** `experiment/pp-recovery-v2` dodaje
+> symetryczne ciepłe/zimne odzyskiwanie PP, lokalne bajty statusu
+> TX/RX i 5-sekundowy limit ciepłego wznowienia. **Instrukcja nowej
+> próby: [pp-recovery-v2.md](pp-recovery-v2.md).** `main` i checkpoint PP
+> nie są zmieniane. Testy hostowe nie zastępują próby na dwóch RF-Nano.
+>
+> **WCZEŚNIEJSZA GAŁĄŹ TESTOWA:** `experiment/pp-echo-ramp-2026-11-04` zastępuje
+> UART bridge **testem granicznej szybkości PP**: A generuje stale bajty
+> `00..FF`, B odsyła je radiem, oba UARTy drukują co 1 s ASCII z CPS i
+> retransmisjami. Wersja z surowym echem UART pozostaje we wcześniejszym
+> commicie gałęzi. Nowy test rozpoczyna od maksymalnego oferowanego tempa.
+> **Instrukcja: [echo-ramp-test.md](echo-ramp-test.md).** Normalne PP i
+> poniższy opis mostu UART pozostają na niezmienionej gałęzi `main`.
+>
 > **Protokoły:** aktualny i zachowany sprzętowo **PP (Ping-Pong)**; drugi profil **BURST20** jest na etapie projektu harmonogramu i testów hostowych, **jeszcze nie jest wykonywany na radiu**. [Specyfikacja BURST20](burst-20ms.md). PP checkpoint: [checkpoint/pp-2026-11-04](https://github.com/analityk/GPT_NRF24/tree/checkpoint/pp-2026-11-04).
 
 # GPT_NRF24 — UART ↔ nRF24L01+ ACK Payload ↔ UART

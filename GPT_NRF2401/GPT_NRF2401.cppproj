@@ -199,6 +199,12 @@
     <None Include="uart_reliable_stream.h">
       <SubType>compile</SubType>
     </None>
+    <None Include="pp_echo_ramp_port.h">
+      <SubType>compile</SubType>
+    </None>
+    <None Include="pp_stress_telemetry.h">
+      <SubType>compile</SubType>
+    </None>
     <None Include="paired_session.h">
       <SubType>compile</SubType>
     </None>

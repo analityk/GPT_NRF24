@@ -1,4 +1,133 @@
-**Stan na 2026-11-04: obecny firmware to PP (Ping-Pong), nie zmieniany przy pracy nad BURST20. Fizyczny zrzut jednoczesnych strumieni poprawił się po przejściu na 8+24B i WINDOW=4; brak binary checksum capture. PP checkpoint `checkpoint/pp-2026-11-04` SHA 784fd83. BURST20 ma czysto logiczny harmonogram i boot-mode selector testowane hostowo, NIE ma jeszcze BURST PHY ani wyboru A1 w main.**
+**NAJNOWSZY PUNKT KONTYNUACJI: 2026-11-05 — pierwszy zaakceptowany punkt PP.**
+Właściciel zaakceptował `experiment/pp-window-drain` jako pierwszą
+technicznie działającą wersję PP do przeniesienia do `main`.
+Wersja kodu firmware (przed późniejszymi zmianami tylko dokumentacji):
+GitHub `ff087b5f3640e9f606b4db8d25f4d02dc7a8ee27`.
+Wszystkie 23 testy hostowe PASS; fizycznie potwierdzono start B→A,
+samotny reset B i samotny reset A z powrotem do ~14,7 kB/s i zerowymi
+`ret/bad`, a także ciepłe wznowienie bez zmiany SID podczas osłabienia
+łączności metalizowanymi torebkami. Nie potwierdzono binarnej
+bezstratności UART ani dokładnie jednokrotnego doręczenia przez reset;
+lokalne próby zmiany szybkości RF i odstępu do 1300 taktów nie są
+częścią zaakceptowanego kodu repozytorium.
+Do dalszej pracy właściciel wskazał **jedną gałąź `testy`**, utworzoną
+od zaakceptowanego `main`; wcześniejszych branchy nie usuwać.
+**Zatrzymać się po uporządkowaniu repozytorium.** Dopiero po następnym
+poleceniu właściciela rozwijać na `testy` nieblokującą maszynę stanów
+PHY, z zachowaniem cache czterech segmentów, warstwy ACK i testów
+odzyskiwania.
+
+**Poprzedni punkt kontynuacji: 2026-11-04, test fizyczny `experiment/pp-window-drain`.**
+Właściciel uruchomił rzeczywiste RF-Nano kolejno B→A, następnie osobno
+zresetował B i osobno A. Na trzech zrzutach RealTerm obie strony
+uzgadniają wspólny SID i wracają do ~14,7 kB/s z `ret=bad=0`:
+po starcie `sid=49792`, po resecie B `sid=52044`, po resecie A
+`sid=53023`. Podczas resetów występują przejściowe `cold` i
+`uncertain`, ale nie pozostaje trwały stan ~9 kB/s ani potrzeba
+ręcznego `w/s`. To pozytywna walidacja *tych trzech scenariuszy*,
+nie dowód bezstratności UART, exactly-once czy odporności na
+długotrwały brak radia. Dodatkowa próba obu płytek w metalizowanych
+torebkach ESD utrzymała `sid=53023`, `up=1`, ~14,4–14,7 kB/s i
+`ret=bad=0`, lecz A rejestrowało sprzętowe `arc≈9–43`, a B chwilowo
+przeszło `link=2` (SUSPECT)→`link=1` (HEALTHY), `warm=1`.
+To dowodzi ciepłego powrotu po krótkiej przerwie poprawnych ramek,
+nie pełnej utraty zasięgu; brak pomiaru tłumienia i szczelności osłon.
+Otwarte: re-open B przy działającym A, kontrolowana dłuższa utrata
+zasięgu i zapis wyniku kompilacji AVR-GCC/F7.
+
+**Poprzedni punkt kontynuacji: automatyczne wygaszanie lawiny.**
+Na płytkach wcześniejszy kod po samotnym ponownym uruchomieniu B mógł
+wejść w trwałe ~9 kB/s, `B ret≈378/s` i `A bad≈378/s`. Zmniejszenie
+obciążenia `w` do ~100 CPS na 5–10 s i powrót `s` do maksimum bez
+resetu, zmiany SID czy sprzętu przywróciły ~14,8 kB/s i `ret/bad=0`.
+To dowodzi odwracalnej lawiny retransmisji pod obciążeniem, ale nie
+identyfikuje jeszcze konkretnego zdarzenia inicjującego pierwszą lukę.
+
+Nowa warstwa `UartReliableStream` po otrzymaniu NACK, po timeoutcie
+aplikacyjnego ACK lub po nowej sesji z niepotwierdzonym cache przechodzi
+w krótką fazę *drain window*: nadal ponawia DATA, niesie ACK/kredyt w
+IDLE, ale **nie pobiera świeżych danych z portu**, dopóki dotychczasowe
+okno nie zostanie zaakceptowane. Potem wraca do pełnego WINDOW4.
+To automatyczna kontrola źródła *we właściwej warstwie transportowej*;
+nie ma dodatkowych bajtów RF, ręcznych resetów ani opóźnień timerów.
+Nowy `pp_recovery_drain_test` najpierw padał na poprzednim kodzie,
+ponieważ świeży DATA3 przeskakiwał przed potwierdzeniem zaległych;
+po zmianie wszystkie **23 testy hostowe PASS**. Brak AVR-GCC w lokalnym
+środowisku. Fizyczny reset B i A pod obciążeniem został już sprawdzony
+na wariancie `pp-window-drain`, bez manipulacji `s/w` (powyżej).
+Wcześniejszy branch i produkcja zachowane do porównań.
+
+**Poprzedni punkt kontynuacji: 2026-11-04, `experiment/pp-rekey-replay`.**
+Fizyczna próba wcześniejszej poprawki `pp-recovery-ack-fix` pokazała
+poprawny powrót ~14,8 kB/s po resecie B i obu, ale po resecie A
+pozostawał stabilny stan ~9 kB/s: `B ret≈378/s`, `A bad≈378/s`.
+Przyczyna zlokalizowana testem jednostkowym w `UartReliableStream`:
+po przejściu do nowego SID nadajnik zachowuje 1–4 pakietów do replay,
+lecz odbiór pierwszego *częściowego* ACK zerował cały plan powtórek,
+pomijając jeszcze niewysłane DATA. Przykład: po ACK dla DATA0 B
+zamiast odtworzyć DATA1..3 wysyłał świeży DATA4. Nowa regresja
+`pp_partial_ack_rekey_test` padała przed poprawką; po zachowaniu
+niepotwierdzonego ogona replay wszystkie **22 testy hostowe PASS**.
+`pp_rekey_full_load_test` obejmuje teraz reset obu kierunków oddzielnie.
+Nie ma nowych bajtów RF, zmian PHY/ADC/UART/main, dodatkowych liczników
+ani alokacji. Lokalny AVR-GCC niedostępny, więc po F7/F12 obu modułów
+**konieczny sprzętowy reset A pod obciążeniem**. Gałąź produkcyjna,
+checkpoint i poprzednie warianty testowe pozostają nietknięte.
+
+**Poprzedni punkt kontynuacji: 2026-11-04, `experiment/pp-recovery-ack-fix`.**
+Odizolowana gałąź wychodzi z `experiment/pp-recovery-v2` i poprawia
+transport Go-back-N po resecie B przy pełnym obciążeniu A. Dwie zmiany
+przenośnego API: (1) przy zerowym `RX_CREDIT` nie wolno ponawiać
+DATA — oczekujące bajty pozostają w pamięci, a IDLE nadal niesie ACK;
+(2) odbiorca napotykający lukę sekwencji ustawia istniejący bit `URGENT`
+w nagłówku DATA/IDLE, informując nadawcę, by bezzwłocznie ponowił od
+`RX_LAST+1`. Nadawca reaguje najwyżej raz na daną lukę mimo opóźnionych
+ACK Payload. **Nie ma dodatkowych bajtów radiowych**, nie zmieniono PHY,
+konfiguracji 1Mb/s, programu main, A0, F7/F12, przechowywania pakietów
+ani statusów hosta. Testy hostowe PASS; **wymagana kompilacja AVR oraz
+fizyczny test z resetem B przy nasyconym A**. Wcześniejsze spadki do
+~5,5 kB/s i `ret≈B bad≈230/s` są dowodem problemu, NIE dowodem naprawy.
+`main`, `checkpoint/pp-2026-11-04` oraz poprzednia gałąź testowa
+pozostają nietknięte.
+
+**Wcześniejszy punkt kontynuacji: 2026-11-04, `experiment/pp-recovery-v2`.**
+Przenośne `pp_recovery_control.h` + `host_flow_status.h` oddzielają zanik
+łączności od utraty RAM partnera. Prawidłowa ramka z dotychczasowym SID
+przywraca ten sam transport bez rekey; po 3×1,6 ms ciszy SUSPECT, po 1 s
+OFFLINE, po 5 s nowa negocjacja. Reset partnera rozpoznaje nonce w
+HELLO/BEACON; przy zmianie SID wcześniejsze niepotwierdzone dane mają
+status UNCERTAIN. W **diagnostycznym** `main.cpp` ponawiamy je automatycznie
+(*at-least-once*); domyślny mechanizm API wymaga decyzji hosta (*HOLD*).
+`TX_STATUS` i `RX_STATUS` są **lokalne**, bez narzutu w radiu. Ostatnia
+wersja testów hostowych PASS; **nie uruchomiono builda AVR ani dwóch
+płytek, bo brak lokalnego kompilatora AVR i urządzeń**. Następny krok:
+F7 / ręczne F12 obu RF-Nano, testy worka metalizowanego, resetu i zaniku
+zasilania zgodnie z `pp-recovery-v2.md`, a potem decyzja na podstawie
+logów o wdrożeniu. Pozostaw `main` i checkpoint PP nietknięte.
+
+**Stan produkcyjny na 2026-11-04: obecny firmware to PP (Ping-Pong), nie zmieniany przy pracy nad BURST20. Fizyczny zrzut jednoczesnych strumieni poprawił się po przejściu na 8+24B i WINDOW=4; brak binary checksum capture. PP checkpoint `checkpoint/pp-2026-11-04` SHA 784fd83. BURST20 ma czysto logiczny harmonogram i boot-mode selector testowane hostowo, NIE ma jeszcze BURST PHY ani wyboru A1 w main.**
+
+**Uwaga dla gałęzi `experiment/pp-echo-ramp-2026-11-04`:** jest to
+tymczasowy wariant pomiarowy, z tym samym PP PHY/MAC/sesją/transportem,
+ale z generatorem bajtów na A i lokalnym echem radiowym na B. Po
+fizycznym wyniku RealTerm ~12 000 CPS (na COM10 A, nasycenie UART)
+wariant eksperymentalny uruchamia od razu maksymalne obciążenie źródła,
+weryfikuje echo **w RAM** i raportuje na obu UART (ASCII, 1 Hz)
+`cps/gen/fwd/arc/max/ret/dup/bad/blk/gap/err/rec/sid/up`. Źródło może
+być zwolnione przez `w` co100 µs i przyspieszone przez `s` co100 µs.
+Radio nadal pracuje przy **1 Mb/s**, PP 8+24B WINDOW4/ACK Payload.
+Normalny UART↔RF↔UART nadal znajduje się na niezmienionym `main`
+(`6b94a43`). Szczegóły i przywracanie: `echo-ramp-test.md`.
+Fizycznie wykryto **histerezę**: po pełnym obciążeniu od zimnego startu
+~4700 CPS/`ret≈195`, po cyklu `w`→`s` ~12 552 CPS/`ret=0`; reset A
+odtwarza wolny stan. Nowa eksperymentalna telemetria `A ack/win` oraz
+`B lg/ls/rf/af` wykorzystuje istniejące liczniki i odczyt FIFO bez
+dodatkowego SPI; czeka na jeden porównawczy pomiar sprzętowy. Własna
+symulacja pełnego źródła nie reprodukuje problemu, przyczyna nieznana.
+Nie zmieniać docelowego PP do wyniku tej diagnostyki.
+Nowy test ma tylko symulację hostową, nie ma jeszcze wyników sprzętowych;
+oba MCU wymagają ręcznego F12. Nie utożsamiać `gap=0` z bezstratnością
+przez reset lub utratę wielokrotności256 bajtów.
 
 # Migracja / punkt kontynuacji GPT_NRF24
 

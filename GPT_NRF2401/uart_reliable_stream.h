@@ -10,6 +10,9 @@
 // successive RF exchanges while older segments await delayed ACK Payload.
 // Go-back-N on ACK timeout (in EXCHANGES, not milliseconds), no heap.
 // Received data is committed only in order, atomically by Port::writeAll.
+// After a gap/timeout/rekey, drain the unacknowledged window first:
+// IDLE still carries ACK/credit, but fresh DATA is not admitted until all
+// previously cached segments are confirmed. No radio timing adjustment.
 // All state is independent of AVR, UART registers, and radio implementation.
 template<class Port>
 class UartReliableStream {
@@ -21,7 +24,9 @@ public:
     explicit UartReliableStream(Port& port)
        :port_(port),session_(0),baseSeq_(0),nextSeq_(0),headIndex_(0),
         recvNext_(0),outstanding_(0),replayCount_(0),replaySeq_(0),
-        noAckTurns_(0),acceptedBytes_(0),acknowledgedBytes_(0),
+        noAckTurns_(0),gapPending_(false),nackSeen_(false),nackForBase_(0),
+        draining_(false),
+        acceptedBytes_(0),acknowledgedBytes_(0),
         duplicates_(0),blocked_(0),badFrames_(0),retransmits_(0) {
         for(uint8_t i=0;i<WINDOW;++i)slotLength_[i]=0;
     }
@@ -36,8 +41,11 @@ public:
         nextSeq_=outstanding_;
         recvNext_=0;
         noAckTurns_=0;
+        gapPending_=false;
+        nackSeen_=false;
         replayCount_=outstanding_;
         replaySeq_=0;
+        draining_=(outstanding_!=0);
         // Physical data already accepted in an old epoch may be delivered
         // again if its final ACK was lost. Exactly-once across reset needs
         // a separate durable protocol, not this volatile UART transport.
@@ -61,22 +69,32 @@ public:
                                      PairedFrame::MAX_BODY);
     }
 
-    bool make(PairedLink& link,uint8_t* dst,uint8_t& width) {
+    // A frozen link still needs IDLE probes carrying the last accepted ACK,
+    // but MUST NOT drain host input or replay stale DATA during RF silence.
+    bool make(PairedLink& link,uint8_t* dst,uint8_t& width,
+              bool permitData=true) {
         if(session_==0||link.sessionId()!=session_)return false;
         uint8_t body[PairedFrame::MAX_BODY];
         uint8_t seq=nextSeq_;
         uint8_t count=0;
         const uint8_t peerCredit=link.peerCredit();
 
-        if(outstanding_!=0 && noAckTurns_<255)++noAckTurns_;
-        if(outstanding_!=0 && replayCount_==0 &&
+        // Peer credit measures *currently free receiver storage*.  A
+        // replay needs that storage as much as a first transmission does.
+        // While credit is zero, keep the cache and send only IDLE/ACK:
+        // retrying a blocked segment cannot make the sink accept it and
+        // may cause an endless out-of-order/retransmit feedback loop.
+        const bool maySend=permitData && peerCredit!=0;
+        if(maySend && outstanding_!=0 && noAckTurns_<255)++noAckTurns_;
+        if(maySend && outstanding_!=0 && replayCount_==0 &&
            noAckTurns_>=REPLAY_AFTER) {
             replaySeq_=baseSeq_;
             replayCount_=outstanding_;
             noAckTurns_=0;
+            draining_=true;
         }
 
-        if(replayCount_!=0) {
+        if(maySend && replayCount_!=0) {
             seq=replaySeq_;
             count=slotLength_[slotIndex(seq)];
             for(uint8_t i=0;i<count;++i)
@@ -84,7 +102,8 @@ public:
             ++replaySeq_;
             --replayCount_;
             ++retransmits_;
-        } else if(outstanding_<WINDOW && outstanding_<peerCredit &&
+        } else if(maySend && !draining_ && outstanding_<WINDOW &&
+                  outstanding_<peerCredit &&
                   port_.available()!=0) {
             seq=nextSeq_;
             uint8_t value=0;
@@ -99,7 +118,7 @@ public:
             }
         }
         return link.makeStream(seq,static_cast<uint8_t>(recvNext_-1U),
-                               credit(),body,count,dst,width)
+                               credit(),body,count,dst,width,gapPending_)
                ==PairedFrame::Error::OK;
     }
 
@@ -111,6 +130,19 @@ public:
             f.header.kind()!=PairedFrame::Kind::IDLE))return false;
         // Every frame, including IDLE and retransmitted DATA, conveys ACK.
         acceptAck(f.header.rxLast);
+        // Go-back-N receiver reports a hole via an already allocated MAC
+        // flag. Rewind immediately only ONCE per missing base sequence:
+        // queued old ACK payloads otherwise cause a replay storm.
+        if((f.header.flags&PairedFrame::URGENT)!=0 && outstanding_!=0 &&
+           static_cast<uint8_t>(f.header.rxLast+1U)==baseSeq_ &&
+           (!nackSeen_ || nackForBase_!=baseSeq_)) {
+            replaySeq_=baseSeq_;
+            replayCount_=outstanding_;
+            noAckTurns_=0;
+            nackForBase_=baseSeq_;
+            nackSeen_=true;
+            draining_=true;
+        }
         if(f.header.kind()==PairedFrame::Kind::IDLE)return false;
         if(!f.length || !f.body) {
             ++badFrames_;
@@ -121,6 +153,7 @@ public:
         if(seq==recvNext_) {
             if(port_.writeAll(f.body,n)) {
                 ++recvNext_;
+                gapPending_=false;
                 acceptedBytes_=static_cast<uint16_t>(acceptedBytes_+n);
             } else {
                 ++blocked_; // NEVER ACK undelivered user bytes
@@ -132,6 +165,7 @@ public:
             // Out-of-order future frame: Go-back-N receiver. Sender must
             // replay the missing oldest segment before advancement.
             ++badFrames_;
+            gapPending_=true;
         }
         return true;
     }
@@ -159,16 +193,31 @@ private:
         headIndex_=static_cast<uint8_t>((headIndex_+n)%WINDOW);
         baseSeq_=static_cast<uint8_t>(baseSeq_+n);
         outstanding_=static_cast<uint8_t>(outstanding_-n);
+        if(outstanding_==0)draining_=false;
         noAckTurns_=0;
-        // The peer has advanced its contiguous prefix. Any outstanding
-        // gap is handled by normal retransmission on the next timeout.
-        replayCount_=0;
-        replaySeq_=baseSeq_;
+        nackSeen_=false;
+        // ACK progress must NOT cancel the yet-unsent tail of a replay.
+        // In particular after a peer reset, replay 0..3 may be queued in
+        // ACK Payload while the new peer already ACKs 0. Dropping replay
+        // 1..3 here would emit fresh DATA 4 into a hole and lock the
+        // receiver into a repeating out-of-order/replay cycle.
+        if(replayCount_!=0) {
+            const uint8_t delta=static_cast<uint8_t>(baseSeq_-replaySeq_);
+            if(delta<=WINDOW) {
+                const uint8_t covered=delta<replayCount_?delta:replayCount_;
+                replaySeq_=static_cast<uint8_t>(replaySeq_+covered);
+                replayCount_=static_cast<uint8_t>(replayCount_-covered);
+            }
+        }
+        if(replayCount_==0)replaySeq_=baseSeq_;
     }
     Port& port_;
     uint16_t session_;
     uint8_t baseSeq_,nextSeq_,headIndex_,recvNext_,outstanding_;
     uint8_t replayCount_,replaySeq_,noAckTurns_;
+    bool gapPending_,nackSeen_;
+    uint8_t nackForBase_;
+    bool draining_;
     uint8_t slots_[WINDOW][MAX_USER_BYTES];
     uint8_t slotLength_[WINDOW];
     uint16_t acceptedBytes_,acknowledgedBytes_;

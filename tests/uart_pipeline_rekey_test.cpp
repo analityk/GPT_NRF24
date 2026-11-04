@@ -90,9 +90,12 @@ int main() {
     a.link.configure(true,0);
     a.resetSession(0x5102);
     b.resetSession(0x5102);
-    // Do NOT use preflight() here: its synthetic ACK would already
-    // acknowledge the first replayed segment before it is inspected.
+    // A new session starts with UNKNOWN peer RX_CREDIT. First observe
+    // its idle advertisement; a DATA replay cannot be accepted until
+    // there is room at the destination. ACK=FF does not falsely ACK any
+    // of the 3 cached segments at baseSeq=0.
     assert(a.stream.outstanding()==3);
+    b.make();a.take(b.bytes,b.width);
     // The first replay must be the OLDEST pending bytes, regardless of
     // the old head index or TX_SEQ modulo256.
     a.make();

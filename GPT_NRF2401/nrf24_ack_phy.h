@@ -22,7 +22,13 @@ public:
     };
 
     NrfAckPayloadPhy(Radio& radio,Delay& delay,Clock& clock)
-        : radio_(radio),delay_(delay),clock_(clock),lastCompleted_(0),haveLast_(false) {}
+        : radio_(radio),delay_(delay),clock_(clock),lastCompleted_(0),
+          haveLast_(false),rxFifoFullSamples_(0) {}
+
+    // Number of receive polls where the existing FIFO_STATUS read saw all
+    // three hardware RX slots occupied. This is NOT a count of dropped
+    // packets: the chip has no direct software-visible RX-overflow counter.
+    uint16_t rxFifoFullSamples()const{return rxFifoFullSamples_;}
 
     // Power up exactly once. Subsequent TX operations remain in PTX and
     // incur no 1.5/2 ms oscillator start penalties.
@@ -105,6 +111,7 @@ public:
         uint8_t fifo=0;
         if (!radio_.readRegister(Radio::FIFO_STATUS,fifo))
             return RxCode::IO_ERROR;
+        if(fifo&0x02)++rxFifoFullSamples_;
         if (fifo&0x01) return RxCode::EMPTY;
         if (!radio_.readDynamicPayload(data,width))
             return (width==0 || width>32)?RxCode::BAD_SIZE:RxCode::IO_ERROR;
@@ -155,5 +162,6 @@ private:
     Clock& clock_;
     uint32_t lastCompleted_;
     bool haveLast_;
+    uint16_t rxFifoFullSamples_;
 };
 #endif

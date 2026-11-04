@@ -16,7 +16,7 @@ struct Fake {
     enum {CONFIG=0,FIFO_STATUS=0x17,OBSERVE_TX=8};
     uint8_t tx[32]={},rx[32]={};
     uint8_t txWidth=0,rxWidth=8,ackWidth=0;
-    bool rxPresent=false,full=false,fail=false;
+    bool rxPresent=false,rxFifoFull=false,full=false,fail=false;
     uint8_t txFlags=0x20;
     unsigned polls=0,highs=0,flushes=0,rxFlushes=0;
     void ceLow() {}
@@ -25,7 +25,9 @@ struct Fake {
     bool readRegister(uint8_t r,uint8_t& out){
         if(fail)return false;
         if(r==FIFO_STATUS)
-            out=static_cast<uint8_t>((rxPresent?0:1)|(full?0x20:0));
+            out=static_cast<uint8_t>((rxPresent?0:1)|
+                                      (rxFifoFull?0x02:0)|
+                                      (full?0x20:0));
         else if(r==OBSERVE_TX)out=2;
         return true;
     }
@@ -99,8 +101,12 @@ int main() {
     assert(prx.queueReply(out,32)==Phy::QueueCode::FULL);
     receiver.full=false;
     assert(prx.receive(back,width)==Phy::RxCode::EMPTY && width==0);
+    assert(prx.rxFifoFullSamples()==0);
+    receiver.rxFifoFull=true;
     receiver.rxPresent=true;receiver.rxWidth=8;
     assert(prx.receive(back,width)==Phy::RxCode::GOOD && width==8);
+    assert(prx.rxFifoFullSamples()==1);
+    receiver.rxFifoFull=false;
     receiver.rxPresent=true;receiver.rxWidth=7;
     assert(prx.receive(back,width)==Phy::RxCode::BAD_SIZE && width==7);
     receiver.rxPresent=true;receiver.rxWidth=33;
