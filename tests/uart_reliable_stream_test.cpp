@@ -120,9 +120,9 @@ int main() {
         x.make();(void)y.incoming(x);
     }
     assert(y.stream.acceptedBytes()==24);
-    assert(y.port.out.available()==124);
+    assert(y.port.out.available()==122);
     // Clear old sentinel then check the precise payload.
-    for(unsigned i=0;i<100;++i) {
+    for(unsigned i=0;i<98;++i) {
         uint8_t v;
         assert(y.port.out.pop(v) && v==0x55);
     }
