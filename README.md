@@ -1,4 +1,10 @@
-> **TYLKO GAŁĄŹ TESTOWA:** `experiment/pp-echo-ramp-2026-11-04` zastępuje
+> **AKTUALNA GAŁĄŹ TESTOWA:** `experiment/pp-recovery-v2` dodaje
+> symetryczne ciepłe/zimne odzyskiwanie PP, lokalne bajty statusu
+> TX/RX i 5-sekundowy limit ciepłego wznowienia. **Instrukcja nowej
+> próby: [pp-recovery-v2.md](pp-recovery-v2.md).** `main` i checkpoint PP
+> nie są zmieniane. Testy hostowe nie zastępują próby na dwóch RF-Nano.
+>
+> **WCZEŚNIEJSZA GAŁĄŹ TESTOWA:** `experiment/pp-echo-ramp-2026-11-04` zastępuje
 > UART bridge **testem granicznej szybkości PP**: A generuje stale bajty
 > `00..FF`, B odsyła je radiem, oba UARTy drukują co 1 s ASCII z CPS i
 > retransmisjami. Wersja z surowym echem UART pozostaje we wcześniejszym

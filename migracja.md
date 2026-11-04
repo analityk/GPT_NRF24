@@ -1,4 +1,19 @@
-**Stan na 2026-11-04: obecny firmware to PP (Ping-Pong), nie zmieniany przy pracy nad BURST20. Fizyczny zrzut jednoczesnych strumieni poprawił się po przejściu na 8+24B i WINDOW=4; brak binary checksum capture. PP checkpoint `checkpoint/pp-2026-11-04` SHA 784fd83. BURST20 ma czysto logiczny harmonogram i boot-mode selector testowane hostowo, NIE ma jeszcze BURST PHY ani wyboru A1 w main.**
+**NAJNOWSZY PUNKT KONTYNUACJI: 2026-11-04, eksperyment `experiment/pp-recovery-v2`.**
+Przenośne `pp_recovery_control.h` + `host_flow_status.h` oddzielają zanik
+łączności od utraty RAM partnera. Prawidłowa ramka z dotychczasowym SID
+przywraca ten sam transport bez rekey; po 3×1,6 ms ciszy SUSPECT, po 1 s
+OFFLINE, po 5 s nowa negocjacja. Reset partnera rozpoznaje nonce w
+HELLO/BEACON; przy zmianie SID wcześniejsze niepotwierdzone dane mają
+status UNCERTAIN. W **diagnostycznym** `main.cpp` ponawiamy je automatycznie
+(*at-least-once*); domyślny mechanizm API wymaga decyzji hosta (*HOLD*).
+`TX_STATUS` i `RX_STATUS` są **lokalne**, bez narzutu w radiu. Ostatnia
+wersja testów hostowych PASS; **nie uruchomiono builda AVR ani dwóch
+płytek, bo brak lokalnego kompilatora AVR i urządzeń**. Następny krok:
+F7 / ręczne F12 obu RF-Nano, testy worka metalizowanego, resetu i zaniku
+zasilania zgodnie z `pp-recovery-v2.md`, a potem decyzja na podstawie
+logów o wdrożeniu. Pozostaw `main` i checkpoint PP nietknięte.
+
+**Stan produkcyjny na 2026-11-04: obecny firmware to PP (Ping-Pong), nie zmieniany przy pracy nad BURST20. Fizyczny zrzut jednoczesnych strumieni poprawił się po przejściu na 8+24B i WINDOW=4; brak binary checksum capture. PP checkpoint `checkpoint/pp-2026-11-04` SHA 784fd83. BURST20 ma czysto logiczny harmonogram i boot-mode selector testowane hostowo, NIE ma jeszcze BURST PHY ani wyboru A1 w main.**
 
 **Uwaga dla gałęzi `experiment/pp-echo-ramp-2026-11-04`:** jest to
 tymczasowy wariant pomiarowy, z tym samym PP PHY/MAC/sesją/transportem,

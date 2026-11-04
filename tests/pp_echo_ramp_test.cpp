@@ -136,6 +136,31 @@ static void radioOnlyStressPort() {
     assert(b.forwarded()==4);
 }
 
+static void pausedProducerSurvivesLongOutage() {
+    MockConsole serial;
+    PpEchoRampPort<MockConsole> a(serial);
+    a.configure(true,0,PpEchoRampPort<MockConsole>::Mode::RADIO_STRESS);
+    a.service(1);
+    assert(a.generated()==120 && a.inputFreeSpace()==7);
+    uint8_t data=0;
+    for(uint8_t i=0;i<60;++i)assert(a.read(data) && data==i);
+    // With RF unavailable, no fresh bytes are generated and the 60 bytes
+    // already in RAM cannot be overwritten by elapsed time.
+    for(uint32_t seconds=1;seconds<120;++seconds)
+        a.service(seconds*2000000UL,false);
+    assert(a.generated()==120 && a.available()==60);
+    serial.command('w');
+    a.service(120*2000000UL,false); // still accept local controls
+    assert(a.periodUs()==100);
+    assert(a.generated()==120);
+    for(uint8_t i=60;i<120;++i)assert(a.read(data) && data==i);
+    assert(a.available()==0);
+    a.service(120*2000000UL+199UL);
+    assert(a.available()==0); // no deferred 120-second catch-up burst
+    a.service(120*2000000UL+200UL);
+    assert(a.read(data) && data==120);
+}
+
 struct Peer {
     MockConsole serial;
     PpEchoRampPort<MockConsole> port;
@@ -215,6 +240,7 @@ int main() {
     timerAndBounds();
     mirrorAndAtomicSink();
     radioOnlyStressPort();
+    pausedProducerSurvivesLongOutage();
     completeRadioEcho();
     lossyRadioOnlyStress();
 }

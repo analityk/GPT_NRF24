@@ -14,6 +14,8 @@
  *
  * The radio source queue is bounded and never overwrites pending bytes.
  * This experiment retains the existing session, MAC, window and PHY.
+ * A silent peer is SUSPECT/OFFLINE, not automatically rebooted: only a
+ * different peer handshake identity invalidates its volatile session.
  */
 #include "board_clock.h"
 #include <stdint.h>
@@ -34,6 +36,8 @@
 #include "pp_stress_telemetry.h"
 #include "boot_epoch.h"
 #include "nrf24_ack_phy.h"
+#include "pp_recovery_control.h"
+#include "host_flow_status.h"
 
 typedef Nrf24<SpiMaster,GPIO> Radio;
 typedef NrfAckPayloadPhy<Radio,AvrDelay,Timer1Clock> AckPhy;
@@ -50,6 +54,15 @@ static PairedSession session(true,PairedSession::Identity());
 static UartReliableStream<PpEchoRampPort<UART> > stream(diagnosticPort);
 static bool isLeader=false;
 static uint32_t lastPeerProgress=0;
+// Bench stress mode explicitly retries uncertain bytes after a cold peer
+// reset. The reusable default policy is HOLD until the host opts in.
+static PpRecoveryControl recovery(3200UL,2000000UL,
+                   PpRecoveryControl::UncertainPolicy::RETRY_AT_LEAST_ONCE);
+static uint32_t lastProbe=0;
+static PpRecoveryControl::State lastPrintedState=
+                   PpRecoveryControl::State::CONNECTING;
+static bool lastPrintedUncertainty=false;
+static uint32_t lastRecoveryReport=0;
 
 static uint16_t recoveryCount=0;
 static uint16_t radioErrors=0;
@@ -60,6 +73,33 @@ static bool ackWaiting=false;
 static PpStressWindow performance;
 static uint32_t hardwareRetries=0,maxRetries=0,lastReport=0;
 static uint16_t ackFifoFull=0;
+
+static void reportRecoveryTransition() {
+    const PpRecoveryControl::State state=recovery.state();
+    const bool uncertain=recovery.uncertainty();
+    if(state==lastPrintedState && uncertain==lastPrintedUncertainty)return;
+    const uint32_t now=ticks.now();
+    // Do not let rapid HEALTHY/SUSPECT changes saturate the console or
+    // compete with RF throughput. Sample the latest state at most 5 Hz.
+    if(static_cast<uint32_t>(now-lastRecoveryReport)<400000UL)return;
+    lastRecoveryReport=now; // also throttle attempts if UART ring is full
+    const HostFlowStatus::Pair status=HostFlowStatus::snapshot(
+        recovery,diagnosticPort.inputFreeSpace(),diagnosticPort.freeSpace());
+    PpStressLine line;
+    line.word(isLeader?"A link=":"B link=");
+    line.decimal(static_cast<uint8_t>(state));
+    line.word(" tx=");line.decimal(status.tx);
+    line.word(" rx=");line.decimal(status.rx);
+    line.word(" warm=");line.decimal(recovery.warmRecoveries());
+    line.word(" cold=");line.decimal(recovery.coldRecoveries());
+    line.word(" exp=");line.decimal(recovery.expiredRecoveries());
+    line.word(" uncertain=");line.decimal(uncertain?1U:0U);
+    line.word("\r\n");
+    if(line.emit(uart)) {
+        lastPrintedState=state;
+        lastPrintedUncertainty=uncertain;
+    }
+}
 
 static PpStressSnapshot performanceSnapshot() {
     PpStressSnapshot s;
@@ -120,7 +160,7 @@ static bool makePacket(uint8_t* dst,uint8_t& width) {
         linkState.configure(isLeader,session.sid());
         stream.beginSession(session.sid());
     }
-    return stream.make(linkState,dst,width);
+    return stream.make(linkState,dst,width,recovery.canSendData());
 }
 
 // Handshake must be decoded BEFORE the strict active-session filter.
@@ -133,8 +173,10 @@ static void processFrame(uint8_t width) {
     }
     const PairedSession::Event event=session.accept(view);
     if(event!=PairedSession::Event::NONE) {
-        lastPeerProgress=ticks.now();
+        const uint32_t now=ticks.now();
+        lastPeerProgress=now;
         if(event==PairedSession::Event::LOST) {
+            recovery.peerStateLost(now,stream.hasPending());
             if(isLeader && session.active()){
                 uint32_t epoch=0;
                 if(!BootEpoch::advance(epoch))fatal();
@@ -147,6 +189,7 @@ static void processFrame(uint8_t width) {
         } else if(event==PairedSession::Event::ESTABLISHED) {
             linkState.configure(isLeader,session.sid());
             stream.beginSession(session.sid());
+            recovery.established(now);
         } else if(!session.active()) {
             linkState.configure(isLeader,0);
             stream.disconnect();
@@ -159,7 +202,9 @@ static void processFrame(uint8_t width) {
         return;
     const PairedLink::Receipt receipt=linkState.observeStream(view);
     if(receipt==PairedLink::Receipt::WRONG_SESSION)return;
-    lastPeerProgress=ticks.now();
+    const uint32_t now=ticks.now();
+    lastPeerProgress=now;
+    recovery.validPeerFrame(now);
     // A repeated DATA sequence may carry a NEW application ACK.
     (void)stream.accept(view);
 }
@@ -170,7 +215,24 @@ static void runA() {
     // Continuous DATA/ACK Payload ping-pong, even when neither UART has
     // bytes. The PHY alone enforces the 130us ESB turnaround guard.
     for(;;) {
-        diagnosticPort.service(ticks.now());
+        const uint32_t now=ticks.now();
+        recovery.poll(now);
+        if(session.active() && recovery.warmExpired(now)) {
+            recovery.abandonWarm(now,stream.hasPending());
+            if(!restartIdentity() || !phy.resetPtxFifos())fatal();
+        }
+        diagnosticPort.service(now,recovery.canProduce());
+        // Once declared OFFLINE, only periodic IDLE/HELLO probes are sent.
+        // No RAM is discarded, and we do not hammer MAX_RT indefinitely.
+        if(session.active() &&
+           recovery.state()==PpRecoveryControl::State::OFFLINE &&
+           static_cast<uint32_t>(now-lastProbe)<40000UL) {
+            reportPerformance();
+            reportRecoveryTransition();
+            delay.us(100);
+            continue;
+        }
+        lastProbe=now;
         uint8_t width=0;
         if(!makePacket(packet,width))fatal();
         uint8_t incomingWidth=0;
@@ -185,14 +247,15 @@ static void runA() {
                 tx.code==AckPhy::TxCode::TIMEOUT)
             ++radioErrors;
 
-        // If the peer has disappeared, restart session negotiation.
-        // We do NOT discard staged, unacknowledged user UART bytes.
-        if(session.phase()!=PairedSession::Phase::DISCOVER &&
-           static_cast<uint32_t>(ticks.now()-lastPeerProgress)>
-           (session.active()?500000UL:2000000UL)) {
+        // Negotiation timeout is different from ACTIVE radio silence.
+        // Silence NEVER invalidates an established peer's session state.
+        if(!session.active() &&
+           session.phase()!=PairedSession::Phase::DISCOVER &&
+           static_cast<uint32_t>(ticks.now()-lastPeerProgress)>2000000UL) {
             if(!restartIdentity() || !phy.resetPtxFifos())fatal();
         }
         reportPerformance();
+        reportRecoveryTransition();
     }
 }
 
@@ -223,6 +286,13 @@ static void runB() {
     if(!phy.beginPrx())fatal();
     if(!queueB())fatal(); // initial BEACON for A's first HELLO
     for(;;) {
+        const uint32_t now=ticks.now();
+        recovery.poll(now);
+        if(session.active() && recovery.warmExpired(now)) {
+            recovery.abandonWarm(now,stream.hasPending());
+            if(!restartIdentity())fatal();
+            replaceAck=true;
+        }
         uint8_t incomingWidth=0;
         const AckPhy::RxCode rx=phy.receive(incoming,incomingWidth);
         if(rx==AckPhy::RxCode::GOOD) {
@@ -234,14 +304,15 @@ static void runB() {
             ++radioErrors;
             if(!phy.clearPrxFlags())++radioErrors;
         }
-        if(session.phase()!=PairedSession::Phase::DISCOVER &&
-           static_cast<uint32_t>(ticks.now()-lastPeerProgress)>
-           (session.active()?1500000UL:4000000UL)) {
+        if(!session.active() &&
+           session.phase()!=PairedSession::Phase::DISCOVER &&
+           static_cast<uint32_t>(ticks.now()-lastPeerProgress)>4000000UL) {
             if(!restartIdentity())fatal();
             replaceAck=true;
         }
         if(replaceAck && !queueB())++radioErrors;
         reportPerformance();
+        reportRecoveryTransition();
     }
 }
 
@@ -265,6 +336,9 @@ int main() {
     linkState.configure(isLeader,0);
     stream.disconnect();
     lastPeerProgress=ticks.now();
+    recovery.reset(lastPeerProgress);
+    lastProbe=lastPeerProgress;
+    lastRecoveryReport=lastPeerProgress-400000UL;
     lastReport=lastPeerProgress;
     performance.start(lastReport,performanceSnapshot());
     if(isLeader)runA();

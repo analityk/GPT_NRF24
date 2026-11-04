@@ -1,5 +1,27 @@
 # TODO — aktywny transport dwukierunkowy UART / ACK Payload
 
+## Wznowienie PP v2 — gałąź `experiment/pp-recovery-v2`
+
+- [x] Oddzielono milczenie radia od potwierdzonej zmiany tożsamości sesji:
+  `PpRecoveryControl` (3 interwały → SUSPECT, 1 s → OFFLINE,
+  5 s → nowa negocjacja), stan przenośny i symetryczny dla A/B.
+- [x] Zatrzymano producenta A i DATA/replay na czas niepewnego łącza;
+  nie kasować SID, okna ani bufora przy chwilowym zaniku.
+- [x] Dwa lokalne bajty `TX_STATUS`/`RX_STATUS`, nie w ramce RF;
+  przy zimnym wznowieniu raportować niejednoznaczność dostarczenia.
+- [x] Hostowa regresja warm A/B, resetu jednej i obu stron, długiej ciszy,
+  overflow kolejki, rollover zegara i decyzji hosta o retransmisji.
+- [ ] **Kompilacja AVR-GCC F7** i wgranie **ręczne F12** na obie RF-Nano.
+- [ ] **Fizyczny test:** zasięg traci B/A na 0,2–1 s (SID bez zmiany),
+  potem >5 s (nowy SID), potem odłączone zasilanie A/B osobno i obu.
+  Rejestrować `link`, `warm`, `cold`, `exp`, `uncertain`, `cps`, `ret`,
+  `arc/max`, `sid`. Procedura w `pp-recovery-v2.md`.
+- [ ] Przed wdrożeniem produkcyjnym podłączyć lokalne statusy do nowego
+  hosta (atomowe przyjmowanie) i ustalić potwierdzanie `UNCERTAIN` oraz
+  kontrakt *at-least-once* vs. jawne rozliczenie aplikacyjne.
+- [ ] Rozstrzygnąć sprzętowo źródło histerezy 4,7 kB/s↔15 kB/s; zmiana
+  recovery nie jest jej udowodnioną naprawą.
+
 > **Eksperyment, nie plan produkcyjny:** na gałęzi
 > `experiment/pp-echo-ramp-2026-11-04` znajduje się tymczasowy wariant
 > echo/ramp A→B→A, obecnie rozszerzony do pomiaru RADIO_STRESS w pamięci

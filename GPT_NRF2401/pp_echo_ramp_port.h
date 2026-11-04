@@ -51,7 +51,7 @@ public:
     // On A, only 's' and 'w' from UART are commands, never stream payload.
     // A zero interval means "as fast as the bounded radio source queue can
     // drain"; an overfull source never skips a number or overwrites data.
-    void service(uint32_t nowTicks) {
+    void service(uint32_t nowTicks,bool producerPermitted=true) {
         if(!leader_)return;
         uint8_t command=0;
         while(serial_.read(command)) {
@@ -64,6 +64,13 @@ public:
                     periodUs_=static_cast<uint16_t>(periodUs_+STEP_US);
                 nextDue_=nowTicks+periodTicks();
             }
+        }
+        // Pause at the *producer* boundary. Existing queued bytes, sequence
+        // number and timer phase are preserved across a temporary RF outage.
+        // Avoid a catch-up burst when the link eventually recovers.
+        if(!producerPermitted) {
+            nextDue_=nowTicks+periodTicks();
+            return;
         }
         if(periodUs_==0) {
             while(pending_.available()<HIGH_WATER)produce();
@@ -85,6 +92,7 @@ public:
 
     // Port interface required by UartReliableStream<Port>.
     uint8_t available()const{return pending_.available();}
+    uint8_t inputFreeSpace()const{return pending_.freeSpace();}
     bool read(uint8_t& b) {
         if(!pending_.pop(b))return false;
         if(!leader_)++forwarded_;

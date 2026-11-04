@@ -350,3 +350,43 @@ Przyszłe wpisy powinny zawierać datę, zakres faktycznie wykonanej zmiany, com
   **do pomiaru na dwóch RF-Nano, bez ustalonej jeszcze przyczyny**.
   To świadomie jednorazowy instrument eksperymentalny, nie zmiana
   produkcyjnego PP. `main` i checkpoint PP nietknięte.
+
+## 2026-11-04 — PP recovery v2: ciepłe/zimne, niepewne dane, status hosta
+
+- Gałąź `experiment/pp-recovery-v2`, od poprzedniego wariantu testowego;
+  produkcyjne `main` i `checkpoint/pp-2026-11-04` nietknięte.
+- Analiza kodu wykazała, że wcześniejsze watchdogy aktywnego linku
+  restartowały handshake wyłącznie wskutek milczenia radia (A 250 ms,
+  B 750 ms), przez co możliwe było nieskoordynowane wyzerowanie SID i
+  okna mimo zachowanej pamięci drugiej strony. Nie stanowi to jeszcze
+  dowodu przyczyny konkretnego spadku CPS.
+- Zaimplementowano przenośną `PpRecoveryControl` bez zależności AVR:
+  po ~4,8 ms bez poprawnego peer DATA/IDLE `SUSPECT`, po 1 s `OFFLINE`,
+  po 5 s rozmyślne porzucenie ciepłego wznowienia i świeży handshake.
+  Przy krótszym zanikaniu SID, sekwencje i niepotwierdzone porcje
+  pozostają bez zmian. B respektuje to samo rozróżnienie bez inicjowania
+  transakcji nRF. OFFLINE A wysyła IDLE co 20 ms.
+- `UartReliableStream::make(...,permitData)` pozwala wysłać samo IDLE
+  z aktualnym ACK, bez poboru nowych bajtów i bez replay starej DATA.
+  `PpEchoRampPort::service(now,permit)` atomowo zatrzymuje lokalny
+  generator, nie nadpisując kolejki ani nie gubiąc numerów wzorca.
+- `HostFlowStatus` definiuje **dwa bajty lokalne**, nie radiowe:
+  STOP/UNCERTAIN + wolne miejsce kolejki TX, PEER_OFFLINE/RX_PRESSURE +
+  wolne miejsce sinku RX. Domyślny tryb wielokrotnego użytku **HOLD**
+  wstrzymuje niepewne porcje do świadomej decyzji hosta. **Tymczasowy
+  eksperyment** wybiera `RETRY_AT_LEAST_ONCE`, aby automatycznie wznowić
+  test po resecie, zachowując flagę możliwego zdublowania bajtów.
+- Krótkie linie diagnostyczne o zmianach stanu poza dotychczasowym
+  1 Hz CPS. Nie ma zmian 8B nagłówka, 24B opaque BODY, ACK Payload,
+  radia 1 Mb/s, UART 115200, EEPROM boot, pinów i F7/F12.
+- **Host PASS:** 18 automatycznie odnalezionych testów C++11, w tym nowe
+  `pp_recovery_control_test`, `pp_recovery_handshake_test`, wydłużenie
+  `pp_echo_ramp_test`. Symulacja obejmuje reset samego A, samego B, obu,
+  ciepłe odzyskanie starego SID, 5 s braku kontaktu, zapełnienie,
+  wstrzymanie producenta i rollover32. **Brak cross-build AVR oraz testu
+  fizycznego:** lokalnie nie było `avr-g++` ani fizycznych RF-Nano.
+- Instrukcja F7/F12 i próby na obu urządzeniach: `pp-recovery-v2.md`.
+- Na tej gałęzi rozszerzono filtrowanie uruchomień GitHub Actions `push`
+  z `main` także na `experiment/**`, żeby eksperyment zidentyfikował
+  niepowodzenie AVR-GCC PRZED ręcznym flashowaniem; produkcyjna gałąź
+  nadal jest niezależna. Wyniku CI nie uznawać za próbę radiową.

@@ -61,22 +61,25 @@ public:
                                      PairedFrame::MAX_BODY);
     }
 
-    bool make(PairedLink& link,uint8_t* dst,uint8_t& width) {
+    // A frozen link still needs IDLE probes carrying the last accepted ACK,
+    // but MUST NOT drain host input or replay stale DATA during RF silence.
+    bool make(PairedLink& link,uint8_t* dst,uint8_t& width,
+              bool permitData=true) {
         if(session_==0||link.sessionId()!=session_)return false;
         uint8_t body[PairedFrame::MAX_BODY];
         uint8_t seq=nextSeq_;
         uint8_t count=0;
         const uint8_t peerCredit=link.peerCredit();
 
-        if(outstanding_!=0 && noAckTurns_<255)++noAckTurns_;
-        if(outstanding_!=0 && replayCount_==0 &&
+        if(permitData && outstanding_!=0 && noAckTurns_<255)++noAckTurns_;
+        if(permitData && outstanding_!=0 && replayCount_==0 &&
            noAckTurns_>=REPLAY_AFTER) {
             replaySeq_=baseSeq_;
             replayCount_=outstanding_;
             noAckTurns_=0;
         }
 
-        if(replayCount_!=0) {
+        if(permitData && replayCount_!=0) {
             seq=replaySeq_;
             count=slotLength_[slotIndex(seq)];
             for(uint8_t i=0;i<count;++i)
@@ -84,7 +87,7 @@ public:
             ++replaySeq_;
             --replayCount_;
             ++retransmits_;
-        } else if(outstanding_<WINDOW && outstanding_<peerCredit &&
+        } else if(permitData && outstanding_<WINDOW && outstanding_<peerCredit &&
                   port_.available()!=0) {
             seq=nextSeq_;
             uint8_t value=0;
