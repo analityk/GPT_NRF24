@@ -23,7 +23,7 @@ struct Endpoint {
         if(!session.active())return session.prepare(out,width);
         if(link.sessionId()!=session.sid())
             link.configure(leader,session.sid());
-        return link.make(PairedFrame::Kind::IDLE,0,1,0,0,out,width)
+        return link.makeStream(0,0xFF,1,0,0,out,width)
                ==PairedFrame::Error::OK;
     }
     PairedSession::Event accept(const uint8_t (&frame)[32],uint8_t width) {
@@ -37,7 +37,7 @@ struct Endpoint {
             link.configure(leader,session.sid());
         if(view.header.kind()!=PairedFrame::Kind::CONTROL &&
            session.active() && view.header.sessionId==session.sid())
-            (void)link.receive(view);
+            (void)link.observeStream(view);
         return result;
     }
 };
