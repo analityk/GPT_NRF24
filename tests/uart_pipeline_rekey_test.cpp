@@ -43,7 +43,7 @@ struct Node {
     void take(const uint8_t* frame,uint8_t n){
         PairedFrame::View v;
         assert(PairedFrame::decode(frame,n,v)==PairedFrame::Error::OK);
-        if(link.receive(v)==PairedLink::Receipt::NEW_FRAME)
+        if(link.observeStream(v)!=PairedLink::Receipt::WRONG_SESSION)
             (void)stream.accept(v);
     }
 };
@@ -98,8 +98,9 @@ int main() {
     a.make();
     PairedFrame::View f;
     assert(PairedFrame::decode(a.bytes,a.width,f)==PairedFrame::Error::OK);
-    assert(f.length==24 && f.body[0]==0);
-    assert(std::memcmp(f.body+2,pending,22)==0);
+    // All 24 BODY bytes are user data, with DATA_SEQ and ACK in header.
+    assert(f.length==24 && f.header.txSeq==0);
+    assert(std::memcmp(f.body,pending,24)==0);
     b.take(a.bytes,a.width);
     a.make();b.take(a.bytes,a.width);
     a.make();b.take(a.bytes,a.width);
