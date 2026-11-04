@@ -229,6 +229,9 @@
     <None Include="paired_frame.h">
       <SubType>compile</SubType>
     </None>
+    <None Include="burst20_report.h">
+      <SubType>compile</SubType>
+    </None>
     <None Include="burst20_schedule.h">
       <SubType>compile</SubType>
     </None>

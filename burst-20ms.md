@@ -188,6 +188,14 @@ a nie dwie alternatywne kopie globalnych sterowników.
   `tests/profile_select_test.cpp`: testy hostowe C++11.
 - PP snapshot: gałąź `checkpoint/pp-2026-11-04`
   przy commit `784fd83dc1000c09af88c6ff0a92c5469e1dce59`.
-- **NIE ma jeszcze**: Burst PHY (przełączanie PRX/PTX/NO_ACK), ramki
-  BURST DATA/REPORT w produkcyjnym kodzie, synchronizacji zegarów,
-  obsługi UART w BURST ani dispatchu A1 w `main.cpp`.
+- `GPT_NRF2401/burst20_report.h`: testowalny C++11 codec 24B
+  końcowego REPORT z walidacją, bieżącym CRC32/ISO-HDLC,
+  32-bitowym bitmapowym potwierdzeniem innego bloku. Test znanego
+  CRC32(`123456789`)=0xCBF43926 oraz pełne pakowanie
+  `PairedFrame` 8+24B w `tests/burst20_report_test.cpp`.
+- **NIE ma jeszcze**: Burst PHY (przełączanie PRX/PTX/NO_ACK),
+  nadawania i odbioru BURST DATA/REPORT na prawdziwym nRF,
+  synchronizacji zegarów, obsługi UART w BURST ani dispatchu
+  A1 w `main.cpp`.
+
+**Zatwierdzona semantyka kodeka, nie uruchomionej transmisji:** kod zwraca `false` na złe VERSION, brak 24B, niepoprawny udział 5/10/15, niewłaściwe liczniki/owner i niezerowy bajt rezerwy, bez mutacji obiektu wyjściowego. CRC32 liczony przyrostowo, w endianie LE na drucie; bitmapa idempotentna po duplikacie DATA, 32 pozycje. Rzeczywiste raporty będą wymagały powiązania z radio `TX_SEQ` i cyklem sesji.

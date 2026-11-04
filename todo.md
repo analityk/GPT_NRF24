@@ -39,7 +39,8 @@
 - [x] Dodać `ProfileSelect`: polityka strap A1 pull-up HIGH=PP, GND=BURST20 z dwukrotnym odczytem; test hostowy.
 - [ ] Wdrażać osobny `NrfBurstPhy`, nie zmieniać ani nie zastępować działającego `NrfAckPayloadPhy` PP. DATA bez ACK (pierwszy wariant), ramka REPORT w zarezerwowanym oknie, zakończenie próby na deadline.
 - [ ] Wdrożyć synchronizację okresu 20ms lider A↔B przez kontrolę on-air, fail-closed przy utracie fazy; testy utraty REPORT, opóźnienia IRQ, drift, resetu jednej/obu płytek.
-- [ ] Wdrożyć `BurstReport` do 24B BODY, liczby/CRC32/bitmapa odbioru poprzedniego bloku, testy rollover i zakodowanej długości/CRC.
+- [x] Dodać `Burst20Report` codec do 24B BODY, liczby/CRC32/bitmapa odbioru poprzedniego bloku oraz testy długości/wariantu, serializacji i CRC32=0xCBF43926 (host PASS).
+- [ ] Zintegrować `Burst20Report` z rzeczywistym radio driverem i synchronizacją cyklu, w tym obsługę utraconego raportu, rollover cyklu, symetryczne potwierdzenie poprzednich bloków.
 - [ ] Wspólny firmwarowy boot dispatcher PP/BURST20 po A1 dopiero gdy BURST profile jest kompletny; obecny main **nie czyta jeszcze A1 i nadal uruchamia PP niezależnie od strapu**.
 - [ ] Zmierzyć na fizycznych RF-Nano pakiety/5ms i czy ramka REPORT mieści się w przeznaczonym 1ms, przesunięcie roli 0,3ms, 10/10 i następnie 5/15; nie interpretować modelu jako pomiaru.
 - [ ] Dla 5/15 przeprojektować świadomie UART ingress: 15ms przy 115200 8N1 to ~173B, więcej niż 127B RX ring; zatwierdzić flow control lub większy bufor/mniejszy baud na BURST bez zmieniania PP.
