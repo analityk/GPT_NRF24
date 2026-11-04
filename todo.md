@@ -21,12 +21,19 @@
   SID na obu terminalach, stabilnym ~14,7 kB/s oraz `ret=bad=0`.
   Żaden z trzech przypadków nie wymaga ręcznego `w/s`; chwilowe stany
   `cold/uncertain` podczas negocjacji nie utrzymują się jako plateau.
+- [x] **Obie płytki w rzeczywiście metalizowanych torebkach ESD:**
+  `sid=53023`, `up=1`, ~14,4–14,7 kB/s; na A `arc≈9–43` (sprzętowe
+  retry), `ret=bad=0`. Na B przejściowe `link=2` (SUSPECT) i powrót
+  `link=1` (HEALTHY), `warm=1` bez zmiany SID. To częściowe osłabienie
+  RF, a nie potwierdzony pełny zanik łącza.
 - [ ] Udokumentować wynik F7/AVR-GCC (kompilator niedostępny lokalnie)
   oraz osobno przetestować re-open portu B przy stale otwartym A,
   w obu kolejnościach A→B i B→A, odczekując ≥15 s po nowym SID.
 - [ ] Przebadać workiem metalizowanym ponowny pełny strumień po
-  krótkim i długim osłabieniu, osobno utrata zasilania i reset obu.
-  Rejestrować te same liczniki, bez dokładania diagnostyki do PHY.
+  krótkim i długim osłabieniu **aż do rzeczywistej utraty odbioru**,
+  osobno utrata zasilania i reset obu. Rejestrować te same liczniki,
+  bez dokładania diagnostyki do PHY. Samo zamknięcie w torebkach
+  nie przerwało transmisji, więc ten przypadek pozostaje otwarty.
 
 ## Korekta częściowego ACK podczas powtórek po rekey — `experiment/pp-rekey-replay`
 

@@ -492,3 +492,21 @@ Przyszłe wpisy powinny zawierać datę, zakres faktycznie wykonanej zmiany, com
   ponownego otwarcia B przy otwartym A ani binarnego porównania
   strumieni. Brak lokalnego AVR-GCC i logu F7; test sprzętowy nie
   zastępuje formalnego raportu kompilacji.
+
+## 2026-11-04 — dwie RF-Nano w metalizowanych torebkach ESD
+
+- Właściciel umieścił **obie** aktywne płytki w silnie metalizowanych
+  torebkach po komponentach wrażliwych na ESD. Zrzut RealTerm:
+  `obraz(20261104-205556).png`. Nie podano pomiaru tłumienia w dB,
+  szczelności zamknięć ani odległości anten.
+- Łącze nadal osiąga ~14,4–14,7 kB/s w obu kierunkach; wspólne
+  `sid=53023`, `up=1`, aplikacyjne `ret=0`, `bad=0`.
+- A zgłasza sprzętowe ponowienia `arc≈9–43` w kolejnych próbkach;
+  B pokazuje krótkie `link=2` (`SUSPECT`) i powrót `link=1`
+  (`HEALTHY`), `warm=1`, `cold=2`, `uncertain=1`, bez zmiany SID.
+  `uncertain=1` mogło pochodzić jeszcze z wcześniejszych resetów.
+- Wniosek ograniczony: poprawna ramka wznowiła ten sam stan po
+  krótkiej przerwie (warm recovery); metalizowane torebki nie
+  spowodowały w tej próbie trwałego zaniku RF ani zimnej negocjacji.
+  Nie jest to jeszcze test długiej utraty zasięgu lub integralności
+  strumienia bajtów.

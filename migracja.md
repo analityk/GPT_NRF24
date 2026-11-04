@@ -7,8 +7,14 @@ po starcie `sid=49792`, po resecie B `sid=52044`, po resecie A
 `uncertain`, ale nie pozostaje trwały stan ~9 kB/s ani potrzeba
 ręcznego `w/s`. To pozytywna walidacja *tych trzech scenariuszy*,
 nie dowód bezstratności UART, exactly-once czy odporności na
-długotrwały brak radia. Otwarty pozostaje re-open B przy działającym A,
-test osłabienia sygnału i zapis wyniku kompilacji AVR-GCC/F7.
+długotrwały brak radia. Dodatkowa próba obu płytek w metalizowanych
+torebkach ESD utrzymała `sid=53023`, `up=1`, ~14,4–14,7 kB/s i
+`ret=bad=0`, lecz A rejestrowało sprzętowe `arc≈9–43`, a B chwilowo
+przeszło `link=2` (SUSPECT)→`link=1` (HEALTHY), `warm=1`.
+To dowodzi ciepłego powrotu po krótkiej przerwie poprawnych ramek,
+nie pełnej utraty zasięgu; brak pomiaru tłumienia i szczelności osłon.
+Otwarte: re-open B przy działającym A, kontrolowana dłuższa utrata
+zasięgu i zapis wyniku kompilacji AVR-GCC/F7.
 
 **Poprzedni punkt kontynuacji: automatyczne wygaszanie lawiny.**
 Na płytkach wcześniejszy kod po samotnym ponownym uruchomieniu B mógł
