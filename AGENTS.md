@@ -45,6 +45,26 @@ W `main` utrzymujemy jeden program `GPT_NRF2401/main.cpp`. Kodek (`paired_frame.
 5. Nie nadpisuj niezwiązanych zmian użytkownika ani nie wykonuj destrukcyjnych operacji Git.
 6. Po zakończeniu pracy aktualizuj `todo.md`, `history.md` i, gdy zmienia się punkt kontynuacji, `migracja.md`.
 
+## Polityka gałęzi Git — obowiązkowa zgoda właściciela
+
+- **Jedno zadanie, jedna gałąź robocza.** Kolejne diagnozy, poprawki,
+  nieudane próby i testy tego samego problemu wykonuj na tej samej
+  gałęzi. Do zachowania historii i powrotu do poprzedniej wersji służą
+  commity; nie zakładaj nowego brancha przy każdej iteracji.
+- **Przed utworzeniem jakiejkolwiek nowej gałęzi najpierw zapytaj
+  właściciela o sens jej tworzenia ORAZ o jej nazwę.** Przedstaw
+  konkretny powód wydzielenia gałęzi i możliwość pozostania na
+  obecnej. Poczekaj na jednoznaczną zgodę zarówno na utworzenie,
+  jak i na uzgodnioną nazwę. Nie zgaduj nazwy i nie traktuj ogólnego
+  pozwolenia na edycję repozytorium jako zgody na nowe gałęzie.
+- Jeżeli właściciel wskazał gałąź, kontynuuj na niej. Jeśli nie wiadomo,
+  która gałąź jest właściwa, ustal to z właścicielem przed zapisem zmian;
+  nie mnoż eksperymentów dla własnej wygody.
+- Nie pozostawiaj kolejnych porzuconych gałęzi eksperymentalnych jako
+  domyślnego sposobu pracy. Scalenie, usunięcie lub przeniesienie
+  istniejących gałęzi wymaga osobnej, wyraźnej zgody właściciela,
+  po sprawdzeniu ich zawartości i możliwości odzyskania historii.
+
 ## Odpowiedzialności dokumentów
 
 - `goal.md` — wymagany rezultat i kryteria odbioru.
