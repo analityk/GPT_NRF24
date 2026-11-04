@@ -70,3 +70,7 @@ Po ręcznym wgraniu tego samego HEX-a na obie RF-Nano zaobserwuj przez kilka sek
 ### Zmierzony narzut handshake'u (2026-11-04)
 
 Przy aktywnej negocjowanej sesji rdzeń uzyskuje około **612–613 wymian/s**, wobec 625/s wcześniejszej wersji. Pełne BODY 24 B odpowiada około **14,7 kB/s na kierunek**; średnia repetycja ~1,63 ms. Przejściowo po resecie jednej płytki pojawiają się `MAX_RT` i trzy automatyczne retransmisje na nieudaną wymianę, po czym obie strony wracają do wspólnego nowego SID bez ręcznej interwencji. To wynik na sprzęcie, nie pomiar czasu CPU ani end-to-end transfer UART.
+
+### Restart obu płytek i różnica między parą a sesją (2026-11-04)
+
+Fizycznie potwierdzono również **restart obu RF-Nano**: terminale pokazują oba bannery i nowy wspólny `SID=13618`, `ST=4 R=0`, powrót do około 613 wymian/s. Identyfikator `SID` jest celowo nowy po restarcie: służy odseparowaniu aktywnej sesji od starych pakietów i ACK Payload. Stała tożsamość urządzenia/pary powinna być w przyszłości przechowywana **oddzielnie** (np. EEPROM) i nie wymuszać stałej wartości `SID`.

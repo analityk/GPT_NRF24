@@ -13,7 +13,7 @@
 
 - [x] Kod negocjacji `SESSION_ID16` z epokami EEPROM i próbami, BEACON/HELLO/WELCOME/READY/READY_ACK, automatyczny rekey A/B po timeoutach, testy hostowe i kompilacja AVR.
 - [x] **Fizycznie potwierdzony handshake i dwa pojedyncze resety:** A i B automatycznie wracają do zgodnego niezerowego SID i ST=4. Po resecie B wspólny SID=12715, po resecie A wspólny SID=16598; działający peer zwiększa R do 1, restartujący wraca z R=0. Stabilnie 612–613 wymian/s (2026-11-04).
-- [ ] Osobno sprawdzić **jednoczesny reset obu RF-Nano** i automatyczny powrót do ST=4, zgodnego nowego SID; nie był częścią pokazanych testów.
+- [x] **Jednoczesny restart obu RF-Nano potwierdzony**: dwa komunikaty startowe, nowy wspólny SID=13618 (poprzednio 16598), ST=4 i R=0 na obu, ~612–613 wymian/s po recovery (2026-11-04).
 - [x] Implementacja unieważniania starych ACK Payload na zmianie epoki, odrzucania opóźnionych BEACON i duplikatów, stabilnego DISCOVER podczas braku partnera; testy hostowe PASS.
 - [x] Model pełnego potoku ACK Payload z opóźnioną odpowiedzią: sparowanie, 300 wymian, restart A/B/obu, utracone ramki i ACK oraz ponowne negocjacje; `tests/paired_session_pipeline_test.cpp`, host PASS.
 - [ ] Zweryfikować fizycznie błędy `MAX_RT`, chwilowe rozłączenie RF, opóźnione ACK i zachowanie FIFO przy resetach. Potwierdzić, że nie występują trwałe dwie różne aktywne sesje.
@@ -27,3 +27,5 @@
 ## Stan
 
 Rdzeń 8+24 fizycznie przetestowany w nominalnych warunkach. **Powrót po pojedynczym resecie A/B jest zaliczony sprzętowo; reset jednoczesny i pełna kontrola przepływu pozostają otwarte.** Jeden projekt, jeden `main.cpp`, ręczne F7/F12.
+
+- [ ] Podczas projektowania parowania rozważyć **niezmienny identyfikator urządzenia/pary zapisany w EEPROM**, odrębny od zmiennego SID16 konkretnej sesji. Nie naruszać ochrony przed zaległym ACK Payload po restarcie.
