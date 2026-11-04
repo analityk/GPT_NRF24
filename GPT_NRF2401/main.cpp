@@ -6,9 +6,11 @@
  * not commands; outgoing USART bytes are ONLY data received from peer.
  * The negotiated radio SID and the hardware DATA/ACK Payload path remain.
  *
- * UartReliableStream adds independent app-level DATA_SEQ and ACK_SEQ within
- * the opaque BODY. It never treats nRF TX_DS as proof of UART delivery.
- * Every 32B radio frame holds up to 22 bytes of original UART data.
+ * UartReliableStream pipelines up to four app-level DATA_SEQ segments
+ * and cumulative ACK_SEQ in opaque BODY; there is no stop-and-wait and
+ * no application-level delay between consecutive RF packets.
+ * The PHY always triggers the next DATA/ACK Payload transaction, even
+ * when both UART streams are empty. Full packet: 22 user bytes per side.
  *
  * USART input has no RTS/CTS: prolonged offered load above radio goodput
  * or RF outage can overflow the 127B USART RX ring. Reported as counters
@@ -46,7 +48,7 @@ static PairedSession session(true,PairedSession::Identity());
 static UartReliableStream<UART> stream(uart);
 static bool isLeader=false;
 static uint32_t lastPeerProgress=0;
-static uint32_t lastPeerData=0;
+
 static uint16_t recoveryCount=0;
 static uint16_t radioErrors=0;
 static bool replaceAck=false;
@@ -116,30 +118,20 @@ static void processFrame(uint8_t width) {
     const PairedLink::Receipt receipt=linkState.receive(view);
     if(receipt==PairedLink::Receipt::WRONG_SESSION)return;
     lastPeerProgress=ticks.now();
-    if(receipt==PairedLink::Receipt::NEW_FRAME &&
-       stream.accept(view))
-        lastPeerData=ticks.now();
+    if(receipt==PairedLink::Receipt::NEW_FRAME)
+        (void)stream.accept(view);
 }
 
 static void runA() {
     if(!phy.beginPtx())fatal();
     delay.ms(150); // one-time peer power-on, never per packet
-    uint32_t lastExchange=0;
-    lastPeerData=ticks.now();
+    // Continuous DATA/ACK Payload ping-pong, even when neither UART has
+    // bytes. The PHY alone enforces the 130us ESB turnaround guard.
     for(;;) {
-        const uint32_t now=ticks.now();
-        // In idle, A must still trigger PRX ACK Payload for unsolicited
-        // data from B. Poll about every 10ms; remain in the fast pipeline
-        // for 60ms after any B user payload or while A has UART input.
-        if(session.active() && !stream.hasWork() &&
-           static_cast<uint32_t>(now-lastPeerData)>120000UL &&
-           static_cast<uint32_t>(now-lastExchange)<20000UL)
-            continue;
         uint8_t width=0;
         if(!makePacket(packet,width))fatal();
         uint8_t incomingWidth=0;
         const AckPhy::TxResult tx=phy.transfer(packet,width,incoming,incomingWidth);
-        lastExchange=ticks.now();
         linkState.notePtxRetries(tx.retries);
         if(tx.code==AckPhy::TxCode::ACK_WITH_DATA)
             processFrame(incomingWidth);

@@ -3,135 +3,171 @@
 #include <stdint.h>
 #include "paired_link.h"
 
-// Optional UART transport above the opaque 24-byte paired-link BODY.
-// Two octets of transport control plus 0..22 arbitrary UART octets.
-// Each direction has its OWN DATA sequence and application ACK, independent
-// from the radio frame TX_SEQ/RX_LAST and from hardware ACK/ACK Payload.
-//
-// Stop-and-wait: at most one unacknowledged segment per direction. The
-// outbound segment is retained across RF loss and session renegotiation,
-// as long as THIS MCU remains powered. Sink acceptance is atomic via
-// Port::writeAll, so an overflowing UART TX queue never acknowledges data.
-// No heap, AVR headers, special byte values, logging, or project specifics.
-//
-// Port concept: read(uint8_t&), available(), freeSpace(),
-//               writeAll(const uint8_t*,uint8_t).
+// Full-rate bidirectional UART stream over opaque 24-byte RF BODY.
+// 2B metadata (DATA_SEQ + cumulative APP_ACK) and up to 22B raw bytes.
+// Four unacknowledged segments per direction: new data can be emitted on
+// successive RF exchanges while older segments await delayed ACK Payload.
+// Go-back-N on ACK timeout (in EXCHANGES, not milliseconds), no heap.
+// Received data is committed only in order, atomically by Port::writeAll.
+// All state is independent of AVR, UART registers, and radio implementation.
 template<class Port>
 class UartReliableStream {
 public:
     static const uint8_t CONTROL_BYTES=2;
     static const uint8_t MAX_USER_BYTES=PairedFrame::MAX_BODY-CONTROL_BYTES;
+    static const uint8_t WINDOW=4;
+    static const uint8_t REPLAY_AFTER=8; // multiple queued RF/ACK turns
 
     explicit UartReliableStream(Port& port)
-        : port_(port),session_(0),sendSeq_(0),nextReceive_(0),
-          pending_(false),pendingLength_(0),
-          acceptedBytes_(0),acknowledgedBytes_(0),
-          duplicates_(0),blocked_(0),badFrames_(0) {}
+       :port_(port),session_(0),baseSeq_(0),nextSeq_(0),
+        recvNext_(0),outstanding_(0),replayCount_(0),replaySeq_(0),
+        noAckTurns_(0),acceptedBytes_(0),acknowledgedBytes_(0),
+        duplicates_(0),blocked_(0),badFrames_(0),retransmits_(0) {
+        for(uint8_t i=0;i<WINDOW;++i)slotLength_[i]=0;
+    }
 
-    // Changes sequence-space epoch, but never discards bytes already read
-    // from the USART RX queue into the pending segment.
+    // A new RF session starts a new 8-bit stream numbering epoch.
+    // Keep ALL unacknowledged segments in their original byte order;
+    // a surviving sender can retransmit them across peer reset.
     void beginSession(uint16_t sid) {
-        if (session_==sid) return;
+        if(session_==sid)return;
         session_=sid;
-        sendSeq_=0;
-        nextReceive_=0;
+        baseSeq_=0;
+        nextSeq_=outstanding_;
+        recvNext_=0;
+        noAckTurns_=0;
+        replayCount_=outstanding_;
+        replaySeq_=0;
+        // Physical data already accepted in an old epoch may be delivered
+        // again if its final ACK was lost. Exactly-once across reset needs
+        // a separate durable protocol, not this volatile UART transport.
     }
-    void disconnect() {beginSession(0);}
+    void disconnect(){beginSession(0);}
+    bool hasPending()const{return outstanding_!=0;}
+    bool hasInput()const{return port_.available()!=0;}
+    bool hasWork()const{return hasPending()||hasInput();}
+    uint16_t acceptedBytes()const{return acceptedBytes_;}
+    uint16_t acknowledgedBytes()const{return acknowledgedBytes_;}
+    uint16_t duplicates()const{return duplicates_;}
+    uint16_t blocked()const{return blocked_;}
+    uint16_t badFrames()const{return badFrames_;}
+    uint16_t retransmits()const{return retransmits_;}
+    uint8_t outstanding()const{return outstanding_;}
 
-    bool hasPending() const {return pending_;}
-    bool hasInput() const {return port_.available()!=0;}
-    bool hasWork() const {return pending_ || hasInput();}
-    uint16_t acceptedBytes() const {return acceptedBytes_;}
-    uint16_t acknowledgedBytes() const {return acknowledgedBytes_;}
-    uint16_t duplicates() const {return duplicates_;}
-    uint16_t blocked() const {return blocked_;}
-    uint16_t badFrames() const {return badFrames_;}
-
-    // Receiver advertises full-size 24-byte reservation units. Actual
-    // stream segments use <=22 bytes, so the credit is conservative.
-    // Each incoming segment still passes the authoritative atomic writeAll
-    // check: stale credits may never overcommit the actual UART TX queue.
-    uint8_t credit() const {
+    // Advertise actual sink headroom in conservative 24B units.
+    // Incoming segments are still checked by an atomic UART writeAll.
+    uint8_t credit()const{
         return static_cast<uint8_t>(port_.freeSpace()/
-                                   PairedFrame::MAX_BODY);
+                                     PairedFrame::MAX_BODY);
     }
 
-    // Every active radio exchange contains transport ACK. If idle, DATA
-    // with two control octets (RF DPL width=10) replaces the old 8B IDLE.
-    // A pending segment is retransmitted with its ORIGINAL data sequence,
-    // even if a hardware ACK was received but app-level ACK was lost.
     bool make(PairedLink& link,uint8_t* dst,uint8_t& width) {
-        if(session_==0 || link.sessionId()!=session_)return false;
-        if(!pending_ && link.peerCredit()!=0)stageInput();
+        if(session_==0||link.sessionId()!=session_)return false;
         uint8_t body[PairedFrame::MAX_BODY];
-        body[0]=sendSeq_;
-        body[1]=static_cast<uint8_t>(nextReceive_-1U);
-        for(uint8_t i=0;i<pendingLength_ && pending_;++i)
-            body[CONTROL_BYTES+i]=pendingBytes_[i];
-        const uint8_t length=static_cast<uint8_t>(
-            CONTROL_BYTES+(pending_?pendingLength_:0));
-        return link.make(PairedFrame::Kind::DATA,0,credit(),body,length,
+        uint8_t seq=nextSeq_;
+        uint8_t count=0;
+        const uint8_t peerCredit=link.peerCredit();
+
+        if(outstanding_!=0 && noAckTurns_<255)++noAckTurns_;
+        if(outstanding_!=0 && replayCount_==0 &&
+           noAckTurns_>=REPLAY_AFTER) {
+            replaySeq_=baseSeq_;
+            replayCount_=outstanding_;
+            noAckTurns_=0;
+        }
+
+        if(replayCount_!=0) {
+            seq=replaySeq_;
+            count=slotLength_[slotIndex(seq)];
+            for(uint8_t i=0;i<count;++i)
+                body[CONTROL_BYTES+i]=slots_[slotIndex(seq)][i];
+            ++replaySeq_;
+            --replayCount_;
+            ++retransmits_;
+        } else if(outstanding_<WINDOW && outstanding_<peerCredit &&
+                  port_.available()!=0) {
+            seq=nextSeq_;
+            uint8_t value=0;
+            while(count<MAX_USER_BYTES && port_.read(value))
+                slots_[slotIndex(seq)][count++]=value;
+            if(count) {
+                slotLength_[slotIndex(seq)]=count;
+                ++nextSeq_;
+                ++outstanding_;
+                for(uint8_t i=0;i<count;++i)
+                    body[CONTROL_BYTES+i]=slots_[slotIndex(seq)][i];
+            }
+        }
+        body[0]=seq;
+        body[1]=static_cast<uint8_t>(recvNext_-1U);
+        return link.make(PairedFrame::Kind::DATA,0,credit(),body,
+                         static_cast<uint8_t>(CONTROL_BYTES+count),
                          dst,width)==PairedFrame::Error::OK;
     }
 
-    // Only call for a NEW, validated RF packet of the current session.
-    // Return true if the peer attempted to send user data; useful for the
-    // initiator's idle->fast polling decision.
-    bool accept(const PairedFrame::View& frame) {
-        if(session_==0 || frame.header.sessionId!=session_ ||
-           frame.header.kind()!=PairedFrame::Kind::DATA)return false;
-        if(frame.length<CONTROL_BYTES || !frame.body) {
+    // Return whether a nonempty user segment was received. This is NOT
+    // proof of success: a full sink may refuse it and leave ACK unchanged.
+    bool accept(const PairedFrame::View& f) {
+        if(session_==0 || f.header.sessionId!=session_ ||
+           f.header.kind()!=PairedFrame::Kind::DATA)return false;
+        if(f.length<CONTROL_BYTES || !f.body) {
             ++badFrames_;
             return false;
         }
+        acceptAck(f.body[1]);
 
-        // ACK of bytes is completely independent of the RF ACK and of
-        // RX_LAST (which reports radio reception, not USART acceptance).
-        if(pending_ && frame.body[1]==sendSeq_) {
-            acknowledgedBytes_=static_cast<uint16_t>(
-                acknowledgedBytes_+pendingLength_);
-            pending_=false;
-            pendingLength_=0;
-            ++sendSeq_;
-        }
-
-        const uint8_t count=static_cast<uint8_t>(
-            frame.length-CONTROL_BYTES);
-        if(count==0)return false;
-        const uint8_t seq=frame.body[0];
-        if(seq==nextReceive_) {
-            if(port_.writeAll(frame.body+CONTROL_BYTES,count)) {
-                ++nextReceive_;
-                acceptedBytes_=static_cast<uint16_t>(acceptedBytes_+count);
+        const uint8_t n=static_cast<uint8_t>(f.length-CONTROL_BYTES);
+        if(!n)return false;
+        const uint8_t seq=f.body[0];
+        if(seq==recvNext_) {
+            if(port_.writeAll(f.body+CONTROL_BYTES,n)) {
+                ++recvNext_;
+                acceptedBytes_=static_cast<uint16_t>(acceptedBytes_+n);
             } else {
-                // A retry is required; NEVER advertise ACK for this data.
-                ++blocked_;
+                ++blocked_; // NEVER ACK undelivered user bytes
             }
-        } else if(seq==static_cast<uint8_t>(nextReceive_-1U)) {
+        } else if(static_cast<uint8_t>(recvNext_-seq)<=WINDOW) {
+            // A duplicate inside our bounded sender window.
             ++duplicates_;
         } else {
-            // Stop-and-wait prohibits future data; neither acknowledge
-            // nor mutate any UART state for stale/out-of-order segments.
+            // Out-of-order future frame: Go-back-N receiver. Sender must
+            // replay the missing oldest segment before advancement.
             ++badFrames_;
         }
         return true;
     }
-private:
-    void stageInput() {
-        uint8_t value=0;
-        pendingLength_=0;
-        while(pendingLength_<MAX_USER_BYTES && port_.read(value))
-            pendingBytes_[pendingLength_++]=value;
-        pending_=(pendingLength_!=0);
-    }
 
+private:
+    static uint8_t slotIndex(uint8_t seq) {
+        return static_cast<uint8_t>(seq%WINDOW);
+    }
+    void acceptAck(uint8_t ack) {
+        if(!outstanding_)return;
+        // Modulo arithmetic valid with WINDOW<128 and non-aliased epochs.
+        const uint8_t distance=static_cast<uint8_t>(ack-baseSeq_);
+        if(distance>=outstanding_)return; // stale/future/unknown ACK
+        const uint8_t n=static_cast<uint8_t>(distance+1U);
+        for(uint8_t i=0;i<n;++i) {
+            const uint8_t slot=slotIndex(static_cast<uint8_t>(baseSeq_+i));
+            acknowledgedBytes_=static_cast<uint16_t>(
+                acknowledgedBytes_+slotLength_[slot]);
+            slotLength_[slot]=0;
+        }
+        baseSeq_=static_cast<uint8_t>(baseSeq_+n);
+        outstanding_=static_cast<uint8_t>(outstanding_-n);
+        noAckTurns_=0;
+        // The peer has advanced its contiguous prefix. Any outstanding
+        // gap is handled by normal retransmission on the next timeout.
+        replayCount_=0;
+        replaySeq_=baseSeq_;
+    }
     Port& port_;
     uint16_t session_;
-    uint8_t sendSeq_,nextReceive_;
-    bool pending_;
-    uint8_t pendingLength_;
-    uint8_t pendingBytes_[MAX_USER_BYTES];
+    uint8_t baseSeq_,nextSeq_,recvNext_,outstanding_;
+    uint8_t replayCount_,replaySeq_,noAckTurns_;
+    uint8_t slots_[WINDOW][MAX_USER_BYTES];
+    uint8_t slotLength_[WINDOW];
     uint16_t acceptedBytes_,acknowledgedBytes_;
-    uint16_t duplicates_,blocked_,badFrames_;
+    uint16_t duplicates_,blocked_,badFrames_,retransmits_;
 };
 #endif
