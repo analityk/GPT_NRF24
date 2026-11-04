@@ -1,4 +1,16 @@
-**NAJNOWSZY PUNKT KONTYNUACJI: 2026-11-04, eksperyment `experiment/pp-window-drain`.**
+**NAJNOWSZY PUNKT KONTYNUACJI: 2026-11-04, test fizyczny `experiment/pp-window-drain`.**
+Właściciel uruchomił rzeczywiste RF-Nano kolejno B→A, następnie osobno
+zresetował B i osobno A. Na trzech zrzutach RealTerm obie strony
+uzgadniają wspólny SID i wracają do ~14,7 kB/s z `ret=bad=0`:
+po starcie `sid=49792`, po resecie B `sid=52044`, po resecie A
+`sid=53023`. Podczas resetów występują przejściowe `cold` i
+`uncertain`, ale nie pozostaje trwały stan ~9 kB/s ani potrzeba
+ręcznego `w/s`. To pozytywna walidacja *tych trzech scenariuszy*,
+nie dowód bezstratności UART, exactly-once czy odporności na
+długotrwały brak radia. Otwarty pozostaje re-open B przy działającym A,
+test osłabienia sygnału i zapis wyniku kompilacji AVR-GCC/F7.
+
+**Poprzedni punkt kontynuacji: automatyczne wygaszanie lawiny.**
 Na płytkach wcześniejszy kod po samotnym ponownym uruchomieniu B mógł
 wejść w trwałe ~9 kB/s, `B ret≈378/s` i `A bad≈378/s`. Zmniejszenie
 obciążenia `w` do ~100 CPS na 5–10 s i powrót `s` do maksimum bez
@@ -16,9 +28,9 @@ nie ma dodatkowych bajtów RF, ręcznych resetów ani opóźnień timerów.
 Nowy `pp_recovery_drain_test` najpierw padał na poprzednim kodzie,
 ponieważ świeży DATA3 przeskakiwał przed potwierdzeniem zaległych;
 po zmianie wszystkie **23 testy hostowe PASS**. Brak AVR-GCC w lokalnym
-środowisku; następny krok F7/F12 i fizyczna próba resetu samego B pod
-obciążeniem, bez manipulacji `s/w`. Wcześniejszy branch i produkcja
-zachowane do porównań.
+środowisku. Fizyczny reset B i A pod obciążeniem został już sprawdzony
+na wariancie `pp-window-drain`, bez manipulacji `s/w` (powyżej).
+Wcześniejszy branch i produkcja zachowane do porównań.
 
 **Poprzedni punkt kontynuacji: 2026-11-04, `experiment/pp-rekey-replay`.**
 Fizyczna próba wcześniejszej poprawki `pp-recovery-ack-fix` pokazała

@@ -469,3 +469,26 @@ Przyszłe wpisy powinny zawierać datę, zakres faktycznie wykonanej zmiany, com
 - `sh tests/run_host_tests.sh`: **23/23 PASS** (C++11, `-Werror`).
   **Bez wyników AVR build / F12 / sprzętowej próby nowego wariantu**;
   stabilna prędkość na RF-Nano pozostaje hipotezą do potwierdzenia.
+
+## 2026-11-04 — próba rzeczywista `pp-window-drain`: oba pojedyncze resety odzyskują pełną prędkość
+
+- Właściciel wgrał wariant `experiment/pp-window-drain` na dwa RF-Nano
+  i pokazał kolejno: start **najpierw B, potem A**, reset samego B,
+  reset samego A. Zrzuty RealTerm: `obraz(20261104-204708).png`,
+  `obraz(20261104-204805).png`, `obraz(20261104-204834).png`.
+- Po uruchomieniu obu urządzeń: obie strony `sid=49792`, `up=1`,
+  około 14,7 kB/s i `ret=bad=0` w stanie ustalonym.
+- Po resecie B: przejściowe renegocjacje; końcowo wspólne
+  `sid=52044`, `up=1`, około 14,7 kB/s i `ret=bad=0`.
+- Po resecie A: przejściowe renegocjacje; końcowo wspólne
+  `sid=53023`, `up=1`, około 14,7 kB/s i `ret=bad=0`.
+- **Potwierdzono sprzętowo samoczynny powrót pełnej szybkości** w tych
+  trzech scenariuszach, bez ręcznej redukcji `w` i ponownego `s`.
+  Wcześniejsze trwałe plateau około 9 kB/s z ~378 `ret/bad` na sekundę
+  nie wystąpiło. Chwilowe `cold/uncertain` w trakcie zmiany SID nie są
+  dowodem błędu, lecz `uncertain` nadal sygnalizuje możliwość
+  niejednoznacznego dostarczenia na granicy resetu.
+- Nie wykonano w tej serii osobnego testu długiego zaniku radia,
+  ponownego otwarcia B przy otwartym A ani binarnego porównania
+  strumieni. Brak lokalnego AVR-GCC i logu F7; test sprzętowy nie
+  zastępuje formalnego raportu kompilacji.

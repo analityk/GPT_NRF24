@@ -16,10 +16,14 @@
   poprzedniej gałęzi (przedwczesny DATA3 zamiast IDLE), po poprawce PASS;
   potwierdza dostarczenie pełnych 120B i automatyczne wznowienie źródła.
 - [x] `sh tests/run_host_tests.sh`: **23/23 PASS**.
-- [ ] AVR-GCC F7 i ręczne F12 na obu płytkach; lokalny cross compiler
-  niedostępny. Przetestować re-open portu B przy stale otwartym A,
-  zarówno B→A, jak i A→B: po około 15 s `ret/bad` powinny spaść do
-  zera, CPS wrócić do około 14–15 kB/s bez manualnego `w/s`.
+- [x] **Rzeczywisty test dwóch RF-Nano po wgraniu `pp-window-drain`:**
+  start B→A, samotny reset B i samotny reset A kończą się zgodnym
+  SID na obu terminalach, stabilnym ~14,7 kB/s oraz `ret=bad=0`.
+  Żaden z trzech przypadków nie wymaga ręcznego `w/s`; chwilowe stany
+  `cold/uncertain` podczas negocjacji nie utrzymują się jako plateau.
+- [ ] Udokumentować wynik F7/AVR-GCC (kompilator niedostępny lokalnie)
+  oraz osobno przetestować re-open portu B przy stale otwartym A,
+  w obu kolejnościach A→B i B→A, odczekując ≥15 s po nowym SID.
 - [ ] Przebadać workiem metalizowanym ponowny pełny strumień po
   krótkim i długim osłabieniu, osobno utrata zasilania i reset obu.
   Rejestrować te same liczniki, bez dokładania diagnostyki do PHY.
