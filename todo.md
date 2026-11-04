@@ -1,5 +1,26 @@
 # TODO — aktywny transport dwukierunkowy UART / ACK Payload
 
+## Korekta częściowego ACK podczas powtórek po rekey — `experiment/pp-rekey-replay`
+
+- [x] Po wgraniu `experiment/pp-recovery-ack-fix` użytkownik sprzętowo
+  potwierdził ~14,8 kB/s i `ret=bad=0` po resecie B i obu urządzeń.
+  **Reset A nadal powodował stan ~9 kB/s, `B ret≈378/s`, `A bad≈378/s`.**
+- [x] Znaleziono błąd niezależny od PHY: `acceptAck` kasował wszystkie
+  niewysłane elementy planu replay już po *częściowym* ACK. Po restarcie
+  A B mogło w ten sposób przeskoczyć z DATA0 na DATA4, pomijając 1–3.
+- [x] Nowy test `pp_partial_ack_rekey_test.cpp` **najpierw padał** na
+  starym kodzie w chwili `DATA4` zamiast `DATA1`; po poprawce kursora
+  wszystkie **22** testy C++11 przechodzą. Rozszerzono też symulację
+  pełnego obciążenia o reset *A* z ocalałym B.
+- [ ] Zbudować AVR przez F7 i ręcznie wgrać F12 na **obie** płytki.
+- [ ] Powtórzyć A→RESET, B→RESET, reset obu przy pełnym obciążeniu:
+  obserwować 15 s po nowym SID; trwała wartość `ret` lub `bad` powinna
+  być bliska zeru, docelowo 14–15 kB/s. W razie kolejnej degradacji
+  zachować 20–30 linii z obu portów oraz kolejność resetów.
+- [ ] Dopiero po fizycznej weryfikacji decydować o przeniesieniu
+  mechanizmu do produkcyjnego PP; poprzednie branche zostają jako
+  porównawcze, bez dopisywania statystyk do transmisji.
+
 ## Test warstwy transportowej po resecie B — `experiment/pp-recovery-ack-fix`
 
 - [x] Zidentyfikowano dwa miejsca wzmacniające problem w przenośnym

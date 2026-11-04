@@ -89,6 +89,11 @@ struct LoadedRadio {
         b=&fresh;
         b->build(reply,replyWidth);
     }
+    void bootA(LoadedNode& fresh) {
+        // PRX keeps its ACK payload prepared for the OLD PTX session.
+        // The fresh A has no pending stream data and must renegotiate.
+        a=&fresh;
+    }
 };
 
 int main(){
@@ -118,4 +123,22 @@ int main(){
     assert(static_cast<uint16_t>(a.stream.retransmits()-retries)<10);
     assert(static_cast<uint16_t>(bNew.stream.badFrames()-oldFrames)<10);
     assert(bNew.link.counters().stale-stale<10UL);
+
+    // Independent reverse direction: B survives with ACK-Payload packets
+    // and its pending echo, while A loses all RAM. This is NOT equivalent
+    // to restarting B: the sender of buffered ACK-payload user DATA now
+    // survives and the receiver starts empty.
+    LoadedNode aNew(true,303);
+    const uint16_t oldSid2=bNew.session.sid();
+    radio.bootA(aNew);
+    radio.settle();
+    assert(aNew.session.sid()!=oldSid2);
+    for(unsigned i=0;i<2000;++i)radio.step();
+    const uint16_t bRetries=bNew.stream.retransmits();
+    const uint16_t aBad=aNew.stream.badFrames();
+    const uint32_t bDelivered=bNew.port.forwarded();
+    for(unsigned i=0;i<1000;++i)radio.step();
+    assert(bNew.port.forwarded()-bDelivered>20000UL);
+    assert(static_cast<uint16_t>(bNew.stream.retransmits()-bRetries)<10);
+    assert(static_cast<uint16_t>(aNew.stream.badFrames()-aBad)<10);
 }

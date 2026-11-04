@@ -187,10 +187,20 @@ private:
         outstanding_=static_cast<uint8_t>(outstanding_-n);
         noAckTurns_=0;
         nackSeen_=false;
-        // The peer has advanced its contiguous prefix. Any outstanding
-        // gap is handled by normal retransmission on the next timeout.
-        replayCount_=0;
-        replaySeq_=baseSeq_;
+        // ACK progress must NOT cancel the yet-unsent tail of a replay.
+        // In particular after a peer reset, replay 0..3 may be queued in
+        // ACK Payload while the new peer already ACKs 0. Dropping replay
+        // 1..3 here would emit fresh DATA 4 into a hole and lock the
+        // receiver into a repeating out-of-order/replay cycle.
+        if(replayCount_!=0) {
+            const uint8_t delta=static_cast<uint8_t>(baseSeq_-replaySeq_);
+            if(delta<=WINDOW) {
+                const uint8_t covered=delta<replayCount_?delta:replayCount_;
+                replaySeq_=static_cast<uint8_t>(replaySeq_+covered);
+                replayCount_=static_cast<uint8_t>(replayCount_-covered);
+            }
+        }
+        if(replayCount_==0)replaySeq_=baseSeq_;
     }
     Port& port_;
     uint16_t session_;

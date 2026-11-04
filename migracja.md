@@ -1,4 +1,21 @@
-**NAJNOWSZY PUNKT KONTYNUACJI: 2026-11-04, eksperyment `experiment/pp-recovery-ack-fix`.**
+**NAJNOWSZY PUNKT KONTYNUACJI: 2026-11-04, eksperyment `experiment/pp-rekey-replay`.**
+Fizyczna próba wcześniejszej poprawki `pp-recovery-ack-fix` pokazała
+poprawny powrót ~14,8 kB/s po resecie B i obu, ale po resecie A
+pozostawał stabilny stan ~9 kB/s: `B ret≈378/s`, `A bad≈378/s`.
+Przyczyna zlokalizowana testem jednostkowym w `UartReliableStream`:
+po przejściu do nowego SID nadajnik zachowuje 1–4 pakietów do replay,
+lecz odbiór pierwszego *częściowego* ACK zerował cały plan powtórek,
+pomijając jeszcze niewysłane DATA. Przykład: po ACK dla DATA0 B
+zamiast odtworzyć DATA1..3 wysyłał świeży DATA4. Nowa regresja
+`pp_partial_ack_rekey_test` padała przed poprawką; po zachowaniu
+niepotwierdzonego ogona replay wszystkie **22 testy hostowe PASS**.
+`pp_rekey_full_load_test` obejmuje teraz reset obu kierunków oddzielnie.
+Nie ma nowych bajtów RF, zmian PHY/ADC/UART/main, dodatkowych liczników
+ani alokacji. Lokalny AVR-GCC niedostępny, więc po F7/F12 obu modułów
+**konieczny sprzętowy reset A pod obciążeniem**. Gałąź produkcyjna,
+checkpoint i poprzednie warianty testowe pozostają nietknięte.
+
+**Poprzedni punkt kontynuacji: 2026-11-04, `experiment/pp-recovery-ack-fix`.**
 Odizolowana gałąź wychodzi z `experiment/pp-recovery-v2` i poprawia
 transport Go-back-N po resecie B przy pełnym obciążeniu A. Dwie zmiany
 przenośnego API: (1) przy zerowym `RX_CREDIT` nie wolno ponawiać

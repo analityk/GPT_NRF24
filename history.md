@@ -417,3 +417,28 @@ Przyszłe wpisy powinny zawierać datę, zakres faktycznie wykonanej zmiany, com
 - Lokalnego `avr-g++` i pary RF-Nano brak. Cross-build AVR, F7/F12 oraz
   test „reset samego B pod pełnym obciążeniem” pozostają otwarte.
   Główna gałąź i poprzednie eksperymenty bez zmian.
+
+## 2026-11-04 — reprodukcja utraty ogona replay po częściowym ACK
+
+- Właściciel wgrał eksperyment `pp-recovery-ack-fix` i pokazał
+  rzeczywistą poprawę po resecie B i obu naraz (~14,8 kB/s,
+  `ret=bad=0`). Natomiast **reset A** wywołał utrzymujące się
+  `B ret≈377–378/s`, `A bad≈377–378/s`, przepustowość około 9 kB/s.
+  `arc/max` przy ustalonej sesji były bliskie zeru. Trzy zrzuty z
+  RealTerm nie zawierają binarnego porównania bajtów.
+- Na gałęzi `experiment/pp-rekey-replay` rozszerzono model pełnego
+  obciążenia o zimny restart A przy ocalałym B i jego kolejce ACK.
+  Idealny model RF nadal nie odtworzył plateau; nie wystarcza on do
+  potwierdzenia fizycznego rozwiązania.
+- **Odizolowany błąd transportu odtworzony czerwonym testem:** po
+  czterech niepotwierdzonych DATA B renegocjuje SID, ponawia DATA0,
+  odbiera ACK0 i nieprawidłowo wyrzuca replay DATA1..3, od razu
+  wysyłając nowy DATA4. `tests/pp_partial_ack_rekey_test.cpp` padał
+  dokładnie na błędnym `TX_SEQ`, przed zmianą kodu.
+- Poprawiono `UartReliableStream::acceptAck`: przesuwa się tylko
+  potwierdzony prefiks i zachowuje jeszcze niewysłany ogon replay,
+  również przy opóźnionych ACK, bez dodatkowych bajtów, liczników,
+  stanu pamięci trwałej i zmian w PHY. Nowy test jest zielony.
+- `sh tests/run_host_tests.sh`: **22/22 PASS**, g++ C++11 `-Werror`.
+  Kompilator AVR i urządzenia nadal dostępne wyłącznie u właściciela;
+  F7/F12 i fizyczne sprawdzenie pozostają otwarte.
