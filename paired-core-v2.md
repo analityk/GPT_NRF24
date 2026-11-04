@@ -97,3 +97,9 @@ Referencja radiowa: Nordic nRF24L01+ Product Specification v1.0 — [plik PDF pr
 ## Archiwalne eksperymenty
 
 Poprzedni most UART (stary format v1), benchmark 32+32 B, koncepcje nagłówka 4 B i eksperymentalny wybór aplikacji `0/1/2` pozostają w historii Git i w [gałęzi archiwalnej](https://github.com/analityk/GPT_NRF24/tree/archive/pre-paired-core-cleanup-2026-11-03). Nie należą do bieżącego builda.
+
+## Fizyczny odbiór negocjacji sesji i resetów — 2026-11-04
+
+Zrzuty użytkownika potwierdzają działanie z handshake'em na obu RF-Nano i powrót do `ST=4` i zgodnego SID po **pojedynczym RESET B** (`SID=12715`) oraz **pojedynczym RESET A** (`SID=16598`). Po resecie B A raportuje `R=1`, nowo uruchomione B `R=0`; odwrotnie przy resecie A. Podczas nieobecności B A mierzy `MAX=110 ARC=330` lub `MAX=219 ARC=657` w 1-sekundowych oknach: wykorzystano wszystkie 3 sprzętowe retransmisje zgodnie z `SETUP_RETR=0x23`. Po renegocjacji tempo wynosi około **612–613 pełnych wymian/s** i wszystkie widoczne liczniki diagnostyczne w stanie ustalonym są zerowe.
+
+W porównaniu z poprzednim testem 625/s bez handshake'u jest to około **2%** niższy wynik: 1,600 ms → 1,631–1,634 ms średniego odstępu. Nie zmieniono prędkości RF ani długości pełnych ramek; można podejrzewać dodatkową obsługę procesora, ale wymaga to osobnego profilowania, podobnie jak bezpośrednia latencja. Podczas resetu występują realne retransmisje i timeouty oraz czas negocjacji, więc nie sprowadzać spadku do samego MCU. **Jednoczesny reset obu płytek, długotrwałe zaniki zasięgu i kontrola przepływu nie są jeszcze fizycznie potwierdzone.**

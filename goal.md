@@ -21,3 +21,7 @@ Rdzeń powinien poprawnie raportować sekwencje, braki, retransmisje sprzętowe,
 **Warunek zaliczenia bieżącego rdzenia:** dwukierunkowe DATA↔ACK Payload, wiarygodne metadane i automatyczne odzyskiwanie sesji w rzeczywistym sprzęcie. Obecny test **potwierdza szybki transfer i podstawową diagnostykę**, nie potwierdza jeszcze pełnej odporności na restarty i przeciążenia.
 
 Zachowujemy manualne F7/F12 w Microchip Studio oraz jeden aktualny program; historia wcześniejszych etapów znajduje się w `history.md`.
+
+## Potwierdzenie kolejnego kamienia milowego (2026-11-04)
+
+Zaliczone fizycznie: handshake i wznowienie pracy po **oddzielnych restartach A i B**, wspólne niezerowe SID (`12715` i `16598`), `ST=4`, około 612–613 wymian/s. Test jednoczesnego restartu obu płytek oraz odzyskania po dłuższej utracie zasięgu pozostaje do wykonania. Spadek względem wcześniejszych 625/s wynosi około 2%; nie jest to izolowany pomiar obciążenia MCU.

@@ -65,4 +65,8 @@ Starszy most UART, odrębny benchmark 32+32 B, stary format v1 oraz związane z 
 
 Po ręcznym wgraniu tego samego HEX-a na obie RF-Nano zaobserwuj przez kilka sekund dwa terminale RealTerm (COM10/11 tylko orientacyjnie; użyj rzeczywistych portów). Po handshake oba powinny mieć **ten sam niezerowy `SID`, `ST=4` i regularny przepływ**. Następnie naciśnij RESET osobno na B, osobno na A i na obu; urządzenie bez resetu powinno wrócić automatycznie do stanu 4. Wskaźnik `R` zlicza lokalne przejścia odzyskiwania, nie jest licznikiem utraconych ramek. Podczas przejścia dopuszczalne są chwilowe `MAX`/`BAD`, lecz nie trwałe zatrzymanie.
 
-Test uruchomienia i resetów na nowej wersji **pozostaje do potwierdzenia przez użytkownika**. Szczegóły handshake i bezpieczeństwa: [`paired-core-v2.md`](paired-core-v2.md).
+**Test fizyczny z 2026-11-04 potwierdza samoczynny powrót do ST=4 i wspólnego SID po pojedynczym resecie B oraz po pojedynczym resecie A.** Reset jednoczesny pozostaje niezweryfikowany. Szczegóły handshake i bezpieczeństwa: [`paired-core-v2.md`](paired-core-v2.md).
+
+### Zmierzony narzut handshake'u (2026-11-04)
+
+Przy aktywnej negocjowanej sesji rdzeń uzyskuje około **612–613 wymian/s**, wobec 625/s wcześniejszej wersji. Pełne BODY 24 B odpowiada około **14,7 kB/s na kierunek**; średnia repetycja ~1,63 ms. Przejściowo po resecie jednej płytki pojawiają się `MAX_RT` i trzy automatyczne retransmisje na nieudaną wymianę, po czym obie strony wracają do wspólnego nowego SID bez ręcznej interwencji. To wynik na sprzęcie, nie pomiar czasu CPU ani end-to-end transfer UART.

@@ -25,3 +25,7 @@
 5. Dopiero po ukończeniu rdzenia dopuścić usługi transportowe nad BODY, nie ingerując w jego znaczenie z poziomu MAC/PHY.
 
 **Nie rozwijamy kilku alternatywnych firmware jednocześnie.** Jedyne aktywne źródło działania i specyfikacja to `main.cpp` i `paired-core-v2.md`. Dawne warianty są dostępne przez historię Git.
+
+## Obserwacja po wprowadzeniu negocjowanej sesji (2026-11-04)
+
+Obie pojedyncze próby resetu (A i B) zaliczone na dwóch RF-Nano: nowy wspólny SID, `ST=4`, wznowienie 612–613 wymian/s. Podczas nieobecności peer widać sprzętowe MAX_RT i komplet 3 retransmisji, więc opóźnienia resetowe wynikają także z fizyki i retransmisji RF. Następny etap: reset jednoczesny, test realnej przerwy w zasięgu oraz projekt niezależnej warstwy rzeczywistych kredytów sinku. W przypadku potrzeby optymalizacji ~2% różnicy do 625/s zastosować pomiar czasów MCU/PHY, nie arbitralne usuwanie opóźnień.
