@@ -88,14 +88,14 @@ int main() {
     // Window=4 pipelines outgoing segments without waiting for a single
     // prior ACK. Test offered load below the theoretical ~22B/exchange
     // upper bound, then an overload impossible even for perfect RF.
-    const Result streaming=run(16,600);
-    assert(streaming.inputA==9600 && streaming.inputB==9600);
+    const Result streaming=run(19,600);
+    assert(streaming.inputA==11400 && streaming.inputB==11400);
     assert(streaming.lostA==0 && streaming.lostB==0);
     const Result flooded=run(24,600);
     assert(flooded.inputA==14400 && flooded.inputB==14400);
     assert(flooded.lostA>0 && flooded.lostB>0);
     std::printf("UART offered-load model: paced(3/exchange) drops A=%lu B=%lu, "
-                "streaming(16/exchange) drops A=%lu B=%lu, "
+                "streaming(19/exchange) drops A=%lu B=%lu, "
                 "flooded(24/exchange) offered A=%lu B=%lu, "
                 "drops A=%lu B=%lu, UART TX emitted A=%lu B=%lu\\n",
                 static_cast<unsigned long>(paced.lostA),
