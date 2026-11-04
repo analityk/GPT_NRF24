@@ -10,6 +10,9 @@
 // successive RF exchanges while older segments await delayed ACK Payload.
 // Go-back-N on ACK timeout (in EXCHANGES, not milliseconds), no heap.
 // Received data is committed only in order, atomically by Port::writeAll.
+// After a gap/timeout/rekey, drain the unacknowledged window first:
+// IDLE still carries ACK/credit, but fresh DATA is not admitted until all
+// previously cached segments are confirmed. No radio timing adjustment.
 // All state is independent of AVR, UART registers, and radio implementation.
 template<class Port>
 class UartReliableStream {
@@ -22,6 +25,7 @@ public:
        :port_(port),session_(0),baseSeq_(0),nextSeq_(0),headIndex_(0),
         recvNext_(0),outstanding_(0),replayCount_(0),replaySeq_(0),
         noAckTurns_(0),gapPending_(false),nackSeen_(false),nackForBase_(0),
+        draining_(false),
         acceptedBytes_(0),acknowledgedBytes_(0),
         duplicates_(0),blocked_(0),badFrames_(0),retransmits_(0) {
         for(uint8_t i=0;i<WINDOW;++i)slotLength_[i]=0;
@@ -41,6 +45,7 @@ public:
         nackSeen_=false;
         replayCount_=outstanding_;
         replaySeq_=0;
+        draining_=(outstanding_!=0);
         // Physical data already accepted in an old epoch may be delivered
         // again if its final ACK was lost. Exactly-once across reset needs
         // a separate durable protocol, not this volatile UART transport.
@@ -86,6 +91,7 @@ public:
             replaySeq_=baseSeq_;
             replayCount_=outstanding_;
             noAckTurns_=0;
+            draining_=true;
         }
 
         if(maySend && replayCount_!=0) {
@@ -96,7 +102,8 @@ public:
             ++replaySeq_;
             --replayCount_;
             ++retransmits_;
-        } else if(maySend && outstanding_<WINDOW && outstanding_<peerCredit &&
+        } else if(maySend && !draining_ && outstanding_<WINDOW &&
+                  outstanding_<peerCredit &&
                   port_.available()!=0) {
             seq=nextSeq_;
             uint8_t value=0;
@@ -134,6 +141,7 @@ public:
             noAckTurns_=0;
             nackForBase_=baseSeq_;
             nackSeen_=true;
+            draining_=true;
         }
         if(f.header.kind()==PairedFrame::Kind::IDLE)return false;
         if(!f.length || !f.body) {
@@ -185,6 +193,7 @@ private:
         headIndex_=static_cast<uint8_t>((headIndex_+n)%WINDOW);
         baseSeq_=static_cast<uint8_t>(baseSeq_+n);
         outstanding_=static_cast<uint8_t>(outstanding_-n);
+        if(outstanding_==0)draining_=false;
         noAckTurns_=0;
         nackSeen_=false;
         // ACK progress must NOT cancel the yet-unsent tail of a replay.
@@ -208,6 +217,7 @@ private:
     uint8_t replayCount_,replaySeq_,noAckTurns_;
     bool gapPending_,nackSeen_;
     uint8_t nackForBase_;
+    bool draining_;
     uint8_t slots_[WINDOW][MAX_USER_BYTES];
     uint8_t slotLength_[WINDOW];
     uint16_t acceptedBytes_,acknowledgedBytes_;

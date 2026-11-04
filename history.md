@@ -442,3 +442,30 @@ Przyszłe wpisy powinny zawierać datę, zakres faktycznie wykonanej zmiany, com
 - `sh tests/run_host_tests.sh`: **22/22 PASS**, g++ C++11 `-Werror`.
   Kompilator AVR i urządzenia nadal dostępne wyłącznie u właściciela;
   F7/F12 i fizyczne sprawdzenie pozostają otwarte.
+
+## 2026-11-04 — po spowolnieniu i przyspieszeniu źródła samoczynny powrót pełnej prędkości
+
+- Właściciel fizycznie powtórzył test na dwóch RF-Nano z gałęzi
+  `experiment/pp-rekey-replay`: start B→A i A→B stabilizuje się na
+  ~14,8 kB/s; ponowne otwarcie portu B przy działającym A może dawać
+  utrzymujące się ~9 kB/s z `B ret≈378/s`, `A bad≈378/s`.
+- Kluczowe potwierdzenie: bez zmiany `sid=54543`, resetu ani zmiany
+  fizycznego radia ręczne obniżenie tempa `w` do ~100 CPS i ponowne
+  przyspieszenie `s` przywróciło ~14,8 kB/s oraz `ret=bad=0`.
+  Wskazuje to na samopodtrzymujące się retransmisje pod pełnym
+  obciążeniem, nie na trwałą utratę RAM sesji. Nadal brak pomiaru
+  liczby hardware ACK_EMPTY; `max=0` nie dowodzi dostarczenia danych
+  z osobnej kolejki ACK Payload.
+- W nowej osobnej gałęzi `experiment/pp-window-drain` dodano w
+  `UartReliableStream` fazę „drain existing window” po NACK, timeoutcie
+  lub nowym SID z niepotwierdzonym cache. Nowe DATA czeka, aż wszystkie
+  zaległe segmenty zostaną potwierdzone; IDLE, ACK, kredyty i retransmisje
+  są nadal czynne. Brak dodatkowego bajtu radiowego, rozbudowy
+  diagnostyki, zmian w `main.cpp`, PHY oraz konfiguracji radiowej.
+- Test `pp_recovery_drain_test` **reprodukował błąd**: przy aktywnej
+  luce i opóźnionym ACK nadajnik wypuszczał nowy DATA3 z pełną
+  prędkością, nie czekając na zakończenie powtórek. Na naprawionym
+  kodzie nadaje IDLE, potem wznawia DATA3–4 i zachowuje 120B.
+- `sh tests/run_host_tests.sh`: **23/23 PASS** (C++11, `-Werror`).
+  **Bez wyników AVR build / F12 / sprzętowej próby nowego wariantu**;
+  stabilna prędkość na RF-Nano pozostaje hipotezą do potwierdzenia.

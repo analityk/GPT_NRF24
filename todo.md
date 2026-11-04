@@ -1,5 +1,29 @@
 # TODO — aktywny transport dwukierunkowy UART / ACK Payload
 
+## Automatyczne wygaszanie lawiny Go-back-N — `experiment/pp-window-drain`
+
+- [x] Test sprzętowy na `pp-rekey-replay`: po otwarciu B przy pracującym
+  A utrzymywało się ~9 kB/s (`B ret≈378/s`, `A bad≈378/s`). Bez zmiany
+  SID i bez resetu wymuszone na A `w`→~100 CPS→`s` przywracało stabilne
+  ~14,8 kB/s, `ret=bad=0`.
+- [x] W przenośnej warstwie Go-back-N dodano stan *drain window*:
+  po NACK (`URGENT`), timeoutcie potwierdzenia lub rekey z zaległymi
+  ramkami nie dopuszczamy **nowych** segmentów, dopóki wszystkie
+  poprzednie nie zostaną potwierdzone. Retransmisje, IDLE i ACK nadal
+  pracują; zapisane bajty i kolejność są zachowane. Po zakończeniu
+  wraca natychmiast pełne okno4, bez stałego opóźnienia lub redukcji RF.
+- [x] Test regresyjny `pp_recovery_drain_test`: **najpierw FAIL** na
+  poprzedniej gałęzi (przedwczesny DATA3 zamiast IDLE), po poprawce PASS;
+  potwierdza dostarczenie pełnych 120B i automatyczne wznowienie źródła.
+- [x] `sh tests/run_host_tests.sh`: **23/23 PASS**.
+- [ ] AVR-GCC F7 i ręczne F12 na obu płytkach; lokalny cross compiler
+  niedostępny. Przetestować re-open portu B przy stale otwartym A,
+  zarówno B→A, jak i A→B: po około 15 s `ret/bad` powinny spaść do
+  zera, CPS wrócić do około 14–15 kB/s bez manualnego `w/s`.
+- [ ] Przebadać workiem metalizowanym ponowny pełny strumień po
+  krótkim i długim osłabieniu, osobno utrata zasilania i reset obu.
+  Rejestrować te same liczniki, bez dokładania diagnostyki do PHY.
+
 ## Korekta częściowego ACK podczas powtórek po rekey — `experiment/pp-rekey-replay`
 
 - [x] Po wgraniu `experiment/pp-recovery-ack-fix` użytkownik sprzętowo
