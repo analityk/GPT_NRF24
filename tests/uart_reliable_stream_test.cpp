@@ -103,6 +103,30 @@ int main() {
     d.make();(void)c.incoming(d);
     assert(c.stream.acknowledgedBytes()==1 && !c.stream.hasPending());
 
+    // A repeated DATA segment may carry a NEW ACK for the reverse stream.
+    // MAC must not discard the whole frame merely because TX_SEQ repeated.
+    Node dupA(true),dupB(false);connect(dupA,dupB,0xACDC);
+    dupA.port.input('X');dupB.port.input('Y');
+    dupA.make();(void)dupB.incoming(dupA);
+    dupB.make();(void)dupA.incoming(dupB);
+    assert(dupB.stream.outstanding()==1);
+    uint8_t repeated[32],rw=0;
+    const uint8_t same='X';
+    assert(dupA.link.makeStream(0,0,1,&same,1,repeated,rw)
+           ==PairedFrame::Error::OK);
+    PairedFrame::View repeatedView;
+    assert(PairedFrame::decode(repeated,rw,repeatedView)
+           ==PairedFrame::Error::OK);
+    assert(dupB.link.observeStream(repeatedView)
+           ==PairedLink::Receipt::DUPLICATE);
+    (void)dupB.stream.accept(repeatedView);
+    assert(dupB.stream.acknowledgedBytes()==1);
+    assert(!dupB.stream.hasPending());
+    assert(dupB.stream.acceptedBytes()==1);
+    assert(dupB.stream.duplicates()==1);
+    drain(dupA.port,reinterpret_cast<const uint8_t*>("Y"),1);
+    drain(dupB.port,reinterpret_cast<const uint8_t*>("X"),1);
+
     // Full sink: no acknowledgement and no partial write until enough
     // output room is released.
     Node x(true),y(false);connect(x,y,0x7878);
