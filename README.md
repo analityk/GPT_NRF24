@@ -1,3 +1,5 @@
+> **Protokoły:** aktualny i zachowany sprzętowo **PP (Ping-Pong)**; drugi profil **BURST20** jest na etapie projektu harmonogramu i testów hostowych, **jeszcze nie jest wykonywany na radiu**. [Specyfikacja BURST20](burst-20ms.md). PP checkpoint: [checkpoint/pp-2026-11-04](https://github.com/analityk/GPT_NRF24/tree/checkpoint/pp-2026-11-04).
+
 # GPT_NRF24 — UART ↔ nRF24L01+ ACK Payload ↔ UART
 
 **Aktualny etap (2026-11-04):** jeden firmware na dwie RF-Nano (ATmega328P 16 MHz + nRF24L01+ + CH340), z **ciągłym ping-pongiem DATA/ACK Payload także na pustym łączu** i **oknem 4 segmentów UART w każdym kierunku**. Fizycznie potwierdzony transfer jednokierunkowy; poprzedni stop-and-wait gubił bajty przy równoczesnym intensywnym ruchu. Nowa wersja WINDOW=4: wszystkie hostowe testy, symulacja strat i cross-build AVR **PASS**, lecz **nowe firmware wymaga osobnego testu fizycznego obustronnego obciążenia**.

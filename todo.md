@@ -30,3 +30,16 @@
 
 - [x] Usunięto z BODY dwa bajty wtórnego nagłówka UART: **pełne 24 B danych**, DATA_SEQ=TX_SEQ, APP_ACK=RX_LAST, IDLE=8 B; powtórzony DATA przenosi nowszy ACK. Zastąpiono dawną API PHY-seq jednym profilem paired stream; host i cross AVR PASS.
 - [ ] **Nowy test sprzętowy:** równoczesne pliki na obu RF-Nano przy `Delays=0,0`; capture binarny, porównanie długości i SHA-256 A→B/B→A. Wersja z 24B BODY nie była jeszcze wgrana ani zmierzona.
+
+## PP checkpoint i implementacja BURST20 (od 2026-11-04)
+
+- [x] Nazwać i zachować aktualny sprzętowo pokazany protokół **PP (Ping-Pong)** w `checkpoint/pp-2026-11-04` (SHA `784fd83`); brak pomiaru binarnej bezstratności, nie oznaczać jako verified-perfect.
+- [x] Zweryfikować czas 32B on-air przy 1Mbps: 329µs, maks. 15 pełnych pakietów fizycznie w 5ms **bez** narzutów; 32 DATA+1 CONTROL niemożliwe. Opracować harmonogram z rzeczywistym deadline, a nie stałą liczbą 32 pakietów.
+- [x] Dodać wielokrotnego użytku `Burst20Schedule`, podział 5/15,10/10,15/5, 1ms report i 0,3ms guard na każdą stronę, testy granic/rollover.
+- [x] Dodać `ProfileSelect`: polityka strap A1 pull-up HIGH=PP, GND=BURST20 z dwukrotnym odczytem; test hostowy.
+- [ ] Wdrażać osobny `NrfBurstPhy`, nie zmieniać ani nie zastępować działającego `NrfAckPayloadPhy` PP. DATA bez ACK (pierwszy wariant), ramka REPORT w zarezerwowanym oknie, zakończenie próby na deadline.
+- [ ] Wdrożyć synchronizację okresu 20ms lider A↔B przez kontrolę on-air, fail-closed przy utracie fazy; testy utraty REPORT, opóźnienia IRQ, drift, resetu jednej/obu płytek.
+- [ ] Wdrożyć `BurstReport` do 24B BODY, liczby/CRC32/bitmapa odbioru poprzedniego bloku, testy rollover i zakodowanej długości/CRC.
+- [ ] Wspólny firmwarowy boot dispatcher PP/BURST20 po A1 dopiero gdy BURST profile jest kompletny; obecny main **nie czyta jeszcze A1 i nadal uruchamia PP niezależnie od strapu**.
+- [ ] Zmierzyć na fizycznych RF-Nano pakiety/5ms i czy ramka REPORT mieści się w przeznaczonym 1ms, przesunięcie roli 0,3ms, 10/10 i następnie 5/15; nie interpretować modelu jako pomiaru.
+- [ ] Dla 5/15 przeprojektować świadomie UART ingress: 15ms przy 115200 8N1 to ~173B, więcej niż 127B RX ring; zatwierdzić flow control lub większy bufor/mniejszy baud na BURST bez zmieniania PP.

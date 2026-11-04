@@ -23,3 +23,7 @@ F7 kompiluje, F12 ręcznie wgrywa; nigdy nie przywracać automatycznego flashowa
 ## Decyzja o ciągłym ping-pongu i potokowaniu — 2026-11-04
 
 Warstwa nRF ma aktywnie wymieniać ramki **bez przerwy także przy braku ruchu UART**, aby nowa wiadomość nie musiała czekać na 10ms polling. Sprzętowy ACK Payload jest wykorzystywany na każdej udanej wymianie, a osobne APP_ACK podróżuje w **RX_LAST nagłówka**, nie w BODY. Poprzedni stop-and-wait został zastąpiony oknem **4 segmentów po 24B na kierunek** (plus retransmisja Go-back-N), z semantyką TX_SEQ/RX_LAST powiązaną z przyjętymi segmentami, SID i fizycznych ról. Cel: przy ciągłym ruchu osiągnąć docelowo limit UART 115200 w obu kierunkach, na ile pozwoli rzeczywisty 1 Mb/s link i CPU; **nowy goodput fizyczny wymaga zmierzenia**. Niekontrolowany ingress większy od zdolności przesyłu nadal wymaga flow-control.
+
+## Nowy cel 2026-11-04: dwa profile, nie zmieniać PP
+
+Dzisiejszy 24B BODY+MAC8 i ciągłe ping-pong z hardware ACK Payload to **PP**. Fizyczne zrzuty obu równoczesnych strumieni przy 0ms delay wyglądają znacznie lepiej; brak jeszcze formalnego porównania bajtowego. PP jest zachowany w branchu `checkpoint/pp-2026-11-04`. Następny **odrębny** profil to BURST20: 20ms cykl, zmiana ról w podziale A/B 5/15,10/10,15/5ms, ostatnia ramka slotu 32B REPORT, bez konieczności 1kB bufora na AVR. Szczegóły i ograniczenia w `burst-20ms.md`. Oba profile docelowo w jednym HEX, boot strap A1: HIGH=PP, LOW=BURST20; w obecnym main nadal tylko PP.

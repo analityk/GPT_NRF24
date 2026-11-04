@@ -42,3 +42,37 @@ Teraz **konieczny odbiór fizyczny** nowej wersji przy 0ms delay w obu RealTerm 
 ## Bieżąca semantyka 8+24 — obowiązuje od 2026-11-04
 
 ACTIVE: ciągłe fizyczne wymiany PTX→PRX + sprzętowy ACK Payload w przeciwną stronę, bez idle scheduler. `PairedLink::makeStream/observeStream` koduje DATA_SEQ=TX_SEQ i cumulative acceptance ACK=RX_LAST w nagłówku; BODY wyłącznie 0..24 bajty użytkownika, ramki IDLE są 8B i nadal przenoszą ACK oraz RX_CREDIT. Utrata/próby sprzętowe nRF i widoczne luki **segmentów** są osobnymi metrykami; nie obiecywać 8bitowej numeracji każdego heartbeat przy równoczesnym nadpisaniu TX_SEQ na segment. WINDOW=4, Go-back-N i sesje SID zostają. Potrzebny fizyczny test pełnego obustronnego UART i binarne porównanie capture, bez przypisywania historycznych 612/s nowemu firmware.
+
+## 2026-11-04 — druga osobna rodzina: PP i BURST20
+
+**PP** zostaje obowiązującym, sprzętowo pokazanym profilem. Punkt przywrócenia:
+`checkpoint/pp-2026-11-04` @ `784fd83`. Wybór trybu: A1/PC1 pull-up
+(HIGH/floating=PP; GND=BURST20) po resecie, rola A/B nadal A0.
+`ProfileSelect` jest zaimplementowany i testowany hostowo, ale
+**nie został jeszcze podłączony do main**, bo BURST PHY nie istnieje.
+Nie wolno uruchomić pustego profilowego stubu jako pozornej implementacji.
+
+**BURST20** — cykl lidera A zawsze 20ms, A nadaje pierwsze 5,10,15ms,
+B nadaje resztę; w każdym slocie 1ms REPORT (ostatnia 32B ramka)
+i 0,3ms GUARD na zmianę ról. Twardy deadline i zero nowych
+DATA po przejściu w REPORT. Burst20Schedule (2MHz timer tick,
+O(1) cycle rollover, fail-closed when out of sync) plus host testy PASS.
+Dokładna faza i radio role switch wymagają osobnego sterownika PHY,
+control/beacon synchronizacji co20ms i prób na dwóch płytkach.
+
+Dane: RF 1Mbps, 32B on-air=329µs, w 5ms max 15 ramek
+w fizycznie niemożliwym scenariuszu bez narzutów; przy rezerwie
+report/guard i rzeczywistym MCU spodziewamy się znacznie mniej,
+ok. 6–10 łącznie, **bez pomiaru**. 32 DATA +1 CONTROL w 5ms
+nie są wykonalne ani przy 1Mbps, ani przy 2Mbps. Odbiór
+END_REPORT z CRC32 i bitmapą strat jest opóźniony o stronę/cykl,
+nie znamy strat w momencie, gdy nadajnik raportuje swój blok.
+
+Przed fizycznym BURST: nowy `NrfBurstPhy` (NO_ACK DATA,
+bounded REPORT, FIFO 3, bez przestojów PWR_UP przy zmianie
+kierunku); `BurstSession` synchronizująca zegary i role,
+`BurstReport` z testami bitowego formatu i CRC; `BurstRunner`
+z rzeczywistym UART. Przy 5/15 koniecznie bilans ingress:
+15ms×11520B/s≈173B >127B obecnego RX ring. Start
+z 10/10 i kontrolowanym źródłem, bez niekontrolowanego UART flood.
+Szczegóły w `burst-20ms.md`.
