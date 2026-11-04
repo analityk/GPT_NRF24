@@ -61,6 +61,52 @@ public:
         if (e==PairedFrame::Error::OK){++txSeq_;++counters_.txFrames;}
         return e;
     }
+    // Paired stream: MAC TX_SEQ is the user DATA sequence, RX_LAST is
+    // the cumulative acceptance ACK. BODY contains only user bytes.
+    PairedFrame::Error makeStream(uint8_t seq,uint8_t ack,uint8_t credit,
+                         const uint8_t* data,uint8_t length,
+                         uint8_t* out,uint8_t& width) {
+        PairedFrame::Header h;
+        h.txSeq=seq;h.rxLast=ack;
+        h.lossAB=isA_?remoteLoss_:localLoss_;
+        h.lossBA=isA_?localLoss_:remoteLoss_;
+        h.arcLast=arc_;h.rxDrop=localDrops_;h.rxCredit=credit;
+        h.flags=static_cast<uint8_t>(length?PairedFrame::Kind::DATA:
+                                           PairedFrame::Kind::IDLE);
+        h.sessionId=sid_;
+        const PairedFrame::Error e=PairedFrame::encode(
+            h,data,length,out,width);
+        if(e==PairedFrame::Error::OK)++counters_.txFrames;
+        return e;
+    }
+
+    // Repeated DATA may contain a newer ACK and credit. All valid frames
+    // reach the stream, which owns user-level deduplication.
+    Receipt observeStream(const PairedFrame::View& f) {
+        if(f.header.sessionId!=sid_) {
+            ++counters_.foreign;
+            return Receipt::WRONG_SESSION;
+        }
+        ++counters_.rxFrames;
+        acceptStatus(f);
+        if(f.header.kind()!=PairedFrame::Kind::DATA || !f.length)
+            return Receipt::NEW_FRAME;
+        if(!peerSeen_) {
+            peerLast_=f.header.txSeq;peerSeen_=true;
+            return Receipt::NEW_FRAME;
+        }
+        const uint8_t delta=static_cast<uint8_t>(f.header.txSeq-peerLast_);
+        if(delta==0){++counters_.duplicates;return Receipt::DUPLICATE;}
+        if(delta>127U){++counters_.stale;return Receipt::STALE;}
+        if(delta>1U) {
+            const uint8_t missing=static_cast<uint8_t>(delta-1U);
+            counters_.gaps+=missing;
+            localLoss_=static_cast<uint8_t>((localLoss_+missing)&15U);
+        }
+        peerLast_=f.header.txSeq;
+        return Receipt::NEW_FRAME;
+    }
+
     Receipt receive(const PairedFrame::View& f) {
         if(f.header.sessionId!=sid_) {
             ++counters_.foreign;
