@@ -6,11 +6,9 @@
  * not commands; outgoing USART bytes are ONLY data received from peer.
  * The negotiated radio SID and the hardware DATA/ACK Payload path remain.
  *
- * UartReliableStream pipelines up to four app-level DATA_SEQ segments
- * and cumulative ACK_SEQ in opaque BODY; there is no stop-and-wait and
- * no application-level delay between consecutive RF packets.
- * The PHY always triggers the next DATA/ACK Payload transaction, even
- * when both UART streams are empty. Full packet: 22 user bytes per side.
+ * MAC TX_SEQ/RX_LAST carry user DATA_SEQ and cumulative acceptance ACK.
+ * Every full DATA packet carries 24 raw UART bytes, with no BODY preamble.
+ * Four in-flight segments per direction; no stop-and-wait or idle polling.
  *
  * USART input has no RTS/CTS: prolonged offered load above radio goodput
  * or RF outage can overflow the 127B USART RX ring. Reported as counters
@@ -115,11 +113,11 @@ static void processFrame(uint8_t width) {
     if(view.header.kind()==PairedFrame::Kind::CONTROL)return;
     if(!session.active() || view.header.sessionId!=session.sid())
         return;
-    const PairedLink::Receipt receipt=linkState.receive(view);
+    const PairedLink::Receipt receipt=linkState.observeStream(view);
     if(receipt==PairedLink::Receipt::WRONG_SESSION)return;
     lastPeerProgress=ticks.now();
-    if(receipt==PairedLink::Receipt::NEW_FRAME)
-        (void)stream.accept(view);
+    // A repeated DATA sequence may carry a NEW application ACK.
+    (void)stream.accept(view);
 }
 
 static void runA() {
