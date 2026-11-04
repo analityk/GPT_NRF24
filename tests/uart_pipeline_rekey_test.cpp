@@ -3,7 +3,6 @@
 #include <cassert>
 #include <cstdint>
 #include <cstring>
-#include <cstdio>
 
 // Regression for contiguous pipelining, gap recovery and rekey with a
 // NONZERO former transmit base and multiple live unacknowledged segments.
@@ -84,17 +83,15 @@ int main() {
     uint8_t pending[66];
     for(uint8_t i=0;i<66;++i)pending[i]=static_cast<uint8_t>(100+i);
     a.serial.push(pending,66);
-    for(unsigned i=0;i<3;++i) {
-        a.make(); // do NOT deliver those frames
-        std::fprintf(stderr,"DBG i=%u width=%u outstanding=%u credit=%u input=%u retry=%u\n",
-          i, a.width, a.stream.outstanding(),a.link.peerCredit(),
-          a.serial.available(),a.stream.retransmits());
-    }
+    for(unsigned i=0;i<3;++i)a.make(); // do NOT deliver those frames
     assert(a.stream.outstanding()==3);
 
     a.stream.disconnect();
     a.link.configure(true,0);
-    preflight(a,b,0x5102);
+    a.resetSession(0x5102);
+    b.resetSession(0x5102);
+    // Do NOT use preflight() here: its synthetic ACK would already
+    // acknowledge the first replayed segment before it is inspected.
     assert(a.stream.outstanding()==3);
     // The first replay must be the OLDEST pending bytes, regardless of
     // the old head index or TX_SEQ modulo256.
