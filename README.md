@@ -1,5 +1,8 @@
 > **TYLKO GAŁĄŹ TESTOWA:** `experiment/pp-echo-ramp-2026-11-04` zastępuje
-> UART bridge diagnostycznym echem A→B→A i regulowanym generatorem bajtów.
+> UART bridge **testem granicznej szybkości PP**: A generuje stale bajty
+> `00..FF`, B odsyła je radiem, oba UARTy drukują co 1 s ASCII z CPS i
+> retransmisjami. Wersja z surowym echem UART pozostaje we wcześniejszym
+> commicie gałęzi. Nowy test rozpoczyna od maksymalnego oferowanego tempa.
 > **Instrukcja: [echo-ramp-test.md](echo-ramp-test.md).** Normalne PP i
 > poniższy opis mostu UART pozostają na niezmienionej gałęzi `main`.
 >

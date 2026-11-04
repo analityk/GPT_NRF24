@@ -2,10 +2,18 @@
 
 **Uwaga dla gałęzi `experiment/pp-echo-ramp-2026-11-04`:** jest to
 tymczasowy wariant pomiarowy, z tym samym PP PHY/MAC/sesją/transportem,
-ale z generatorem bajtów na A i lokalnym echem radiowym na B. Normalny
-UART↔RF↔UART nadal znajduje się na niezmienionym `main` (`6b94a43`).
-Szczegóły i przywracanie: `echo-ramp-test.md`. Nie przedstawiać testu
-hostowego jako odbioru sprzętowego; oba MCU wymagają ręcznego F12.
+ale z generatorem bajtów na A i lokalnym echem radiowym na B. Po
+fizycznym wyniku RealTerm ~12 000 CPS (na COM10 A, nasycenie UART)
+wariant eksperymentalny uruchamia od razu maksymalne obciążenie źródła,
+weryfikuje echo **w RAM** i raportuje na obu UART (ASCII, 1 Hz)
+`cps/gen/fwd/arc/max/ret/dup/bad/blk/gap/err/rec/sid/up`. Źródło może
+być zwolnione przez `w` co100 µs i przyspieszone przez `s` co100 µs.
+Radio nadal pracuje przy **1 Mb/s**, PP 8+24B WINDOW4/ACK Payload.
+Normalny UART↔RF↔UART nadal znajduje się na niezmienionym `main`
+(`6b94a43`). Szczegóły i przywracanie: `echo-ramp-test.md`.
+Nowy test ma tylko symulację hostową, nie ma jeszcze wyników sprzętowych;
+oba MCU wymagają ręcznego F12. Nie utożsamiać `gap=0` z bezstratnością
+przez reset lub utratę wielokrotności256 bajtów.
 
 # Migracja / punkt kontynuacji GPT_NRF24
 

@@ -102,6 +102,40 @@ static void mirrorAndAtomicSink() {
     assert(a.echoGaps()==1); // one omitted byte, then re-synchronize
 }
 
+static void radioOnlyStressPort() {
+    MockConsole serial;
+    PpEchoRampPort<MockConsole> a(serial),b(serial);
+    a.configure(true,0,PpEchoRampPort<MockConsole>::Mode::RADIO_STRESS);
+    b.configure(false,0,PpEchoRampPort<MockConsole>::Mode::RADIO_STRESS);
+    assert(a.periodUs()==0 && a.freeSpace()==127);
+    a.service(1);
+    assert(a.available()==120 && a.generated()==120);
+    uint8_t one=0;
+    assert(a.read(one) && one==0);
+
+    // A full console TX ring does not change RF credit or block echo.
+    for(unsigned i=0;i<127;++i)assert(serial.tx.push(0xCC));
+    assert(a.freeSpace()==127);
+    const uint8_t echo[]={0,1,2,3};
+    assert(a.writeAll(echo,sizeof(echo)));
+    assert(a.echoed()==4 && a.echoGaps()==0);
+    assert(serial.tx.available()==127);
+    const uint8_t error[]={5};
+    assert(a.writeAll(error,sizeof(error)) && a.echoGaps()==1);
+
+    // Source still responds to 100us commands in stress mode.
+    serial.command('w');a.service(2);assert(a.periodUs()==100);
+    serial.command('s');a.service(3);assert(a.periodUs()==0);
+
+    assert(b.writeAll(echo,sizeof(echo)));
+    assert(b.received()==4 && b.forwarded()==0);
+    for(unsigned i=0;i<4;++i) {
+        uint8_t value=0;
+        assert(b.read(value) && value==i);
+    }
+    assert(b.forwarded()==4);
+}
+
 struct Peer {
     MockConsole serial;
     PpEchoRampPort<MockConsole> port;
@@ -150,8 +184,37 @@ static void completeRadioEcho() {
     assert(a.transport.badFrames()==0 && b.transport.badFrames()==0);
 }
 
+static void lossyRadioOnlyStress() {
+    Peer a(true),b(false);
+    a.port.configure(true,0,PpEchoRampPort<MockConsole>::Mode::RADIO_STRESS);
+    b.port.configure(false,0,PpEchoRampPort<MockConsole>::Mode::RADIO_STRESS);
+    b.prepare();
+    uint8_t reply[32];uint8_t replySize=b.width;
+    std::memcpy(reply,b.frame,replySize);
+    for(uint32_t turn=1;turn<=3000;++turn) {
+        a.port.service(turn*3200UL);
+        a.prepare();
+        const bool delivered=(turn%17)!=0 && (turn%43)!=0;
+        if(delivered) {
+            b.receive(a.frame,a.width);
+            if((turn%13)!=0)a.receive(reply,replySize);
+            b.prepare();
+            replySize=b.width;
+            std::memcpy(reply,b.frame,replySize);
+        }
+    }
+    assert(a.port.echoed()>10000U);
+    assert(a.port.echoGaps()==0);
+    assert(b.port.received()>=a.port.echoed());
+    assert(a.port.freeSpace()==127);
+    assert(a.serial.tx.available()==0);
+    assert(a.transport.retransmits()>0 || b.transport.retransmits()>0);
+}
+
 int main() {
     timerAndBounds();
     mirrorAndAtomicSink();
+    radioOnlyStressPort();
     completeRadioEcho();
+    lossyRadioOnlyStress();
 }

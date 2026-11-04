@@ -304,3 +304,28 @@ Przyszłe wpisy powinny zawierać datę, zakres faktycznie wykonanej zmiany, com
   bajtów, atomowość echa B oraz model PP z opóźnionym ACK Payload.
 - Wariant nie był jeszcze testowany fizycznie; instrukcja oraz procedura
   przywrócenia normalnego PP znajdują się w `echo-ramp-test.md`.
+
+## 2026-11-04 — fizyczny wynik echo 12 000 CPS; test graniczny PP bez UART payload
+
+- Właściciel uruchomił eksperyment na dwóch RF-Nano, po poprawnym wysłaniu
+  komend `s` na A/COM10 pokazał ciągłą sekwencję `00..FF` i około
+  **12 000 CPS** w RealTerm 115200 8N1. To wskazanie RealTerm w pobliżu
+  granicy UART, nie niezależny pomiar przepustowości radiowej; nie
+  wykonano binarnego porównania całego strumienia.
+- Na tej samej gałęzi testowej dodano tryb `RADIO_STRESS` do przenośnego
+  `PpEchoRampPort`: A generuje od razu z nasyceniem źródła, odbierane
+  echo sprawdza w RAM bez TX UART i wystawia stałe niezależne od UART
+  kredyty. B liczy zaakceptowane i przygotowywane do zwrotu bajty.
+  Źródło nadal ma limit 120/127B i obsługuje `s`/`w` co100 µs.
+- Dodano przenośny `pp_stress_telemetry.h`: 1-sekundowe okno pomiarowe
+  Timer1 (z obsługą zawinięcia), liczniki CPS i zdarzeń (sprzętowe
+  `OBSERVE_TX.ARC_CNT`/`MAX_RT` na A, aplikacyjne replay/duplikaty,
+  nieciągłości echa, odmowy bufora, inne błędy i odzyskiwanie SID)
+  oraz bezpieczny ograniczony format linii ASCII na UART A i B.
+  W raporcie nie ma binarnych danych użytkownika; nie zmienia to PP PHY,
+  handshake'u ani formatu radiowego. B nie udaje własnego licznika ARC.
+- Rozbudowane testy hostowe obejmują tryb bez UART, nasycenie kolejki,
+  przesył przy modelowych stratach ramek/ACK, poprawną sekwencję,
+  wrap zegara i licznika16, częstotliwości, format i granice bufora.
+  **Testy hostowe PASS**; kompilacja AVR w tej sesji nie była dostępna.
+  Brak fizycznego testu nowego firmware i wyników izolowania radii.

@@ -5,7 +5,8 @@
 #include "byte_ring.h"
 
 // Portable diagnostic data source/sink for the EXISTING paired stream.
-// A: time-paced 00,01,...,FF source -> radio; radio echo -> binary UART TX.
+// A: time-paced 00,01,...,FF source -> radio; radio echo either to binary
+// UART TX (interactive ramp) or verified silently in RAM (RF saturation).
 // B: radio RX -> bounded local queue -> radio ACK Payload in the next turn.
 // Physical PP/session/Go-back-N mechanics remain in UartReliableStream.
 // No diagnostic text is mixed with the binary UART output.
@@ -16,6 +17,7 @@
 template<class Console, uint32_t TicksPerUs=2UL>
 class PpEchoRampPort {
 public:
+    enum class Mode : uint8_t { UART_ECHO, RADIO_STRESS };
     static_assert(TicksPerUs>0 && TicksPerUs<=100UL,
                   "Tick frequency must represent whole microseconds");
     static const uint16_t START_US=10000U;
@@ -23,14 +25,18 @@ public:
     static const uint8_t HIGH_WATER=120U; // 120 of 127 usable bytes
 
     explicit PpEchoRampPort(Console& serial)
-        :serial_(serial),leader_(false),periodUs_(START_US),
+        :serial_(serial),leader_(false),mode_(Mode::UART_ECHO),
+         periodUs_(START_US),
          nextDue_(0),nextByte_(0),expectedEcho_(0),
-         generated_(0),pressure_(0),echoed_(0),echoGaps_(0) {}
+         generated_(0),pressure_(0),echoed_(0),echoGaps_(0),
+         received_(0),forwarded_(0) {}
 
-    void configure(bool leader,uint32_t nowTicks) {
+    void configure(bool leader,uint32_t nowTicks,
+                   Mode mode=Mode::UART_ECHO) {
         leader_=leader;
+        mode_=mode;
         pending_.reset();
-        periodUs_=START_US;
+        periodUs_=(mode_==Mode::RADIO_STRESS && leader_)?0:START_US;
         nextDue_=nowTicks+periodTicks();
         nextByte_=0;
         expectedEcho_=0;
@@ -38,6 +44,8 @@ public:
         pressure_=0;
         echoed_=0;
         echoGaps_=0;
+        received_=0;
+        forwarded_=0;
     }
 
     // On A, only 's' and 'w' from UART are commands, never stream payload.
@@ -77,17 +85,26 @@ public:
 
     // Port interface required by UartReliableStream<Port>.
     uint8_t available()const{return pending_.available();}
-    bool read(uint8_t& b){return pending_.pop(b);}
+    bool read(uint8_t& b) {
+        if(!pending_.pop(b))return false;
+        if(!leader_)++forwarded_;
+        return true;
+    }
     uint8_t freeSpace()const {
-        return leader_?serial_.freeSpace():pending_.freeSpace();
+        // In stress mode the radio echo is accepted in RAM, not into the
+        // slow console TX ring. Its credit must not depend on UART speed.
+        return leader_?
+            (mode_==Mode::RADIO_STRESS?127U:serial_.freeSpace()):
+            pending_.freeSpace();
     }
     bool writeAll(const uint8_t* bytes,uint8_t count) {
         if(count && !bytes)return false;
         if(leader_) {
-            // Observe only after the entire echo was accepted by UART TX.
-            // On mismatch, resynchronize to the received byte, so a single
-            // omission counts as one discontinuity rather than 255 errors.
-            if(!serial_.writeAll(bytes,count))return false;
+            // UART_ECHO requires atomic UART TX acceptance; RADIO_STRESS
+            // consumes the bytes in RAM without UART backpressure. On a
+            // mismatch, resynchronize to count one sequence discontinuity.
+            if(mode_==Mode::UART_ECHO && !serial_.writeAll(bytes,count))
+                return false;
             for(uint8_t i=0;i<count;++i) {
                 if(bytes[i]!=expectedEcho_)++echoGaps_;
                 expectedEcho_=static_cast<uint8_t>(bytes[i]+1U);
@@ -98,6 +115,7 @@ public:
         if(pending_.freeSpace()<count)return false;
         for(uint8_t i=0;i<count;++i)
             (void)pending_.push(bytes[i]); // checked atomically as a group
+        received_+=count;
         return true;
     }
 
@@ -107,6 +125,8 @@ public:
     uint32_t pressureEvents()const{return pressure_;}
     uint32_t echoed()const{return echoed_;}
     uint32_t echoGaps()const{return echoGaps_;}
+    uint32_t received()const{return received_;}
+    uint32_t forwarded()const{return forwarded_;}
 
 private:
     static bool reached(uint32_t now,uint32_t deadline) {
@@ -125,10 +145,12 @@ private:
     Console& serial_;
     ByteRing<128> pending_;
     bool leader_;
+    Mode mode_;
     uint16_t periodUs_;
     uint32_t nextDue_;
     uint8_t nextByte_,expectedEcho_;
     uint32_t generated_,pressure_,echoed_,echoGaps_;
+    uint32_t received_,forwarded_;
 };
 
 #endif

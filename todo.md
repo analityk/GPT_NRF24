@@ -2,9 +2,14 @@
 
 > **Eksperyment, nie plan produkcyjny:** na gałęzi
 > `experiment/pp-echo-ramp-2026-11-04` znajduje się tymczasowy wariant
-> echo/ramp A→B→A. Aktualny stan i instrukcja: `echo-ramp-test.md`.
-> [ ] Fizycznie potwierdzić pełne echo, `echoGaps==0`, zmiany odstępu
-> co 100 µs, przypadki nasycenia i prędkość przy obu rolach.
+> echo/ramp A→B→A, obecnie rozszerzony do pomiaru RADIO_STRESS w pamięci
+> z raportami ASCII co 1 s na obu UART. Instrukcja: `echo-ramp-test.md`.
+> [x] Fizycznie potwierdzony wzrost odbioru echa do ~12 000 CPS
+> (RealTerm COM10, 115200 8N1); to granica pomiaru UART, NIE radia.
+> [x] Wariant saturation bez kopiowania payloadu na UART, miernik CPS,
+> ARC/MAX_RT, retry aplikacyjne, duplikaty, błędy i renegocjacje; host PASS.
+> [ ] Test fizyczny do nasycenia radia (A/B CPS), osłanianie workiem,
+> przejście do utraty łączności i automatyczne odtworzenie.
 > [ ] Po próbie przywrócić `main` i ręcznie F12 wgrać bazowy PP na oba MCU.
 
 ## Potwierdzone wcześniej na dwóch RF-Nano

@@ -1,11 +1,11 @@
 /*
- * TEMPORARY PP echo/rate-ramp diagnostic on the experiment branch.
+ * TEMPORARY PP radio-saturation and error-recovery diagnostic.
  *
  * The very same AVR firmware runs on both boards. A0 low: A/PTX uses
- * UART 's'/'w' to adjust a generated 00..FF pattern (100us steps, 10ms
- * initial interval). A0 high: B/PRX queues each received RF body for
- * retransmission by hardware ACK Payload, without using its local UART.
- * Only the echoed raw bytes are written to A's UART TX.
+ * UART 's'/'w' to adjust a generated 00..FF pattern (100us steps, from
+ * maximum offered rate). A0 high: B/PRX queues each received RF body for
+ * retransmission by hardware ACK Payload. BOTH UARTs print 1Hz counters;
+ * no payload byte goes to UART, so UART baud does not limit radio throughput.
  * The negotiated radio SID and the hardware DATA/ACK Payload path remain.
  *
  * MAC TX_SEQ/RX_LAST carry user DATA_SEQ and cumulative acceptance ACK.
@@ -31,6 +31,7 @@
 #include "paired_session.h"
 #include "uart_reliable_stream.h"
 #include "pp_echo_ramp_port.h"
+#include "pp_stress_telemetry.h"
 #include "boot_epoch.h"
 #include "nrf24_ack_phy.h"
 
@@ -56,9 +57,42 @@ static bool replaceAck=false;
 static uint8_t packet[32],incoming[32];
 static uint8_t ackStaged[32],ackSize=0;
 static bool ackWaiting=false;
+static PpStressWindow performance;
+static uint32_t hardwareRetries=0,maxRetries=0,lastReport=0;
+
+static PpStressSnapshot performanceSnapshot() {
+    PpStressSnapshot s;
+    s.sourceBytes=isLeader?diagnosticPort.generated():diagnosticPort.forwarded();
+    s.deliveredBytes=isLeader?diagnosticPort.echoed():diagnosticPort.received();
+    s.hardwareRetries=hardwareRetries;
+    s.maxRetries=maxRetries;
+    s.echoGaps=diagnosticPort.echoGaps();
+    s.appRetries=stream.retransmits();
+    s.duplicates=stream.duplicates();
+    s.badFrames=stream.badFrames();
+    s.blocked=stream.blocked();
+    s.radioErrors=radioErrors;
+    s.recoveries=recoveryCount;
+    s.sid=session.sid();
+    s.active=session.active();
+    return s;
+}
+
+static void reportPerformance() {
+    const uint32_t now=ticks.now();
+    if(static_cast<uint32_t>(now-lastReport)<2000000UL)return;
+    lastReport=now;
+    const PpStressSnapshot snapshot=performanceSnapshot();
+    PpStressSample sample;
+    if(performance.take(now,snapshot,sample))
+        (void)printPpStressLine(uart,isLeader,sample);
+}
 
 static void fatal() {
-    // Never corrupt binary UART data with a diagnostic string.
+    // This temporary firmware owns the diagnostic UART, not a binary
+    // payload stream. Make a halted test distinguishable from RF silence.
+    const uint8_t marker[]={'F','A','T','A','L','\r','\n'};
+    (void)uart.writeAll(marker,sizeof(marker));
     for(;;)delay.ms(100);
 }
 static bool restartIdentity() {
@@ -135,6 +169,8 @@ static void runA() {
         uint8_t incomingWidth=0;
         const AckPhy::TxResult tx=phy.transfer(packet,width,incoming,incomingWidth);
         linkState.notePtxRetries(tx.retries);
+        hardwareRetries+=tx.retries;
+        if(tx.code==AckPhy::TxCode::MAX_RT)++maxRetries;
         if(tx.code==AckPhy::TxCode::ACK_WITH_DATA)
             processFrame(incomingWidth);
         else if(tx.code==AckPhy::TxCode::BAD_REPLY_SIZE ||
@@ -149,6 +185,7 @@ static void runA() {
            (session.active()?500000UL:2000000UL)) {
             if(!restartIdentity() || !phy.resetPtxFifos())fatal();
         }
+        reportPerformance();
     }
 }
 
@@ -196,6 +233,7 @@ static void runB() {
             replaceAck=true;
         }
         if(replaceAck && !queueB())++radioErrors;
+        reportPerformance();
     }
 }
 
@@ -211,13 +249,16 @@ int main() {
     uint16_t adc=0;
     if(!Adc0::sample(adc))fatal();
     isLeader=(Adc0::classForM1(adc)==0);
-    diagnosticPort.configure(isLeader,ticks.now());
+    diagnosticPort.configure(isLeader,ticks.now(),
+        PpEchoRampPort<UART>::Mode::RADIO_STRESS);
     uint32_t epoch=0;
     if(!BootEpoch::advance(epoch))fatal();
     session.configure(isLeader,PairedSession::Identity(epoch,0));
     linkState.configure(isLeader,0);
     stream.disconnect();
     lastPeerProgress=ticks.now();
+    lastReport=lastPeerProgress;
+    performance.start(lastReport,performanceSnapshot());
     if(isLeader)runA();
     else runB();
 }
