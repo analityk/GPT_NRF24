@@ -32,8 +32,8 @@ struct Node {
     bool incoming(const Node& other) {
         PairedFrame::View f;
         assert(PairedFrame::decode(other.raw,other.width,f)==PairedFrame::Error::OK);
-        const PairedLink::Receipt r=link.receive(f);
-        return r==PairedLink::Receipt::NEW_FRAME && stream.accept(f);
+        const PairedLink::Receipt r=link.observeStream(f);
+        return r!=PairedLink::Receipt::WRONG_SESSION && stream.accept(f);
     }
 };
 static void connect(Node& a,Node& b,uint16_t sid) {
@@ -53,7 +53,7 @@ static void exchange(Node& a,Node& b) {
     (void)b.incoming(a);
     PairedFrame::View v;
     assert(PairedFrame::decode(snapshot,backWidth,v)==PairedFrame::Error::OK);
-    if(a.link.receive(v)==PairedLink::Receipt::NEW_FRAME)
+    if(a.link.observeStream(v)!=PairedLink::Receipt::WRONG_SESSION)
         (void)a.stream.accept(v);
 }
 static void drain(Port& p,const uint8_t* expected,unsigned n) {
@@ -68,19 +68,26 @@ int main() {
     Node a(true),b(false);
     connect(a,b,0x1234);
     assert(a.stream.credit()==5 && b.stream.credit()==5);
-    uint8_t ab[22],ba[22];
-    for(uint8_t i=0;i<22;++i){
+    uint8_t ab[24],ba[24];
+    for(uint8_t i=0;i<24;++i){
         ab[i]=static_cast<uint8_t>(i==0?0:(i==1?255:i*13U));
         ba[i]=static_cast<uint8_t>(i==0?255:(i==1?0:255U-i*11U));
         a.port.input(ab[i]);b.port.input(ba[i]);
     }
     // Data in both directions, with multiple delayed ACK-payload replies.
     for(unsigned i=0;i<10;++i)exchange(a,b);
-    drain(b.port,ab,22);drain(a.port,ba,22);
-    assert(a.stream.acknowledgedBytes()==22);
-    assert(b.stream.acknowledgedBytes()==22);
-    assert(a.stream.acceptedBytes()==22);
-    assert(b.stream.acceptedBytes()==22);
+    drain(b.port,ab,24);drain(a.port,ba,24);
+    assert(a.stream.acknowledgedBytes()==24);
+    assert(b.stream.acknowledgedBytes()==24);
+    assert(a.stream.acceptedBytes()==24);
+    assert(b.stream.acceptedBytes()==24);
+    // The next DATA packet has 1 octet of raw BODY, no transport header.
+    a.port.input(0xA5);
+    a.make();assert(a.width==9);
+    PairedFrame::View direct;
+    assert(PairedFrame::decode(a.raw,a.width,direct)==PairedFrame::Error::OK);
+    assert(direct.length==1 && direct.body[0]==0xA5);
+    assert(direct.header.txSeq==1 && direct.header.rxLast==0);
 
     // Unacknowledged segment has to be REPEATED, not discarded after
     // hardware ACK. Resending may happen with a different RF TX_SEQ.
@@ -100,10 +107,10 @@ int main() {
     // output room is released.
     Node x(true),y(false);connect(x,y,0x7878);
     for(unsigned i=0;i<122;++i)assert(y.port.out.push(0x55));
-    for(unsigned i=0;i<22;++i)x.port.input(static_cast<uint8_t>(i));
+    for(unsigned i=0;i<24;++i)x.port.input(static_cast<uint8_t>(i));
     x.make();(void)y.incoming(x);
     assert(y.stream.acceptedBytes()==0 && y.stream.blocked()==1);
-    for(unsigned i=0;i<22;++i){
+    for(unsigned i=0;i<24;++i){
         uint8_t dummy;
         assert(y.port.out.pop(dummy));
     }
@@ -112,15 +119,15 @@ int main() {
     for(unsigned i=0;i<16 && y.stream.acceptedBytes()==0;++i) {
         x.make();(void)y.incoming(x);
     }
-    assert(y.stream.acceptedBytes()==22);
-    assert(y.port.out.available()==122);
+    assert(y.stream.acceptedBytes()==24);
+    assert(y.port.out.available()==124);
     // Clear old sentinel then check the precise payload.
     for(unsigned i=0;i<100;++i) {
         uint8_t v;
         assert(y.port.out.pop(v) && v==0x55);
     }
-    uint8_t expected[22];for(uint8_t i=0;i<22;++i)expected[i]=i;
-    drain(y.port,expected,22);
+    uint8_t expected[24];for(uint8_t i=0;i<24;++i)expected[i]=i;
+    drain(y.port,expected,24);
 
     // Cross-session reset: keep pending bytes in the transmitting MCU,
     // but reset the two independent 8-bit sequence spaces.
@@ -134,13 +141,14 @@ int main() {
     e.make();
     PairedFrame::View v;
     assert(PairedFrame::decode(e.raw,e.width,v)==PairedFrame::Error::OK);
-    assert(v.header.txSeq==0 && v.length==3 && v.body[2]=='Q');
+    assert(v.header.txSeq==0 && v.length==1 && v.body[0]=='Q');
     (void)f.incoming(e);
     drain(f.port,reinterpret_cast<const uint8_t*>("Q"),1);
-    // DATA with length 2 is an ack-only/idle transport packet.
-    f.make();assert(f.width==10);
+    // Idle payload is only the 8B MAC header, carrying the live ACK.
+    f.make();assert(f.width==8);
     assert(PairedFrame::decode(f.raw,f.width,v)==PairedFrame::Error::OK);
-    assert(v.length==2);
+    assert(v.length==0 && v.header.kind()==PairedFrame::Kind::IDLE);
+    assert(v.header.rxLast==0);
 
     // 300 segments cross the transport 8-bit wrap with no duplicates.
     Node p(true),q(false);connect(p,q,0x9999);
