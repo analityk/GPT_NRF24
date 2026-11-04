@@ -35,7 +35,7 @@ struct Peer {
     void receive(const uint8_t* bytes,uint8_t n){
         PairedFrame::View v;
         assert(PairedFrame::decode(bytes,n,v)==PairedFrame::Error::OK);
-        if(link.receive(v)==PairedLink::Receipt::NEW_FRAME)
+        if(link.observeStream(v)!=PairedLink::Receipt::WRONG_SESSION)
             (void)transport.accept(v);
     }
 };
