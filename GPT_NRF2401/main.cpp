@@ -1,12 +1,18 @@
 /*
- * Paired diagnostic RF core, 8 B header + up to 24 B OPAQUE data.
- * Both boards run one binary; A0 low => A/PTX, high => B/PRX.
+ * Binary UART <-> paired 8+24B RF core <-> binary UART.
  *
- * Physical ACK payload provides the return direction with no role change.
- * Persistent boot epochs + 16-bit session-attempt IDs negotiate SESSION_ID.
- * Pairing is for accidental stale-packet rejection, not authentication.
- * Periodic UART output is DIAGNOSTIC only; the user payload never enters it.
- * Single active paired-core firmware. Historical variants are archived in Git.
+ * The very same AVR firmware runs on both boards. A0 low: PTX/initiator,
+ * A0 high: PRX/ACK Payload responder. Incoming USART bytes are user data,
+ * not commands; outgoing USART bytes are ONLY data received from peer.
+ * The negotiated radio SID and the hardware DATA/ACK Payload path remain.
+ *
+ * UartReliableStream adds independent app-level DATA_SEQ and ACK_SEQ within
+ * the opaque BODY. It never treats nRF TX_DS as proof of UART delivery.
+ * Every 32B radio frame holds up to 22 bytes of original UART data.
+ *
+ * USART input has no RTS/CTS: prolonged offered load above radio goodput
+ * or RF outage can overflow the 127B USART RX ring. Reported as counters
+ * accessible in a debugger; this build emits no logs into the UART stream.
  */
 #include "board_clock.h"
 #include <stdint.h>
@@ -22,6 +28,7 @@
 #include "paired_frame.h"
 #include "paired_link.h"
 #include "paired_session.h"
+#include "uart_reliable_stream.h"
 #include "boot_epoch.h"
 #include "nrf24_ack_phy.h"
 
@@ -36,84 +43,19 @@ static Timer1Clock ticks;
 static AckPhy phy(radio,delay,ticks);
 static PairedLink linkState(true,0);
 static PairedSession session(true,PairedSession::Identity());
+static UartReliableStream<UART> stream(uart);
 static bool isLeader=false;
 static uint32_t lastPeerProgress=0;
+static uint32_t lastPeerData=0;
 static uint16_t recoveryCount=0;
+static uint16_t radioErrors=0;
 static bool replaceAck=false;
-static uint8_t packet[32],incoming[32],body[24];
+static uint8_t packet[32],incoming[32];
 static uint8_t ackStaged[32],ackSize=0;
 static bool ackWaiting=false;
 
-class Diagnostic {
-public:
-    Diagnostic():size_(0) {}
-    void word(const char* s) {while(*s) put(*s++);}
-    void number(uint32_t n) {
-        char rev[10];uint8_t i=0;
-        do {rev[i++]=static_cast<char>('0'+n%10UL);n/=10UL;}
-        while(n && i<10);
-        while(i)put(rev[--i]);
-    }
-    void send() {
-        put('\r');put('\n');
-        if(uart.freeSpace()>=size_)
-            (void)uart.writeAll(reinterpret_cast<const uint8_t*>(data_),size_);
-        size_=0;
-    }
-private:
-    void put(char c) {if(size_<sizeof(data_))data_[size_++]=c;}
-    char data_[112];uint8_t size_;
-};
-
-struct Period {
-    uint16_t tx,rx,queued,arc,maxRt,empty,bad,io,full;
-    Period():tx(0),rx(0),queued(0),arc(0),maxRt(0),empty(0),
-             bad(0),io(0),full(0) {}
-    void reset() {*this=Period();}
-};
-static Period period;
-static uint32_t lastSecond=0;
-
-static void pattern(uint8_t role,uint8_t seq,uint8_t (&out)[24]) {
-    for(uint8_t i=0;i<24;++i)
-        out[i]=static_cast<uint8_t>(
-            (static_cast<uint16_t>(seq)*37U +
-             static_cast<uint16_t>(i)*41U +
-             static_cast<uint16_t>(role)*71U) ^
-            (static_cast<uint16_t>(seq)>>(i&3U)));
-}
-static bool check(const uint8_t* bytes,uint8_t role,uint8_t seq) {
-    if(!bytes)return false;
-    uint8_t expected[24];
-    pattern(role,seq,expected);
-    for(uint8_t i=0;i<24;++i)if(bytes[i]!=expected[i])return false;
-    return true;
-}
-static void report(bool leader,PairedLink& link) {
-    const uint32_t now=ticks.now();
-    if(static_cast<uint32_t>(now-lastSecond)<2000000UL)return;
-    lastSecond=now;
-    Diagnostic l;
-    l.word(leader?"A TX/s=":"B RX/s=");
-    l.number(leader?period.tx:period.rx);
-    l.word(leader?" ACK/s=":" Q/s=");
-    l.number(leader?period.rx:period.queued);
-    l.word(" ARC=");l.number(period.arc);
-    l.word(" MAX=");l.number(period.maxRt);
-    l.word(" BAD=");l.number(period.bad);
-    l.word(" IO=");l.number(period.io);
-    l.word(" GAB=");l.number(leader?link.remoteLoss():link.localLoss());
-    l.word(" GBA=");l.number(leader?link.localLoss():link.remoteLoss());
-    l.word(" DROP=");l.number(link.localDrops());
-    l.word(" FULL=");l.number(period.full);
-    l.word(" SID=");l.number(session.active()?session.sid():0);
-    l.word(" ST=");l.number(static_cast<uint8_t>(session.phase()));
-    l.word(" R=");l.number(recoveryCount);
-    l.send();
-    period.reset();
-}
-static void fatal(const char* what) {
-    Diagnostic l;l.word("PAIR CORE FAIL ");l.word(what);l.send();
+static void fatal() {
+    // Never corrupt binary UART data with a diagnostic string.
     for(;;)delay.ms(100);
 }
 static bool restartIdentity() {
@@ -123,183 +65,163 @@ static bool restartIdentity() {
         session.changeBoot(next);
     }
     linkState.configure(isLeader,0);
+    stream.disconnect(); // Retains the pending, unacknowledged UART segment.
     ++recoveryCount;
     lastPeerProgress=ticks.now();
     return true;
 }
-static bool makePacket(PairedLink& link,uint8_t role,
-                       uint8_t* dst,uint8_t& width) {
+static bool makePacket(uint8_t* dst,uint8_t& width) {
     if(!session.active())return session.prepare(dst,width);
-    if(link.sessionId()!=session.sid())
-        link.configure(isLeader,session.sid());
-    if(link.peerCredit()!=0) {
-        pattern(role,link.nextTxSeq(),body);
-        return link.make(PairedFrame::Kind::DATA,0,1,body,24,
-                         dst,width)==PairedFrame::Error::OK;
+    if(linkState.sessionId()!=session.sid()){
+        linkState.configure(isLeader,session.sid());
+        stream.beginSession(session.sid());
     }
-    return link.make(PairedFrame::Kind::IDLE,0,1,0,0,
-                     dst,width)==PairedFrame::Error::OK;
+    return stream.make(linkState,dst,width);
 }
 
-
-// Decode a control handshake independently of application telemetry.
-// It must be processed BEFORE PairedLink's strict SID filter.
-static void processFrame(PairedLink& link,uint8_t peer,uint8_t width) {
+// Handshake must be decoded BEFORE the strict active-session filter.
+// Hardware ACK is never interpreted here as acceptance of UART bytes.
+static void processFrame(uint8_t width) {
     PairedFrame::View view;
-    if(PairedFrame::decode(incoming,width,view)!=PairedFrame::Error::OK) {
-        ++period.bad;return;
+    if(PairedFrame::decode(incoming,width,view)!=PairedFrame::Error::OK){
+        ++radioErrors;
+        return;
     }
     const PairedSession::Event event=session.accept(view);
-    if(event!=PairedSession::Event::NONE){
+    if(event!=PairedSession::Event::NONE) {
         lastPeerProgress=ticks.now();
-        if(event==PairedSession::Event::LOST){
+        if(event==PairedSession::Event::LOST) {
             if(isLeader && session.active()){
                 uint32_t epoch=0;
-                if(!BootEpoch::advance(epoch))fatal("EPOCH");
+                if(!BootEpoch::advance(epoch))fatal();
                 session.changeBoot(epoch);
             }
-            link.configure(isLeader,0);
+            linkState.configure(isLeader,0);
+            stream.disconnect();
             ++recoveryCount;
-            if(isLeader && !phy.resetPtxFifos())++period.io;
+            if(isLeader && !phy.resetPtxFifos())++radioErrors;
         } else if(event==PairedSession::Event::ESTABLISHED) {
-            link.configure(isLeader,session.sid());
+            linkState.configure(isLeader,session.sid());
+            stream.beginSession(session.sid());
+        } else if(!session.active()) {
+            linkState.configure(isLeader,0);
+            stream.disconnect();
         }
-        // A new peer nonce can change the ACK reply while the responder
-        // remains in WAIT_READY. Phase equality is NOT proof of FIFO safety.
+        // PRX must invalidate any preloaded ACK from a prior phase/epoch.
         if(!isLeader)replaceAck=true;
     }
     if(view.header.kind()==PairedFrame::Kind::CONTROL)return;
-    if(!session.active() || view.header.sessionId!=session.sid()) {
-        ++period.bad;return;
-    }
-    const PairedLink::Receipt receipt=link.receive(view);
-    if(receipt==PairedLink::Receipt::WRONG_SESSION) {
-        ++period.bad;return;
-    }
+    if(!session.active() || view.header.sessionId!=session.sid())
+        return;
+    const PairedLink::Receipt receipt=linkState.receive(view);
+    if(receipt==PairedLink::Receipt::WRONG_SESSION)return;
     lastPeerProgress=ticks.now();
-    if(receipt!=PairedLink::Receipt::NEW_FRAME)return;
-    if(view.header.kind()==PairedFrame::Kind::DATA) {
-        if(view.length!=24 || !check(view.body,peer,view.header.txSeq)) {
-            ++period.bad;
-            link.noteLocalDrop();
-            return;
-        }
-    }
-    ++period.rx;
+    if(receipt==PairedLink::Receipt::NEW_FRAME &&
+       stream.accept(view))
+        lastPeerData=ticks.now();
 }
+
 static void runA() {
-    if(!phy.beginPtx())fatal("PTX");
-    delay.ms(150); // only once, allow PRX to boot
-    Diagnostic hello;
-    hello.word("PAIR CORE A PTX 8+24B SESSION SPI8");
-    hello.send();
-    lastSecond=ticks.now();
+    if(!phy.beginPtx())fatal();
+    delay.ms(150); // one-time peer power-on, never per packet
+    uint32_t lastExchange=0;
+    lastPeerData=ticks.now();
     for(;;) {
+        const uint32_t now=ticks.now();
+        // In idle, A must still trigger PRX ACK Payload for unsolicited
+        // data from B. Poll about every 10ms; remain in the fast pipeline
+        // for 60ms after any B user payload or while A has UART input.
+        if(session.active() && !stream.hasWork() &&
+           static_cast<uint32_t>(now-lastPeerData)>120000UL &&
+           static_cast<uint32_t>(now-lastExchange)<20000UL)
+            continue;
         uint8_t width=0;
-        if(!makePacket(linkState,0,packet,width))fatal("ENCODE");
+        if(!makePacket(packet,width))fatal();
         uint8_t incomingWidth=0;
         const AckPhy::TxResult tx=phy.transfer(packet,width,incoming,incomingWidth);
+        lastExchange=ticks.now();
         linkState.notePtxRetries(tx.retries);
-        period.arc=static_cast<uint16_t>(period.arc+tx.retries);
-        if(tx.code==AckPhy::TxCode::ACK_WITH_DATA ||
-           tx.code==AckPhy::TxCode::ACK_EMPTY) ++period.tx;
         if(tx.code==AckPhy::TxCode::ACK_WITH_DATA)
-            processFrame(linkState,1,incomingWidth);
-        else if(tx.code==AckPhy::TxCode::ACK_EMPTY) ++period.empty;
-        else if(tx.code==AckPhy::TxCode::MAX_RT) ++period.maxRt;
-        else if(tx.code==AckPhy::TxCode::BAD_REPLY_SIZE) ++period.bad;
-        else if(tx.code==AckPhy::TxCode::IO_ERROR ||
-                tx.code==AckPhy::TxCode::TIMEOUT) ++period.io;
-        // Discovery is idempotent. Never burn through attempts (and EEPROM
-        // epochs) just because the other board is powered off for days.
+            processFrame(incomingWidth);
+        else if(tx.code==AckPhy::TxCode::BAD_REPLY_SIZE ||
+                tx.code==AckPhy::TxCode::IO_ERROR ||
+                tx.code==AckPhy::TxCode::TIMEOUT)
+            ++radioErrors;
+
+        // If the peer has disappeared, restart session negotiation.
+        // We do NOT discard staged, unacknowledged user UART bytes.
         if(session.phase()!=PairedSession::Phase::DISCOVER &&
            static_cast<uint32_t>(ticks.now()-lastPeerProgress)>
            (session.active()?500000UL:2000000UL)) {
-            if(!restartIdentity() || !phy.resetPtxFifos())
-                fatal("RESTART_A");
+            if(!restartIdentity() || !phy.resetPtxFifos())fatal();
         }
-        report(true,linkState);
     }
 }
 
 static bool queueB() {
     if(replaceAck) {
         ackWaiting=false;
-        if(!makePacket(linkState,1,ackStaged,ackSize))return false;
-        // A preloaded ACK from the old session must never be reused after
-        // rekeying, even if the receiver's MCU was not reset.
-        if(!phy.replacePrxReply(ackStaged,ackSize)) {
-            ++period.io;
-            return false;
-        }
+        if(!makePacket(ackStaged,ackSize))return false;
+        if(!phy.replacePrxReply(ackStaged,ackSize))return false;
         replaceAck=false;
-        ++period.queued;
         return true;
     }
     if(!ackWaiting) {
-        if(!makePacket(linkState,1,ackStaged,ackSize))return false;
+        if(!makePacket(ackStaged,ackSize))return false;
         ackWaiting=true;
     }
     const AckPhy::QueueCode q=phy.queueReply(ackStaged,ackSize);
     if(q==AckPhy::QueueCode::QUEUED) {
         ackWaiting=false;
-        ++period.queued;
-    } else if(q==AckPhy::QueueCode::FULL) {
-        ++period.full;
-    } else ++period.io;
-    return q==AckPhy::QueueCode::QUEUED;
+        return true;
+    }
+    if(q==AckPhy::QueueCode::IO_ERROR)++radioErrors;
+    // FULL is normal when the PRX has a pipelined response outstanding.
+    return false;
 }
+
 static void runB() {
-    if(!phy.beginPrx())fatal("PRX");
-    // Initial BEACON is a 15B CONTROL frame in hardware ACK Payload.
-    // B does not transmit application DATA until A confirms the session.
-    if(!queueB())fatal("PRIME");
-    Diagnostic hello;hello.word("PAIR CORE B PRX 8+24B SESSION SPI8");hello.send();
-    lastSecond=ticks.now();
+    if(!phy.beginPrx())fatal();
+    if(!queueB())fatal(); // initial BEACON for A's first HELLO
     for(;;) {
         uint8_t incomingWidth=0;
         const AckPhy::RxCode rx=phy.receive(incoming,incomingWidth);
         if(rx==AckPhy::RxCode::GOOD) {
-            processFrame(linkState,0,incomingWidth);
-            if(!phy.clearPrxFlags()) ++period.io;
+            processFrame(incomingWidth);
+            if(!phy.clearPrxFlags())++radioErrors;
             (void)queueB();
-        } else if(rx==AckPhy::RxCode::BAD_SIZE) {
-            ++period.bad;
-            if(!phy.clearPrxFlags()) ++period.io;
-        } else if(rx==AckPhy::RxCode::IO_ERROR) {
-            ++period.io;
-            if(!phy.clearPrxFlags()) ++period.io;
+        } else if(rx==AckPhy::RxCode::BAD_SIZE ||
+                  rx==AckPhy::RxCode::IO_ERROR) {
+            ++radioErrors;
+            if(!phy.clearPrxFlags())++radioErrors;
         }
-        // B cannot transmit unsolicited frames. After silence it prepares
-        // a new BEACON which the next PTX trigger will retrieve in ACK.
-        // Once in DISCOVER, the prepared BEACON remains valid indefinitely.
         if(session.phase()!=PairedSession::Phase::DISCOVER &&
            static_cast<uint32_t>(ticks.now()-lastPeerProgress)>
            (session.active()?1500000UL:4000000UL)) {
-            if(!restartIdentity())fatal("RESTART_B");
+            if(!restartIdentity())fatal();
             replaceAck=true;
         }
-        if(replaceAck && !queueB())++period.io;
-        report(false,linkState);
+        if(replaceAck && !queueB())++radioErrors;
     }
 }
+
 int main() {
     uart.begin();
     Timer1Clock::begin();
     sei();
     ce.clear();csn.set();
     delay.ms(110);
-    if(radio.probeAndConfigure().result!=Radio::Result::OK)
-        fatal("NRF");
+    if(radio.probeAndConfigure().result!=Radio::Result::OK)fatal();
     spi.setSpeed(SpiMaster::Speed::MHz8);
-    if(!radio.enableAckPayload(0x23))fatal("DPL");
+    if(!radio.enableAckPayload(0x23))fatal();
     uint16_t adc=0;
-    if(!Adc0::sample(adc))fatal("ADC");
+    if(!Adc0::sample(adc))fatal();
     isLeader=(Adc0::classForM1(adc)==0);
     uint32_t epoch=0;
-    if(!BootEpoch::advance(epoch))fatal("EEPROM_EPOCH");
+    if(!BootEpoch::advance(epoch))fatal();
     session.configure(isLeader,PairedSession::Identity(epoch,0));
     linkState.configure(isLeader,0);
+    stream.disconnect();
     lastPeerProgress=ticks.now();
     if(isLeader)runA();
     else runB();

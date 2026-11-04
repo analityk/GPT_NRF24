@@ -196,6 +196,9 @@
     <None Include="epoch_journal.h">
       <SubType>compile</SubType>
     </None>
+    <None Include="uart_reliable_stream.h">
+      <SubType>compile</SubType>
+    </None>
     <None Include="paired_session.h">
       <SubType>compile</SubType>
     </None>
