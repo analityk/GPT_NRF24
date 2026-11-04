@@ -3,9 +3,11 @@
 #include <stdint.h>
 #include "paired_frame.h"
 
-// Pure state of one direction of a paired RF link. No UART, PHY or heap.
-// Sequence and loss counters diagnose RF frames, NOT end-to-end delivery.
-// PTX owns the observed ARC count; the PRX merely echoes last received ARC.
+// Shared two-peer RF link state. No UART registers, MCU types or heap.
+// Stream DATA seq identifies logical 24B user segments; IDLE does not
+// advance sequence. RX_LAST is cumulative acceptance ACK (set by stream).
+// A received RF packet is never equated with application acceptance.
+// PTX owns OBSERVE_TX.ARC_CNT; PRX echoes its last reported value.
 class PairedLink {
 public:
     struct Counters {
@@ -15,7 +17,7 @@ public:
     };
     enum class Receipt : uint8_t { NEW_FRAME, DUPLICATE, STALE, WRONG_SESSION };
     explicit PairedLink(bool isA,uint16_t sid)
-      : isA_(isA),sid_(sid),txSeq_(0),peerLast_(0),peerSeen_(false),
+      : isA_(isA),sid_(sid),peerLast_(0),peerSeen_(false),
         localLoss_(0),remoteLoss_(0),localDrops_(0),arc_(0),peerCredit_(0) {}
     // Configure the same link-state object for either board role.
     // One instance per board suffices on the 2KB SRAM ATmega328P.
@@ -24,12 +26,11 @@ public:
         resetSession(sid);
     }
     void resetSession(uint16_t sid) {
-        sid_=sid;txSeq_=0;peerLast_=0;peerSeen_=false;
+        sid_=sid;peerLast_=0;peerSeen_=false;
         localLoss_=0;remoteLoss_=0;localDrops_=0;arc_=0;peerCredit_=0;
         counters_=Counters();
     }
     uint16_t sessionId() const {return sid_;}
-    uint8_t nextTxSeq() const {return txSeq_;}
     uint8_t peerCredit() const {return peerCredit_;}
     uint8_t localLoss() const {return localLoss_;}
     uint8_t remoteLoss() const {return remoteLoss_;}
@@ -41,25 +42,6 @@ public:
     void noteLocalDrop() {
         localDrops_=static_cast<uint8_t>((localDrops_+1U)&15U);
         ++counters_.rxDrops;
-    }
-    PairedFrame::Error make(PairedFrame::Kind kind,
-                 uint8_t extraFlags,uint8_t rxCredit,
-                 const uint8_t* body,uint8_t length,
-                 uint8_t* out,uint8_t& width) {
-        PairedFrame::Header h;
-        h.txSeq=txSeq_;
-        h.rxLast=peerSeen_?peerLast_:0xFF;
-        h.lossAB=isA_?remoteLoss_:localLoss_;
-        h.lossBA=isA_?localLoss_:remoteLoss_;
-        h.arcLast=arc_;
-        h.rxDrop=localDrops_;
-        h.rxCredit=rxCredit;
-        h.flags=static_cast<uint8_t>((extraFlags&0xFCU)|
-                                  static_cast<uint8_t>(kind));
-        h.sessionId=sid_;
-        const PairedFrame::Error e=PairedFrame::encode(h,body,length,out,width);
-        if (e==PairedFrame::Error::OK){++txSeq_;++counters_.txFrames;}
-        return e;
     }
     // Paired stream: MAC TX_SEQ is the user DATA sequence, RX_LAST is
     // the cumulative acceptance ACK. BODY contains only user bytes.
@@ -107,33 +89,6 @@ public:
         return Receipt::NEW_FRAME;
     }
 
-    Receipt receive(const PairedFrame::View& f) {
-        if(f.header.sessionId!=sid_) {
-            ++counters_.foreign;
-            return Receipt::WRONG_SESSION;
-        }
-        // Duplicate and stale frames MUST NOT roll back advertised credit
-        // or the last acknowledged diagnostic snapshot.
-        if(!peerSeen_){
-            acceptStatus(f);
-            peerLast_=f.header.txSeq;
-            peerSeen_=true;
-            ++counters_.rxFrames;
-            return Receipt::NEW_FRAME;
-        }
-        const uint8_t delta=static_cast<uint8_t>(f.header.txSeq-peerLast_);
-        if(delta==0){++counters_.duplicates;return Receipt::DUPLICATE;}
-        if(delta>127){++counters_.stale;return Receipt::STALE;}
-        if(delta>1){
-            const uint8_t missing=static_cast<uint8_t>(delta-1U);
-            counters_.gaps+=missing;
-            localLoss_=static_cast<uint8_t>((localLoss_+missing)&15U);
-        }
-        acceptStatus(f);
-        peerLast_=f.header.txSeq;
-        ++counters_.rxFrames;
-        return Receipt::NEW_FRAME;
-    }
 private:
     void acceptStatus(const PairedFrame::View& f) {
         // B owns A->B loss, A owns B->A loss; peer field is delayed echo.
@@ -143,7 +98,7 @@ private:
     }
     bool isA_;
     uint16_t sid_;
-    uint8_t txSeq_,peerLast_;
+    uint8_t peerLast_;
     bool peerSeen_;
     uint8_t localLoss_,remoteLoss_,localDrops_,arc_,peerCredit_;
     Counters counters_;
