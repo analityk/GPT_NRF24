@@ -12,6 +12,14 @@
 > przejście do utraty łączności i automatyczne odtworzenie.
 > [ ] Po próbie przywrócić `main` i ręcznie F12 wgrać bazowy PP na oba MCU.
 
+> [x] Przygotowano test rozróżniający zimny start ~4700 CPS i stan
+> ~12 552 CPS po zwolnieniu/przyspieszeniu źródła: dodatkowe liczniki
+> ACK / okna A, sekwencji MAC i próbek FIFO B, bez dodatkowego SPI.
+> [ ] **Najbliższy pomiar sprzętowy:** nowy HEX na obie płytki, 5–10
+> linii A+B po zimnym starcie i 5 po cyklu `w`→`s`, zgodnie z
+> `echo-ramp-test.md`. Nie zmieniać algorytmu PP do zlokalizowania
+> przyczyny; obecnie niska szybkość nie jest udowodnionym limitem PHY.
+
 ## Potwierdzone wcześniej na dwóch RF-Nano
 
 - [x] Sprzętowy ping-pong 8+24 B; około 625 wymian/s bez handshake'u i 612–613/s z handshake'em.

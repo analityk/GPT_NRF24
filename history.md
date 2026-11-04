@@ -329,3 +329,24 @@ Przyszłe wpisy powinny zawierać datę, zakres faktycznie wykonanej zmiany, com
   wrap zegara i licznika16, częstotliwości, format i granice bufora.
   **Testy hostowe PASS**; kompilacja AVR w tej sesji nie była dostępna.
   Brak fizycznego testu nowego firmware i wyników izolowania radii.
+
+## 2026-11-04 — potwierdzona histereza przy pełnym obciążeniu, diagnostyka warstwowa
+
+- Właściciel pokazał powtarzalne ~4700 B/s po uruchomieniu A od razu z
+  pełną kolejką (`A ret≈195/s`, `B bad≈195/s`, `arc=0`, `max=0`), ale
+  ~12 552 B/s bez retry po zejściu `w` do ~100 B/s i powrocie `s` do
+  maksimum. Sam reset A ponownie wywołał wolny stan w nowym SID.
+  `gap=0` w odebranym echu nie dowodzi braku strat przy każdej zmianie
+  sesji. Osłabienie sygnału radiowego nie wyjaśnia stabilnego podziału.
+- Hostowa symulacja bez limitu sprzętowego RX FIFO nie odtworzyła
+  degradacji pełnego obciążenia. Wersja eksperymentalna została zatem
+  wyposażona w **pasywne** liczniki: A `ack` (aplikacyjnie potwierdzone
+  bajty/s), `win` (liczba oczekujących segmentów); B `lg` (MAC gaps/s),
+  `ls` (stare DATA/s), `rf` (odczyty RX_FULL/s przy istniejącym pollingu
+  FIFO_STATUS), `af` (ACK TX FIFO FULL/s). `rf` ani `af` nie są
+  bezpośrednim licznikiem fizycznych ubytków. Nie ma nowych transakcji
+  SPI ani zrzutu każdego pakietu po UART.
+- Testy hostowe dla zmian pola RX_FULL, wrap liczników i zmiany SID;
+  **do pomiaru na dwóch RF-Nano, bez ustalonej jeszcze przyczyny**.
+  To świadomie jednorazowy instrument eksperymentalny, nie zmiana
+  produkcyjnego PP. `main` i checkpoint PP nietknięte.

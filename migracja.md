@@ -11,6 +11,13 @@ być zwolnione przez `w` co100 µs i przyspieszone przez `s` co100 µs.
 Radio nadal pracuje przy **1 Mb/s**, PP 8+24B WINDOW4/ACK Payload.
 Normalny UART↔RF↔UART nadal znajduje się na niezmienionym `main`
 (`6b94a43`). Szczegóły i przywracanie: `echo-ramp-test.md`.
+Fizycznie wykryto **histerezę**: po pełnym obciążeniu od zimnego startu
+~4700 CPS/`ret≈195`, po cyklu `w`→`s` ~12 552 CPS/`ret=0`; reset A
+odtwarza wolny stan. Nowa eksperymentalna telemetria `A ack/win` oraz
+`B lg/ls/rf/af` wykorzystuje istniejące liczniki i odczyt FIFO bez
+dodatkowego SPI; czeka na jeden porównawczy pomiar sprzętowy. Własna
+symulacja pełnego źródła nie reprodukuje problemu, przyczyna nieznana.
+Nie zmieniać docelowego PP do wyniku tej diagnostyki.
 Nowy test ma tylko symulację hostową, nie ma jeszcze wyników sprzętowych;
 oba MCU wymagają ręcznego F12. Nie utożsamiać `gap=0` z bezstratnością
 przez reset lub utratę wielokrotności256 bajtów.

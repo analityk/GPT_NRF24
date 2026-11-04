@@ -26,6 +26,35 @@ A cps=18000 gen=18048 arc=0 max=0 ret=0 dup=0 bad=0 blk=0 gap=0 err=0 rec=0 sid=
 B cps=18024 fwd=18024 ret=0 dup=0 bad=0 blk=0 err=0 rec=0 sid=12345 up=1
 ```
 
+**Uzupełnienie diagnostyczne po rzeczywistym teście:** powyższy przykład
+dotyczy poprzedniego wariantu raportowania. Aktualna linia A dodaje
+`ack` (bajty potwierdzone aplikacyjnie przez B w tym oknie) i `win`
+(liczbę niepotwierdzonych segmentów A, 0–4), a nie wypisuje na A
+`dup` i `blk` (nadal dostępne w obiekcie transportu). Linia B dodaje:
+
+| Pole B | Znaczenie |
+| --- | --- |
+| `lg` | liczba luk w numerach DATA, które zauważyła warstwa MAC w danym oknie; może obejmować odwróconą kolejność pakietów, nie dowodzi fizycznej utraty ramki |
+| `ls` | liczba starych numerów DATA zauważonych przez MAC w danym oknie |
+| `rf` | liczba odczytów istniejącego `FIFO_STATUS` (podczas `receive`), gdy **trzy miejsca RX FIFO były zajęte**; nie jest bezpośrednim licznikiem strat |
+| `af` | liczba prób kolejki ACK Payload z wynikiem TX FIFO FULL; nie jest bezpośrednim licznikiem utraconych ACK |
+
+Nie dodano ani jednego odczytu SPI do gorącej ścieżki; `rf` wykorzystuje
+ten sam `FIFO_STATUS`, który `receive` już odczytuje. `ack`, `win`, `lg`
+i `ls` pochodzą z istniejących struktur. Wszystkie nowe miary poza `win`
+są liczone w oknie pomiarowym, a `win` jest stanem chwilowym. Zmiana SID
+resetuje porównanie liczników MAC.
+
+**Jedna próba do rozpoznania spowolnienia po zimnym starcie:** wgraj ten
+sam HEX na A i B, uruchom bez komend `s`/`w` i prześlij 5–10 kolejnych
+linii z obu RealTerm przy utrzymującym się ~4700 CPS. Potem spowolnij
+`w` do ~100 CPS, a następnie przyspiesz `s` do maksimum i prześlij
+ponownie 5 linii z obu urządzeń. Jeśli wystarczy, drugi etap można
+zastąpić resetem **samej płytki A**, bez resetowania B. Kluczowe jest
+porównanie `A ack/win/ret` z `B bad/lg/ls/rf/af` przy **tym samym SID**.
+Nie osłaniaj na razie modułów: najpierw izolujemy problem kolejki i
+potwierdzeń bez strat radiowych.
+
 Każdy odczyt odnosi się do poprzedniego okna około 1 s:
 
 | Pole | Znaczenie |

@@ -12,18 +12,23 @@ struct PpStressSnapshot {
     uint32_t echoGaps;
     uint16_t appRetries, duplicates, badFrames, blocked;
     uint16_t radioErrors, recoveries, sid;
+    uint16_t acknowledgedBytes,linkGaps,linkStale,rxFifoFull,ackFifoFull;
+    uint8_t outstanding;
     bool active;
     PpStressSnapshot()
         :sourceBytes(0),deliveredBytes(0),hardwareRetries(0),
          maxRetries(0),echoGaps(0),appRetries(0),duplicates(0),
          badFrames(0),blocked(0),radioErrors(0),recoveries(0),
-         sid(0),active(false) {}
+         sid(0),acknowledgedBytes(0),linkGaps(0),linkStale(0),
+         rxFifoFull(0),ackFifoFull(0),outstanding(0),active(false) {}
 };
 
 struct PpStressSample {
     uint32_t cps,sourceCps,hardwareRetries,maxRetries,echoGaps;
     uint16_t appRetries,duplicates,badFrames,blocked;
     uint16_t radioErrors,recoveries,sid;
+    uint16_t acknowledgedBytes,linkGaps,linkStale,rxFifoFull,ackFifoFull;
+    uint8_t outstanding;
     bool active;
 };
 
@@ -61,6 +66,21 @@ public:
                                                  last_.radioErrors);
         sample.recoveries=static_cast<uint16_t>(current.recoveries-
                                                 last_.recoveries);
+        sample.acknowledgedBytes=static_cast<uint16_t>(
+            current.acknowledgedBytes-last_.acknowledgedBytes);
+        // Link sequence counters are scoped to one negotiated session,
+        // unlike the lifetime counters in the PHY and transport.
+        sample.linkGaps=(current.sid==last_.sid)?
+            static_cast<uint16_t>(current.linkGaps-last_.linkGaps):
+            current.linkGaps;
+        sample.linkStale=(current.sid==last_.sid)?
+            static_cast<uint16_t>(current.linkStale-last_.linkStale):
+            current.linkStale;
+        sample.rxFifoFull=static_cast<uint16_t>(
+            current.rxFifoFull-last_.rxFifoFull);
+        sample.ackFifoFull=static_cast<uint16_t>(
+            current.ackFifoFull-last_.ackFifoFull);
+        sample.outstanding=current.outstanding;
         sample.sid=current.sid;
         sample.active=current.active;
         lastTicks_=now;last_=current;
@@ -119,13 +139,21 @@ bool printPpStressLine(Serial& serial,bool leader,
     line.word(leader?"A cps=":"B cps=");line.decimal(s.cps);
     line.word(leader?" gen=":" fwd=");line.decimal(s.sourceCps);
     if(leader) {
+        line.word(" ack=");line.decimal(s.acknowledgedBytes);
+        line.word(" win=");line.decimal(s.outstanding);
         line.word(" arc=");line.decimal(s.hardwareRetries);
         line.word(" max=");line.decimal(s.maxRetries);
     }
     line.word(" ret=");line.decimal(s.appRetries);
-    line.word(" dup=");line.decimal(s.duplicates);
+    if(!leader){line.word(" dup=");line.decimal(s.duplicates);}
     line.word(" bad=");line.decimal(s.badFrames);
-    line.word(" blk=");line.decimal(s.blocked);
+    if(!leader) {
+        line.word(" lg=");line.decimal(s.linkGaps);
+        line.word(" ls=");line.decimal(s.linkStale);
+        line.word(" rf=");line.decimal(s.rxFifoFull);
+        line.word(" af=");line.decimal(s.ackFifoFull);
+    }
+    if(!leader){line.word(" blk=");line.decimal(s.blocked);}
     if(leader){line.word(" gap=");line.decimal(s.echoGaps);}
     line.word(" err=");line.decimal(s.radioErrors);
     line.word(" rec=");line.decimal(s.recoveries);

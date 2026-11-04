@@ -59,6 +59,7 @@ static uint8_t ackStaged[32],ackSize=0;
 static bool ackWaiting=false;
 static PpStressWindow performance;
 static uint32_t hardwareRetries=0,maxRetries=0,lastReport=0;
+static uint16_t ackFifoFull=0;
 
 static PpStressSnapshot performanceSnapshot() {
     PpStressSnapshot s;
@@ -73,6 +74,12 @@ static PpStressSnapshot performanceSnapshot() {
     s.blocked=stream.blocked();
     s.radioErrors=radioErrors;
     s.recoveries=recoveryCount;
+    s.acknowledgedBytes=stream.acknowledgedBytes();
+    s.outstanding=stream.outstanding();
+    s.linkGaps=static_cast<uint16_t>(linkState.counters().gaps);
+    s.linkStale=static_cast<uint16_t>(linkState.counters().stale);
+    s.rxFifoFull=phy.rxFifoFullSamples();
+    s.ackFifoFull=ackFifoFull;
     s.sid=session.sid();
     s.active=session.active();
     return s;
@@ -206,6 +213,7 @@ static bool queueB() {
         ackWaiting=false;
         return true;
     }
+    if(q==AckPhy::QueueCode::FULL)++ackFifoFull;
     if(q==AckPhy::QueueCode::IO_ERROR)++radioErrors;
     // FULL is normal when the PRX has a pipelined response outstanding.
     return false;
