@@ -3,6 +3,7 @@
 #include <cassert>
 #include <cstdint>
 #include <cstring>
+#include <cstdio>
 
 // Reusable offered-load regression for the REAL UART boundary.
 // A producer with no RTS/CTS sends even when the RX ring is full:
@@ -90,6 +91,17 @@ int main() {
     const Result flooded=run(19,600);
     assert(flooded.inputA==11400 && flooded.inputB==11400);
     assert(flooded.lostA>0 && flooded.lostB>0);
+    std::printf("UART offered-load model: paced(3/exchange) drops A=%lu B=%lu, "
+                "flooded(19/exchange) offered A=%lu B=%lu, "
+                "drops A=%lu B=%lu, UART TX emitted A=%lu B=%lu\\n",
+                static_cast<unsigned long>(paced.lostA),
+                static_cast<unsigned long>(paced.lostB),
+                static_cast<unsigned long>(flooded.inputA),
+                static_cast<unsigned long>(flooded.inputB),
+                static_cast<unsigned long>(flooded.lostA),
+                static_cast<unsigned long>(flooded.lostB),
+                static_cast<unsigned long>(flooded.forwardedA),
+                static_cast<unsigned long>(flooded.forwardedB));
     assert(flooded.forwardedA<flooded.inputB &&
            flooded.forwardedB<flooded.inputA);
 }
