@@ -73,6 +73,10 @@ int main() {
     assert(a.stream.outstanding()==0);
     assert(a.stream.acknowledgedBytes()==44);
     b.serial.drain(first,44);
+    // RX_CREDIT is a delayed on-wire advertisement. Refresh it explicitly
+    // after consuming the prior output before starting a new test burst.
+    b.make();
+    a.take(b.bytes,b.width);
 
     // The physical ring now starts with slot index 2. Window=4 will put
     // outstanding frames in slots 2,3,0. Rekey must preserve this order.
