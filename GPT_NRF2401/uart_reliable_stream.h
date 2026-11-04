@@ -4,7 +4,8 @@
 #include "paired_link.h"
 
 // Full-rate bidirectional UART stream over opaque 24-byte RF BODY.
-// 2B metadata (DATA_SEQ + cumulative APP_ACK) and up to 22B raw bytes.
+// DATA_SEQ and cumulative APP_ACK occupy MAC TX_SEQ/RX_LAST.
+// All 24 BODY octets are user bytes, without transport preamble.
 // Four unacknowledged segments per direction: new data can be emitted on
 // successive RF exchanges while older segments await delayed ACK Payload.
 // Go-back-N on ACK timeout (in EXCHANGES, not milliseconds), no heap.
@@ -13,8 +14,7 @@
 template<class Port>
 class UartReliableStream {
 public:
-    static const uint8_t CONTROL_BYTES=2;
-    static const uint8_t MAX_USER_BYTES=PairedFrame::MAX_BODY-CONTROL_BYTES;
+    static const uint8_t MAX_USER_BYTES=PairedFrame::MAX_BODY;
     static const uint8_t WINDOW=4;
     static const uint8_t REPLAY_AFTER=8; // multiple queued RF/ACK turns
 
@@ -80,7 +80,7 @@ public:
             seq=replaySeq_;
             count=slotLength_[slotIndex(seq)];
             for(uint8_t i=0;i<count;++i)
-                body[CONTROL_BYTES+i]=slots_[slotIndex(seq)][i];
+                body[i]=slots_[slotIndex(seq)][i];
             ++replaySeq_;
             --replayCount_;
             ++retransmits_;
@@ -95,32 +95,31 @@ public:
                 ++nextSeq_;
                 ++outstanding_;
                 for(uint8_t i=0;i<count;++i)
-                    body[CONTROL_BYTES+i]=slots_[slotIndex(seq)][i];
+                    body[i]=slots_[slotIndex(seq)][i];
             }
         }
-        body[0]=seq;
-        body[1]=static_cast<uint8_t>(recvNext_-1U);
-        return link.make(PairedFrame::Kind::DATA,0,credit(),body,
-                         static_cast<uint8_t>(CONTROL_BYTES+count),
-                         dst,width)==PairedFrame::Error::OK;
+        return link.makeStream(seq,static_cast<uint8_t>(recvNext_-1U),
+                               credit(),body,count,dst,width)
+               ==PairedFrame::Error::OK;
     }
 
     // Return whether a nonempty user segment was received. This is NOT
     // proof of success: a full sink may refuse it and leave ACK unchanged.
     bool accept(const PairedFrame::View& f) {
         if(session_==0 || f.header.sessionId!=session_ ||
-           f.header.kind()!=PairedFrame::Kind::DATA)return false;
-        if(f.length<CONTROL_BYTES || !f.body) {
+           (f.header.kind()!=PairedFrame::Kind::DATA &&
+            f.header.kind()!=PairedFrame::Kind::IDLE))return false;
+        // Every frame, including IDLE and retransmitted DATA, conveys ACK.
+        acceptAck(f.header.rxLast);
+        if(f.header.kind()==PairedFrame::Kind::IDLE)return false;
+        if(!f.length || !f.body) {
             ++badFrames_;
             return false;
         }
-        acceptAck(f.body[1]);
-
-        const uint8_t n=static_cast<uint8_t>(f.length-CONTROL_BYTES);
-        if(!n)return false;
-        const uint8_t seq=f.body[0];
+        const uint8_t n=f.length;
+        const uint8_t seq=f.header.txSeq;
         if(seq==recvNext_) {
-            if(port_.writeAll(f.body+CONTROL_BYTES,n)) {
+            if(port_.writeAll(f.body,n)) {
                 ++recvNext_;
                 acceptedBytes_=static_cast<uint16_t>(acceptedBytes_+n);
             } else {
