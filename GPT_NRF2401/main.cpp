@@ -1,18 +1,19 @@
 /*
- * Binary UART <-> paired 8+24B RF core <-> binary UART.
+ * TEMPORARY PP echo/rate-ramp diagnostic on the experiment branch.
  *
- * The very same AVR firmware runs on both boards. A0 low: PTX/initiator,
- * A0 high: PRX/ACK Payload responder. Incoming USART bytes are user data,
- * not commands; outgoing USART bytes are ONLY data received from peer.
+ * The very same AVR firmware runs on both boards. A0 low: A/PTX uses
+ * UART 's'/'w' to adjust a generated 00..FF pattern (100us steps, 10ms
+ * initial interval). A0 high: B/PRX queues each received RF body for
+ * retransmission by hardware ACK Payload, without using its local UART.
+ * Only the echoed raw bytes are written to A's UART TX.
  * The negotiated radio SID and the hardware DATA/ACK Payload path remain.
  *
  * MAC TX_SEQ/RX_LAST carry user DATA_SEQ and cumulative acceptance ACK.
  * Every full DATA packet carries 24 raw UART bytes, with no BODY preamble.
  * Four in-flight segments per direction; no stop-and-wait or idle polling.
  *
- * USART input has no RTS/CTS: prolonged offered load above radio goodput
- * or RF outage can overflow the 127B USART RX ring. Reported as counters
- * accessible in a debugger; this build emits no logs into the UART stream.
+ * The radio source queue is bounded and never overwrites pending bytes.
+ * This experiment retains the existing session, MAC, window and PHY.
  */
 #include "board_clock.h"
 #include <stdint.h>
@@ -29,12 +30,14 @@
 #include "paired_link.h"
 #include "paired_session.h"
 #include "uart_reliable_stream.h"
+#include "pp_echo_ramp_port.h"
 #include "boot_epoch.h"
 #include "nrf24_ack_phy.h"
 
 typedef Nrf24<SpiMaster,GPIO> Radio;
 typedef NrfAckPayloadPhy<Radio,AvrDelay,Timer1Clock> AckPhy;
 static UART uart;
+static PpEchoRampPort<UART> diagnosticPort(uart);
 static SpiMaster spi;
 static GPIO ce(&PORTB,PB2),csn(&PORTB,PB1);
 static Radio radio(spi,ce,csn);
@@ -43,7 +46,7 @@ static Timer1Clock ticks;
 static AckPhy phy(radio,delay,ticks);
 static PairedLink linkState(true,0);
 static PairedSession session(true,PairedSession::Identity());
-static UartReliableStream<UART> stream(uart);
+static UartReliableStream<PpEchoRampPort<UART> > stream(diagnosticPort);
 static bool isLeader=false;
 static uint32_t lastPeerProgress=0;
 
@@ -126,6 +129,7 @@ static void runA() {
     // Continuous DATA/ACK Payload ping-pong, even when neither UART has
     // bytes. The PHY alone enforces the 130us ESB turnaround guard.
     for(;;) {
+        diagnosticPort.service(ticks.now());
         uint8_t width=0;
         if(!makePacket(packet,width))fatal();
         uint8_t incomingWidth=0;
@@ -207,6 +211,7 @@ int main() {
     uint16_t adc=0;
     if(!Adc0::sample(adc))fatal();
     isLeader=(Adc0::classForM1(adc)==0);
+    diagnosticPort.configure(isLeader,ticks.now());
     uint32_t epoch=0;
     if(!BootEpoch::advance(epoch))fatal();
     session.configure(isLeader,PairedSession::Identity(epoch,0));

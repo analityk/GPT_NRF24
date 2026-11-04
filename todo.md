@@ -1,5 +1,12 @@
 # TODO — aktywny transport dwukierunkowy UART / ACK Payload
 
+> **Eksperyment, nie plan produkcyjny:** na gałęzi
+> `experiment/pp-echo-ramp-2026-11-04` znajduje się tymczasowy wariant
+> echo/ramp A→B→A. Aktualny stan i instrukcja: `echo-ramp-test.md`.
+> [ ] Fizycznie potwierdzić pełne echo, `echoGaps==0`, zmiany odstępu
+> co 100 µs, przypadki nasycenia i prędkość przy obu rolach.
+> [ ] Po próbie przywrócić `main` i ręcznie F12 wgrać bazowy PP na oba MCU.
+
 ## Potwierdzone wcześniej na dwóch RF-Nano
 
 - [x] Sprzętowy ping-pong 8+24 B; około 625 wymian/s bez handshake'u i 612–613/s z handshake'em.

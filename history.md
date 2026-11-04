@@ -288,3 +288,19 @@ Przyszłe wpisy powinny zawierać datę, zakres faktycznie wykonanej zmiany, com
 - **Nie zmieniono `main.cpp`, firmware nadal uruchamia tylko PP.** Wdrażanie rzeczywistego 20ms nadawania, NO_ACK, przełączania ról, ramki kontrolnej i dyspozytora strap nastąpi dopiero w kolejnych krokach. Nie przypisywać nowemu profilowi prędkości ani poprawnego działania na sprzęcie. Dokument: `burst-20ms.md`.
 
 - Uzupełniono BURST20 o portable `burst20_report.h` — 24B body końcowej ramki kontrolnej z walidacją, serializacją little-endian, przyrostowym CRC32/ISO-HDLC i idempotentną bitmapą 32 pakietów. `tests/burst20_report_test.cpp` weryfikuje kodowanie 32B `PairedFrame`, granice, brak mutacji po błędzie, znany wektor CRC32 oraz deduplikację bitmapy. Host i AVR cross build PASS; raport nie jest jeszcze wysyłany w fizycznym BURST20.
+
+# 2026-11-04 — gałąź eksperymentalna PP echo/ramp (nie `main`)
+
+- Na odrębnej gałęzi `experiment/pp-echo-ramp-2026-11-04` z bazy
+  `6b94a43` przygotowano tymczasowy adapter `pp_echo_ramp_port.h`:
+  A generuje kolejno 00..FF od 10 ms z krokiem 100 µs na `s`/`w`, B
+  odbija dane RF do własnego nadajnika ACK Payload, A wypisuje surowe
+  echo na UART. Nadal działa PP z oknem czterech segmentów, SID i
+  retransmisjami. Nie zmieniono samego kodu PHY/transportu.
+- Źródło A jest ograniczone do 120/127 bajtów w kolejce; przy nasyceniu
+  nie nadpisuje ani nie pomija numeru. Zliczane są bajty źródłowe,
+  nasycenia, echo i nieciągłości sekwencji, bez tekstu na UART.
+- `pp_echo_ramp_test.cpp` sprawdza krok/limity, wrap zegara i wartości
+  bajtów, atomowość echa B oraz model PP z opóźnionym ACK Payload.
+- Wariant nie był jeszcze testowany fizycznie; instrukcja oraz procedura
+  przywrócenia normalnego PP znajdują się w `echo-ramp-test.md`.

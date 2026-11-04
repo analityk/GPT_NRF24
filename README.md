@@ -1,3 +1,8 @@
+> **TYLKO GAŁĄŹ TESTOWA:** `experiment/pp-echo-ramp-2026-11-04` zastępuje
+> UART bridge diagnostycznym echem A→B→A i regulowanym generatorem bajtów.
+> **Instrukcja: [echo-ramp-test.md](echo-ramp-test.md).** Normalne PP i
+> poniższy opis mostu UART pozostają na niezmienionej gałęzi `main`.
+>
 > **Protokoły:** aktualny i zachowany sprzętowo **PP (Ping-Pong)**; drugi profil **BURST20** jest na etapie projektu harmonogramu i testów hostowych, **jeszcze nie jest wykonywany na radiu**. [Specyfikacja BURST20](burst-20ms.md). PP checkpoint: [checkpoint/pp-2026-11-04](https://github.com/analityk/GPT_NRF24/tree/checkpoint/pp-2026-11-04).
 
 # GPT_NRF24 — UART ↔ nRF24L01+ ACK Payload ↔ UART

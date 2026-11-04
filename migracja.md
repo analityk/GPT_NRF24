@@ -1,5 +1,12 @@
 **Stan na 2026-11-04: obecny firmware to PP (Ping-Pong), nie zmieniany przy pracy nad BURST20. Fizyczny zrzut jednoczesnych strumieni poprawił się po przejściu na 8+24B i WINDOW=4; brak binary checksum capture. PP checkpoint `checkpoint/pp-2026-11-04` SHA 784fd83. BURST20 ma czysto logiczny harmonogram i boot-mode selector testowane hostowo, NIE ma jeszcze BURST PHY ani wyboru A1 w main.**
 
+**Uwaga dla gałęzi `experiment/pp-echo-ramp-2026-11-04`:** jest to
+tymczasowy wariant pomiarowy, z tym samym PP PHY/MAC/sesją/transportem,
+ale z generatorem bajtów na A i lokalnym echem radiowym na B. Normalny
+UART↔RF↔UART nadal znajduje się na niezmienionym `main` (`6b94a43`).
+Szczegóły i przywracanie: `echo-ramp-test.md`. Nie przedstawiać testu
+hostowego jako odbioru sprzętowego; oba MCU wymagają ręcznego F12.
+
 # Migracja / punkt kontynuacji GPT_NRF24
 
 **Aktualny stan: 2026-11-04 — ciągły sprzętowy ping-pong DATA↔ACK Payload, WINDOW=4 w obu kierunkach, pełne 24B danych UART na ramkę (bez preambuły BODY), DATA_SEQ/APP_ACK w MAC TX_SEQ/RX_LAST. Host i AVR-GCC PASS, fizyczny test tego nowego formatu jeszcze otwarty.**
