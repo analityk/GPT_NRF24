@@ -1,6 +1,6 @@
 # Migracja / punkt kontynuacji GPT_NRF24
 
-**Aktualny stan: 2026-11-04 — jeden aktywny firmware: dwukierunkowy binarny UART↔nRF24↔UART przez hardware ACK Payload, z SID16 i 22-bajtowymi segmentami transportowymi. Hostowe testy i AVR build PASS; fizyczny test tego nowego UART pozostaje do wykonania.**
+**Aktualny stan: 2026-11-04 — jeden aktywny firmware z ciągłym ping-pongiem DATA↔ACK Payload i 4-segmentowym, dwukierunkowym transportem UART. Poprzedni stop-and-wait działał sprzętowo w jednym kierunku, lecz ubytki pojawiały się przy dwóch równoczesnych nadawcach. Nowe WINDOW=4: hostowe testy i AVR build PASS; wymaga ponownego testu fizycznego obu kierunków.**
 
 ## Źródło prawdy
 
@@ -75,3 +75,11 @@ Na RF-Nano nowy UART bridge jest **sprawdzony z jednym kierunkiem**. Jednoczesne
 **Nowy powtarzalny test** `tests/uart_unthrottled_ingress_test.cpp`: `3B/wymianę` bez odrzucenia, `19B/wymianę` powoduje przepełnienie RX na obu portach bez błędów RF, 600 wymian, 11400B wejścia na stronę; test host PASS, AVR build PASS. Dotychczasowy 4096B stress podawał tylko 3B/wymianę i pauzował, kiedy nie było miejsca: nie dowodził odporności na flood. Brak produkcyjnej zmiany PHY i stop-and-wait. `UART::counters().rx_buffer_full` wskazuje software ring drop; `rx_overrun` sprzętowy DOR0. Nie wypisywać ich na binarny UART bez wyraźnego diagnostycznego trybu/oddzielnego kanału.
 
 **Dalsza praca:** przetestować oba kierunki z charakter delay 1ms (pierwsze pole RealTerm `Delays`) i sprawdzić captured data; następnie zaprojektować **okno transportowe 2+** (wspólny sposób obsługi potoku ACK Payload) i regulację ingress. Samo zwiększanie ringów bez RTS/CTS lub ograniczenia źródła nie zapewnia bezstratnego transferu. F7/F12 manualne, jeden firmware, brak alokacji dynamicznej.
+
+## Najnowsza implementacja pełnego ping-ponga UART — 2026-11-04
+
+**Aktualne** (nadpisuje wcześniejsze opisy stop-and-wait i 10ms polling wyżej): użytkownik wyraźnie wymaga, aby radio wymieniało pakiety bez przerwy, a każdy sprzętowy ACK Payload mógł przenosić niezależny nowy DATA z B. W `main.cpp` usunięto warunek 10ms okresowego odpytywania, więc PTX wyzwala ciągłe wymiany nawet przy pustym UART. `UartReliableStream` przebudowano na wielokrotnego użytku Go-back-N z **WINDOW=4** niezależnie na każdej ATmedze, 4×22B cache, `DATA_SEQ`, kumulacyjne `ACK_SEQ`, replay po 8 własnych wymianach bez postępu. `RX_CREDIT` nadal liczy się z realnego UART TX i ogranicza zbyt duże okno; poprawne `UART::writeAll` nadal jedynym kryterium APP_ACK. Pakiet RF ma 8B MAC+2B transport+0..22B user, więc pozostaje binarnie transparentny. Nie zmieniono negocjacji SID, EEPROM, pinout, SPI, F7/F12 czy Post-Build.
+
+W teście nowej regresji odkryto błąd renumeracji oczekujących segmentów przy rekey po wzroście baseSeq: indeksowanie cache według starego seq%4 zgubiłoby porządek. Poprawiono w warstwie `UartReliableStream` przez `headIndex_` i offset od najstarszego DATA. Testy hostowe PASS, w tym nowy `uart_pipeline_rekey_test.cpp` z 3 zaległymi segmentami i utraconym pierwszym pakietem, `uart_unthrottled_ingress_test.cpp`: **19 B/wymianę ×600=11400 B/stronę bez strat w modelu**, 24B/wymianę z overflow. Cross-build AVR PASS: `.text=10858B, .data=96B, .bss=591B`, 687B statycznego SRAM. Pamiętać, że są to wyłącznie wyniki host i kompilatora, NIE nowego pomiaru na dwóch RF-Nano.
+
+**Następny sprzętowy krok:** po F7/ręcznym F12 obu płyt RealTerm oba COM 115200 8N1, local echo OFF, dwa pliki przy `Delays=0,0` równocześnie, binarny Capture i porównanie SHA256/byte count. Potem pomiar rzeczywistego goodput i liczniki USART RX overflow vs DOR0 przy ewentualnym dalszym ubytku. Z samego UART bez RTS/CTS nie ma absolutnej bezstratności, gdy oferowane źródło jest szybsze niż realne PHY/CPU. `Delays=1ms/char` w poprzednim eksperymencie sztucznie obcinał do ~1000 B/s na kanał i nie testował docelowych ~11,52 kB/s.

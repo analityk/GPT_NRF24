@@ -32,3 +32,9 @@ W UART RX jest tylko 127 B i brak sprzętowego flow control. Przy przeciążeniu
 - Dodano test obciążenia wejścia bez flow-control i stwierdzono przepełnienie 127B RX w obu kierunkach mimo idealnego RF. Zidentyfikowano lukę w dotychczasowym teście 4096B/kierunek: idealne wstrzymywanie producenta i zaledwie 3B/wymianę.
 - Kolejny etap przed zmianą transportu: pomiar liczników `UART::Counters` na sprzęcie i binarne capture, próba z 1ms/znak RealTerm na obu nadajnikach.
 - Docelowo rozbudować **opcjonalny transport** w okno co najmniej 2 segmentów per kierunek, z cumulative/selective ACK według potrzeb, uniezależnionym tempem przyjmowania UART ingress i deduplikacją. Nie podmieniać samego rdzenia 8+24 ani zachowania RF ACK Payload bez uzasadnienia.
+
+## Wdrożona odpowiedź na problem stop-and-wait — 2026-11-04
+
+Wykonano: usunięcie 10ms idle scheduler z `main.cpp`, w `UartReliableStream` utworzenie statycznego bufora 4×22B per direction, cumulative ACK i Go-back-N z cyklem 8 wymian bez postępu; bez zmian `PairedFrame`, nRF PHY i handshake SID. Testy na hoście PASS: jednoczesne 19B w obu kierunkach per wymianę bez overflow przy idealnym RF, 24B per wymianę z overflow, strata pierwszego pakietu, 3 pakiety in-flight przy rekey (w tym stary baseSeq≠0), 4096B pod stratami i wrap. AVR-GCC PASS, 687B stałego SRAM w .data+.bss.
+
+Teraz **konieczny odbiór fizyczny** nowej wersji przy 0ms delay w obu RealTerm i porównanie plików, bo model nie odtwarza realnego czasu RF, czasu obsługi ISR, wszystkich sprzętowych FIFO/CRC i faktycznego tempa USB CH340. Dopiero z pomiaru wynika dalsza decyzja o flow-control albo optymalizacji PHY/CPU. Nie obiecywać matematycznie 13,49 kB/s po stronie UART — UART 115200 ma maks. 11,52 kB/s per direction.

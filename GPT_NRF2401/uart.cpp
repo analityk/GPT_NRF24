@@ -57,7 +57,7 @@ uint8_t UART::write(const uint8_t* bytes, uint8_t count) {
 // A transport segment must not be partially accepted. TX has a single
 // foreground producer; USART_UDRE_vect is its only consumer. Masking
 // interrupts here preserves the all-or-none contract even if other code
-// is added later. Maximum transport segment is 18 bytes.
+// is added later. Current maximum UART transport segment is 22 bytes.
 bool UART::writeAll(const uint8_t* bytes, uint8_t count) {
     if (count!=0 && !bytes) return false;
     bool ok=false;

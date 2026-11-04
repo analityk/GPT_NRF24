@@ -53,3 +53,7 @@ W `main` utrzymujemy jeden program `GPT_NRF2401/main.cpp`. Kodek (`paired_frame.
 - `history.md` — wyłącznie rzeczywiście dokonane zmiany i potwierdzone wyniki.
 - `migracja.md` — samodzielny punkt kontynuacji.
 - `README.md` — opis i używanie projektu.
+
+## Aktualna decyzja po teście obu UART — 2026-11-04
+
+Wcześniejsze opisy stop-and-wait i 10ms pollingu są HISTORYCZNE. **Aktualny firmware ma zawsze aktywny nRF DATA↔ACK Payload ping-pong, nawet przy pustych UART, i `UartReliableStream` z WINDOW=4 (4×22B per direction), kumulacyjnymi APP_ACK i Go-back-N.** Nie wprowadzać arbitralnych interwałów bezczynności ani czekania na ACK każdego segmentu przed wysłaniem następnego. Radio jest nadal półdupleksowe, ACK Payload nadal przygotowywany wcześniej. Numerację i retransmisję usługi implementować ponad opaque 8+24 MAC, bez naruszania SID, AVR UART pełnodupleksowego, F7/F12 i reguł RAM. Użytkownik nie wymaga oszczędzania energii podczas idle. Niekontrolowany CH340 UART przy szybkości wyższej niż skuteczna zdolność PHY+CPU nadal wymaga wejściowego flow control; window=4 nie jest gwarancją przeciw overflow.

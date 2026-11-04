@@ -1,6 +1,6 @@
 # GPT_NRF24 — UART ↔ nRF24L01+ ACK Payload ↔ UART
 
-**Aktualny etap (2026-11-04):** jeden firmware na dwie identyczne płytki RF-Nano (ATmega328P 16 MHz + nRF24L01+ + CH340), z prawdziwym **dwukierunkowym strumieniem binarnych bajtów UART** przez sprzętowy DATA/ACK Payload. Hostowe testy C++11, symulacja strat i krzyżowy AVR build **PASS**. **Nowego mostu UART w tym profilu nie zweryfikowano jeszcze na fizycznych RF-Nano**.
+**Aktualny etap (2026-11-04):** jeden firmware na dwie RF-Nano (ATmega328P 16 MHz + nRF24L01+ + CH340), z **ciągłym ping-pongiem DATA/ACK Payload także na pustym łączu** i **oknem 4 segmentów UART w każdym kierunku**. Fizycznie potwierdzony transfer jednokierunkowy; poprzedni stop-and-wait gubił bajty przy równoczesnym intensywnym ruchu. Nowa wersja WINDOW=4: wszystkie hostowe testy, symulacja strat i cross-build AVR **PASS**, lecz **nowe firmware wymaga osobnego testu fizycznego obustronnego obciążenia**.
 
 ## Uruchomienie w Microchip Studio
 
@@ -17,16 +17,16 @@
 - **PHY:** nRF24L01+, 1 Mb/s, CRC16, SPI 8 MHz; A stale PTX, B stale PRX, a B odsyła zwrotne dane w uprzednio przygotowanym **sprzętowym ACK Payload**.
 - **Nagłówek rdzenia:** bez zmian: 8 bajtów (`TX_SEQ`, `RX_LAST`, `LOSS_AB/BA`, `ARC_LAST/RX_DROP`, `RX_CREDIT`, `TYPE_FLAGS`, `SESSION_ID16`).
 - **BODY:** do 24 bajtów pozostaje nieinterpretowane w PHY/MAC. Samodzielna usługa `UartReliableStream` wykorzystuje **2 bajty BODY na `DATA_SEQ` i aplikacyjny `ACK_SEQ`**, więc przenosi **0–22 bajty oryginalnego UART na jedną ramkę**.
-- **Niezawodność:** oddzielny stop-and-wait w obu kierunkach; dane wypisywane są do UART **atomowo całym segmentem**. Sprzętowy ACK nie jest mylony z dostarczeniem do kolejki UART. Powtórzenia tej samej porcji nie duplikują bajtów w ramach aktywnej sesji.
+- **Niezawodność:** niezależne okna **4 segmentów × 22 B** na kierunek, kumulacyjne `ACK_SEQ`, retransmisja Go-back-N po 8 wymianach bez postępu potwierdzeń. Odbiornik przyjmuje wyłącznie kolejne segmenty przez atomowy `UART::writeAll`; brak ACK dla danych odrzuconych, duplikaty nie trafiają drugi raz do UART w tej samej sesji.
 - **Kontrola przepływu:** `RX_CREDIT` pochodzi teraz z rzeczywistego wolnego miejsca w kolejce UART TX (jednostka: 24 bajty), a nie ze stałej `1`. Przy zapełnieniu odbiorcy nie przyjmuje się nowego segmentu, nie wysyła dla niego aplikacyjnego ACK i następuje ponowienie.
 - **Sesja:** HELLO/BEACON/WELCOME/READY/READY_ACK, identyfikator `SID16` z epok EEPROM i liczników prób, auto-odnowienie po resecie. W razie zmiany sesji niepotwierdzony segment utrzymywany jest w RAM strony, która nie została zresetowana.
-- **Bezczynność:** A wykonuje krótkie zapytanie o gotowość/dane B mniej więcej raz na 10 ms; gdy przychodzą dane, nadaje szybko, bez starych opóźnień 20/25 ms.
+- **Bezczynność:** **brak odpytywania co 10 ms** — A wysyła następną ramkę bez względu na obecność danych, a B odpowiada sprzętowym ACK Payload; przy pustych UART oba kierunki niosą krótkie 10B ramki status/APP_ACK. Minimalny odstęp obsługuje PHY, nie planista aplikacji.
 
 ## Zachowanie i ograniczenia
 
 **Brak RTS/CTS.** USART RX ma pojemność 127 bajtów. Jeśli RealTerm bez ograniczeń poda plik szybciej, niż radio i odbiornik mogą odbierać, lub w czasie awarii łącza, ta kolejka może się przepełnić. Nie jest to sytuacja, którą radiowy ACK naprawi wstecznie. Pierwszy test: krótkie komunikaty; przy pliku w RealTerm włącz niewielkie opóźnienia i porównaj pełne pliki capture bajt po bajcie.
 
-Stop-and-wait jest **wersją funkcjonalną**, nie maksymalnie wydajnym BULK ani pełną usługą plikową. Każdy kierunek ma jeden segment w locie, czyli dalsze zwiększanie przepustowości będzie wymagało większego okna. Testowany UART 115200 8N1 daje maksymalnie 11 520 B/s na kierunek; **obecnej użytecznej przepustowości UART nie zmierzono jeszcze**.
+Okno czterech segmentów usuwa poprzednie ograniczenie do jednego DATA na kilka wymian. Przy 613 wymianach/s sufit arytmetyczny 22×613 ≈ **13,49 kB/s na kierunek** (22 B USER/frame) przekracza limit UART **11,52 kB/s/kierunek** przy 115200 8N1. To tylko *górna granica przy zachowaniu tempa RF* — nowe wykorzystanie CPU i zapełnione obie strony mogą ją obniżyć. **Wynik rzeczywistego bezstratnego UART end-to-end musi być zmierzony na obu płytkach.** Przy długim oferowanym obciążeniu ponad rzeczywistą przepustowość brak RTS/CTS nadal prowadzi do overflow RX.
 
 **Reset i dokładnie-jeden-raz:** bieżący MCU zachowuje niepotwierdzoną porcję w RAM podczas renegocjacji sesji po resecie partnera, lecz reset własnego MCU usuwa dane niezapisane trwale. Jeśli partner zdążył wypisać bajty na UART, a jego potwierdzenie zaginęło przed resetem, możliwe jest ich ponowienie po nowej sesji. Pełnej gwarancji exactly-once między resetami bez trwałego dziennika transakcji nie deklarujemy.
 
@@ -43,7 +43,7 @@ Stop-and-wait jest **wersją funkcjonalną**, nie maksymalnie wydajnym BULK ani 
 
 ## Weryfikacja i historia wyników
 
-`sh tests/run_host_tests.sh` odkrywa aktualne testy hostowe. `sh tests/build_avr.sh` kompiluje jeden program dla AVR bez programowania płytki. [GitHub Actions](https://github.com/analityk/GPT_NRF24/actions) uruchamia oba zadania. Nowe testy UART obejmują opóźnione ACK, brak miejsca w UART TX, renumerację sesji, zawinięcie numeracji oraz **4096 bajtów dowolnych danych w obu kierunkach** z symulowaną utratą ramek i ACK Payload — oba strumienie odtwarzają się dokładnie w symulacji.
+`sh tests/run_host_tests.sh` odkrywa aktualne testy hostowe. `sh tests/build_avr.sh` kompiluje jeden program dla AVR bez programowania płytki. [GitHub Actions](https://github.com/analityk/GPT_NRF24/actions) uruchamia oba zadania. Testy UART obejmują **okno 4 segmentów**, opóźnione ACK Payload, brak miejsca w UART TX, przerwy RF, renumerację sesji z trzema zaległymi segmentami, zawinięcie numeracji i **4096 bajtów w obu kierunkach** z symulowanymi stratami; dane odtwarzają się w symulacji. Test `uart_unthrottled_ingress_test.cpp` przy modelowych 600 wymianach i **19 B wejścia na wymianę na każdej płytce (11 400 B/stronę)** nie wykazuje overflow RX, a przy nieosiągalnych docelowo 24 B/wymianę odtwarza przeciążenie. To wynik modelu z idealnym RF, a nie pomiar hardware.
 
 **Historyczne pomiary sprzętowe (inny firmware):** rdzeń 8+24 B bez handshake'u około 625 wymian/s; z handshake'em około 612–613 wymian/s, automatyczny powrót po resetach A, B i obu płyt. Nie są to pomiary nowej usługi UART. Wcześniejsze implementacje zachowane w gałęzi [archive/pre-paired-core-cleanup-2026-11-03](https://github.com/analityk/GPT_NRF24/tree/archive/pre-paired-core-cleanup-2026-11-03).
 
@@ -56,3 +56,9 @@ Wysłanie pliku **w jednym kierunku działa**. Równoczesny intensywny transfer 
 **Próba rozstrzygająca:** w RealTerm ustaw dla OBU nadawców w zakładce Send / Dump File / `Delays` **pierwsze pole = 1** (1 ms na znak), **drugie = 0** (brak dodatkowej przerwy na koniec linii). Wyślij oba pliki i porównaj binarny capture z oryginałami. Gdy to działa, zmniejszaj pierwszy delay, aby wyznaczyć granicę obecnego transportu. `Delays=0,10` z pokazanego eksperymentu to 0ms na znak i 10ms po linii: może nadal pozwalać długim liniom zapełnić 127B RX ring.
 
 Nowy `tests/uart_unthrottled_ingress_test.cpp` jest powtarzalną regresją tego przypadku: symuluje UART bez RTS/CTS przy 3 i 19 B/iterację RF, z rzeczywistym `UartReliableStream` i opóźnionym ACK. Przy 19 B/iterację przepełnia oba wejścia nawet bez błędów radia, przy 3 B nie. Dotychczasowy stress test 4096B na kierunek **sztucznie zwalniał wejście**, więc nie udowadniał odporności na flood. Nie zmieniono jeszcze transportu produkcyjnego; do poprawy architektonicznej potrzebne większe okno lub flow-control, najlepiej oba.
+
+### Zmiana architektury po teście równoczesnym (2026-11-04)
+
+Użytkownik słusznie zwrócił uwagę, że sprzętowe ACK Payload to dwukierunkowa okazja do przeniesienia danych w **każdej** transakcji. Dawne stop-and-wait i sztuczne 10ms polling zostały **usunięte** z aktywnego kodu. Nie trzeba wysyłać nowej ramki radiowej tylko po to, by otrzymać aplikacyjne potwierdzenie — `ACK_SEQ` jest piggybackowane w każdej ramce. Przy `RealTerm Delays=1,0` host nadaje orientacyjnie do 1000 B/s na kanał (jeśli 1ms jest rzeczywistą przerwą po znaku), a nie testuje limitu 11,52 kB/s. Kolejny test powinien użyć `Delays=0,0` w obu kierunkach i **porównać oryginały z przechwyconymi plikami bajt po bajcie**.
+
+**Uwaga:** ACK w radiu jest generowany dla poprawnej ramki (CRC i adres), lecz jego payload pochodzi z **wcześniej przygotowanego** FIFO; aplikacyjny ACK może być o jedną lub więcej wymian spóźniony. Okno 4 usuwa konieczność czekania. Prawdziwy RF nadal może retransmitować ramki lub zgłosić MAX_RT, zatem bezwzględnie stała latencja nie jest fizycznie gwarantowana.
