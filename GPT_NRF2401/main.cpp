@@ -79,9 +79,11 @@ static uint32_t lastPeerProgress=0;
 static PpRecoveryControl recovery(3200UL,2000000UL,
                    PpRecoveryControl::UncertainPolicy::RETRY_AT_LEAST_ONCE);
 static uint32_t lastProbe=0;
+#if PP_TEST_TRAFFIC_MODE == PP_TRAFFIC_MODE_SYNTHETIC_RADIO
 static PpRecoveryControl::State lastPrintedState=
-                   PpRecoveryControl::State::CONNECTING;
+	PpRecoveryControl::State::CONNECTING;
 static bool lastPrintedUncertainty=false;
+#endif
 static uint32_t lastRecoveryReport=0;
 
 static uint16_t recoveryCount=0;

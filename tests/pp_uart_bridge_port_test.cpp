@@ -14,6 +14,7 @@
 #define PP_BRIDGE_TEST_A_MULTIPLIER 37U
 #define PP_BRIDGE_TEST_B_MULTIPLIER 53U
 #define PP_BRIDGE_TEST_B_SALT 0xA5U
+#define PP_BRIDGE_TEST_FILL_BYTE 0x3CU
 #define PP_BRIDGE_TEST_SESSION_ID 0x7171U
 #define PP_BRIDGE_TEST_FIRST_BYTE 0x00U
 #define PP_BRIDGE_TEST_SECOND_BYTE 0xFFU
@@ -98,7 +99,7 @@ static void testAtomicBridge(){
 		assert(b==pattern[i]);
 	}
 
-	const uint8_t filler=0x3CU;
+	const uint8_t filler=PP_BRIDGE_TEST_FILL_BYTE;
 	while(serial.tx.freeSpace()>sizeof(pattern)-1U){
 		assert(serial.tx.push(filler));
 	}
