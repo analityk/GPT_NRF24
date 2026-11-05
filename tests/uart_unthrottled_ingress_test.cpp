@@ -1,23 +1,28 @@
 #include "../GPT_NRF2401/uart_reliable_stream.h"
 #include "../GPT_NRF2401/byte_ring.h"
+#include "../GPT_NRF2401/retained_byte_ring.h"
 #include <cassert>
 #include <cstdint>
 #include <cstring>
 #include <cstdio>
 
 // Reusable offered-load regression for the REAL UART boundary.
-// A producer with no RTS/CTS sends even when the RX ring is full:
-// the excess is irrecoverably dropped BEFORE UartReliableStream::read().
+// A producer with no RTS/CTS sends even when the retained UART ring is full:
+// excess bytes are irrecoverably dropped before application-level ACK.
+// The transport shares the *same* ring with its simulated RX ISR.
 // The simulated PHY faithfully pipelines B's ACK Payload one RF
 // exchange behind the A->B packet; both RF channels carry user bytes.
 struct UnthrottledUart {
-    ByteRing<128> rx,tx;
+    RetainedByteRing rx;
+    ByteRing<128> tx;
+    RetainedByteRing& retainedInput(){
+        return rx;
+    }
     uint32_t offered=0,dropped=0,emitted=0;
     void receiveByte(uint8_t value) {
         ++offered;
         if(!rx.push(value))++dropped;
     }
-    bool read(uint8_t& value){return rx.pop(value);}
     uint8_t available() const{return rx.available();}
     uint8_t freeSpace() const{return tx.freeSpace();}
     bool writeAll(const uint8_t* bytes,uint8_t count) {
@@ -35,7 +40,7 @@ struct UnthrottledUart {
 struct Peer {
     UnthrottledUart uart;
     PairedLink link;
-    UartReliableStream<UnthrottledUart> transport;
+    UartReliableStream<UnthrottledUart,true> transport;
     uint8_t packet[32],width;
     explicit Peer(bool leader):
         link(leader,0xC0DE),transport(uart),width(0) {
