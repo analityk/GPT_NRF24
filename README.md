@@ -1,3 +1,9 @@
+> **UWAGA — `testy` ma teraz włączony jednorazowy pomiar po zakończeniu strumienia.**
+> Po około 0,8 s ciszy oba porty COM dopisują linie `A/B uart`,
+> `A/B pp` oraz `A rf`. To celowo uniemożliwia byte-exact capture.
+> Instrukcja: [pp-uart-cycle-diagnostic.md](pp-uart-cycle-diagnostic.md).
+> Wyłączenie: `-DPP_UART_DIAG_ENABLED=0` i ponowna kompilacja.
+>
 > **Aktualna gałąź `testy` (2026-11-05):** domyślnie uruchamia test
 > binarnego mostu UART A↔B bez tekstowych raportów na COM.
 > Instrukcja jednoczesnego wysyłania i weryfikacji dwóch plików:

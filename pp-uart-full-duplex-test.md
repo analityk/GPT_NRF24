@@ -1,3 +1,9 @@
+> **Ważne:** aktualna diagnostyczna wersja gałęzi `testy` ma domyślnie
+> `PP_UART_DIAG_ENABLED=1` i dopisuje tekst do UART po zakończeniu
+> transferu. Dla porównania Capture bajt po bajcie ustaw
+> `PP_UART_DIAG_ENABLED=0` podczas kompilacji AVR. Pomiar i interpretacja
+> liczników znajdują się w [pp-uart-cycle-diagnostic.md](pp-uart-cycle-diagnostic.md).
+>
 # PP: jednoczesna transmisja plików UART A ↔ B
 
 ## Wersja testowa

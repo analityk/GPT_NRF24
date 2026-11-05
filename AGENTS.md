@@ -149,3 +149,11 @@ Obecny, fizycznie pokazany profil to oficjalnie **PP (Ping-Pong)**. Nie zamienia
 - Retransmisja odczytuje ten sam obszar pamięci, w tym po zawinięciu indeksu 255→0. Serializacja BODY czyta pierścień bez dodatkowej tablicy. Brak danych nie wstrzymuje 8-bajtowych ramek IDLE.
 - `pauseHostInput` ma histerezę: ≤48 B wolnych ustawia PAUSE, ≥96 B zwalnia PAUSE. RealTerm/CH340 nie respektuje tego automatycznie; nie umieszczać bajtów statusowych w binarnym strumieniu i nie deklarować bezstratności bez flow control przy arbitralnym przeciążeniu.
 - Przed akceptacją zmian uruchomić `tests/run_host_tests.sh`, oba warianty `tests/build_avr.sh` oraz sprawdzić `pp_uart_burst_retained_test`, `uart_unthrottled_ingress_test` (model **współdzielonego** RX), regresje rekey/replay i bilans SRAM.
+
+## Tymczasowy pomiar okresu transmisji UART/PP — 2026-11-05
+
+- `testy` włączono do diagnostyki przy `PP_UART_DIAG_ENABLED=1`: tekst statusowy na UART jest emitowany **tylko po ≥0,8 s braku postępu** i jest **świadomym odstępstwem** od normalnej binarnej transparentności.
+- Jedynym mierzonym czasem jest 16-bitowy odstęp PTX start→start dla pełnego 32B DATA↔32B ACK Payload bez ARC. Nie przywracać wielofazowej sondy w tym przebiegu. Kumulowanie próbek może używać 32 bitów, ale odczyty czasu na granicy cyklu są tylko 16-bitowe.
+- Liczniki `UART::Counters::rx_bytes/tx_bytes` istnieją wyłącznie w wariancie diagnostycznym; statystyki UART i PP są próbkowane co 10ms, nie w każdej ISR i funkcji protokołu.
+- Wariant `PP_UART_DIAG_ENABLED=0` musi dalej kompilować się jako zwykły binary bridge, bez dołączania tekstu, i być wymagany do prób byte-for-byte.
+- `pp-uart-cycle-diagnostic.md` to bieżąca procedura sprawdzenia granicy strat przy 128B+CRLF i `Delays=0,10` oraz `0,20`; brak JTAG/SWD jest celowy, do odczytu wystarczają oba RealTerm.

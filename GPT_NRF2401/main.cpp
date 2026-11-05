@@ -3,7 +3,8 @@
  * Compile-time traffic mode selects either a binary-transparent,
  * bidirectional USART0 bridge or the synthetic RF saturation benchmark.
  * MAC/session/window/recovery and ACK Payload are shared by both modes.
- * In UART bridge mode USART0 NEVER carries firmware diagnostics.
+ * In bridge diagnostic builds UART prints a post-burst report only;
+ * disable PP_UART_DIAG_ENABLED for byte-exact binary captures.
  */
 #include "board_clock.h"
 #include <stdint.h>

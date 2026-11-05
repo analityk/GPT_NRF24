@@ -2,7 +2,8 @@
 #define GPT_NRF24_PP_TEST_TRAFFIC_MODE_H
 
 // Select a single data source/sink for both boards at compile time.
-// Only the synthetic radio benchmark may print diagnostic text to USART0.
+// Synthetic prints a live benchmark; the bridge diagnostic (when enabled)
+// prints only after a quiet interval, never inside an active data burst.
 #define PP_TRAFFIC_MODE_SYNTHETIC_RADIO 0U
 #define PP_TRAFFIC_MODE_UART_BRIDGE 1U
 

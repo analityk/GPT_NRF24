@@ -5,7 +5,8 @@
 
 // Diagnostics are published after RX/RF progress stops. No control bytes
 // are inserted into the binary UART stream while a transfer is active.
-// The counters are 16-bit; test bursts must not wrap more than once.
+// The counters are 16-bit; each measured burst must contain fewer than
+// 65536 bytes per counter to avoid an ambiguous modulo-65536 delta.
 #define PP_UART_DIAG_QUIET_TICKS 1600000UL
 #define PP_UART_DIAG_POLL_TICKS 20000UL
 #define PP_UART_DIAG_LINE_FREE_BYTES 112U

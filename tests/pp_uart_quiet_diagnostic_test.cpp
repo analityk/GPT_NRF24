@@ -15,6 +15,9 @@
 #define DIAG_TEST_SAMPLE_SID 0x5678U
 #define DIAG_TEST_SAMPLE_FREE 79U
 #define DIAG_TEST_SAMPLE_CREDIT 3U
+#define DIAG_TEST_REPEATED_LINES 100U
+#define DIAG_TEST_BYTES_PER_LINE 128U
+#define DIAG_TEST_LINE_GAP_TICKS 20000UL
 #define DIAG_TEST_WRAP_FIRST 65530U
 #define DIAG_TEST_WRAP_SECOND 6U
 #define DIAG_TEST_WRAP_DELTA 12U
@@ -61,6 +64,24 @@ static void testQuietGapAndProgress(){
 	assert(report.uartRx==0U);
 }
 
+static void testRepeatedLineGaps(){
+	PpUartQuietDiagnostic watcher;
+	PpUartDiagSnapshot sample;
+	PpUartDiagReport report;
+	uint32_t now=DIAG_TEST_START_TICKS;
+	assert(!watcher.observe(now,sample,report));
+	for(uint16_t line=0;line<DIAG_TEST_REPEATED_LINES;++line){
+		sample.uartRx=static_cast<uint16_t>(
+			sample.uartRx+DIAG_TEST_BYTES_PER_LINE);
+		now+=DIAG_TEST_LINE_GAP_TICKS;
+		assert(!watcher.observe(now,sample,report));
+	}
+	now+=DIAG_TEST_SAMPLE_QUIET_TICKS;
+	assert(watcher.observe(now,sample,report));
+	assert(report.uartRx==
+		DIAG_TEST_REPEATED_LINES*DIAG_TEST_BYTES_PER_LINE);
+}
+
 static void testWrapAndHardwareOverflow(){
 	PpUartQuietDiagnostic watcher;
 	PpUartDiagSnapshot s;
@@ -93,6 +114,7 @@ static void testLineLength(){
 
 int main(){
 	testQuietGapAndProgress();
+	testRepeatedLineGaps();
 	testWrapAndHardwareOverflow();
 	testLineLength();
 }
