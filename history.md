@@ -763,6 +763,10 @@ Przyszłe wpisy powinny zawierać datę, zakres faktycznie wykonanej zmiany, com
   Testy hostowe **30/30 PASS**, w tym symulacja 2048 bajtów
   w każdą stronę z utratą DATA/ACK, zachowanie skrzynki RX,
   SPI timeout i księgowanie nakładania czasu. **Nowa optymalizacja
-  nie ma jeszcze pomiaru AVR ani wyniku sprzętowego** — wynik
+  nie ma jeszcze wyniku na fizycznych RF-Nano** — realny zysk
   rozstrzygnie F7, ręczne F12 obu płytek i testy resetu A/B.
+  W CI commit `7915019` przeszedł host/AVR (run #42004061533):
+  `.text=24434`, `.data=96`, `.bss=1034` bajtów,
+  razem **1130/2048 B statycznego SRAM**, +6 B względem
+  poprzedniego AVR CI. To cross-kompilacja, nie wynik sprzętowy.
   Produkcyjny `main` i istniejące gałęzie pozostają nietknięte.

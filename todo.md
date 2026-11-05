@@ -20,7 +20,10 @@
   `rf`; `rest` odlicza tylko protokół spoza `ON_AIR`. Testy obejmują
   zachowanie skrzynki, strumień dwukierunkowy z stratami, timeout SPI
   oraz niewliczanie równoległego czasu do wyłącznego CPU.
-- [ ] **Sprawdzić cross-build AVR (Flash i SRAM) oraz pełny test sprzętowy**:
+- [x] GitHub Actions run #42004061533 dla `7915019`: host i AVR
+  **PASS**, `.text=24434`, `.data=96`, `.bss=1034`, statyczny
+  SRAM **1130/2048 B** (o 6 B więcej od poprzedniego CI).
+- [ ] **Pełny test sprzętowy**:
   F7/ręcznie F12 na A i B, RealTerm `cps`, `A us/det`, `sid/up/ret/bad`,
   samodzielny reset A i B, osłabienie RF. Punkt odniesienia przed tą
   optymalizacją: 16 704 B/s przy `cyc≈1437`, `spi≈116`, `ack≈230`,

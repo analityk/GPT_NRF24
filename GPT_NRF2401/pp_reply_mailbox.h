@@ -11,7 +11,9 @@
 template<class Outcome>
 class PpReplyMailbox {
 public:
-	PpReplyMailbox():pending_(false),width_(0),outcome_(){}
+	PpReplyMailbox():pending_(false),width_(0),outcome_(){
+	}
+
 
 	bool pending() const{
 		return pending_;

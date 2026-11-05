@@ -35,7 +35,9 @@ struct OverlapTiming {
 		waitTicks(PP_TIMING_OVERLAP_RF_TICKS),
 		readTicks(PP_TIMING_OVERLAP_READ_TICKS),
 		pollCount(0),pollSpiTicks(0),observeTicks(0),fifoTicks(0),
-		payloadTicks(0),irqTicks(0){}
+		payloadTicks(0),irqTicks(0){
+	}
+
 };
 
 int main(){

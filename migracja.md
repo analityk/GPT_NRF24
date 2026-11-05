@@ -1,4 +1,4 @@
-**NAJNOWSZY PUNKT KONTYNUACJI: 2026-11-05 — szybkie SPI i odroczony ACK na `testy`, nowy wsad czeka na AVR i test dwóch RF-Nano.**
+**NAJNOWSZY PUNKT KONTYNUACJI: 2026-11-05 — szybkie SPI i odroczony ACK na `testy`, AVR PASS, oczekuje test dwóch RF-Nano.**
 Właściciel dostarczył po optymalizacji GPIO wynik dwóch RF-Nano:
 `sid=44831`, `up=1`, `ret=bad=0`, **16 704 B/s**, `cyc≈1437`,
 `spi≈116`, `ack≈230`, `ps≈206`, `pr≈134` µs. To aktualny
@@ -19,8 +19,10 @@ i malformed reply są przetwarzane od razu przed kolejnym TX.
 Sonda `A det` ma nowe `prf=` (część `pr` równoległa do `rf`), a
 `rest` nie odejmuje już jej od wyłącznego CPU. Nowe testy hostowe
 obejmują SPI, skrzynkę, 2048B w obie strony przy stratach i timing;
-lokalnie **30/30 PASS**. AVR jeszcze niesprawdzony; po publikacji
-potrzebny CI AVR, potem F7/ręczne F12 obu płytek, 5–10 par `A us`
+lokalnie **30/30 PASS**. GitHub Actions run #42004061533 dla
+commita `7915019`: host/AVR **PASS**, `.text=24434`, `.data=96`,
+`.bss=1034`, statyczny SRAM **1130/2048 B**. Następny krok:
+F7/ręczne F12 obu płytek, 5–10 par `A us`
 i `A det`, `A cps/B cps`, reset osobno B i A, osłabienie workami ESD.
 Zmiana zwiększa opóźnienie informacji APP_ACK/kredytu o jedną wymianę,
 dlatego **odzyskiwanie i Go-back-N są kryterium odbioru**.

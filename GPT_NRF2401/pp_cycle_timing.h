@@ -35,6 +35,7 @@ public:
 			payloadUs(0),irqUs(0),sourceUs(0),encodeUs(0),
 			readOtherUs(0),prepareOtherUs(0),cpuOtherUs(0){
 		}
+
     };
 
     PpCycleTimingWindow():lastDone_(0),samples_(0),previous_(false) {

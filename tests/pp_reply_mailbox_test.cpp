@@ -14,7 +14,9 @@
 struct ReplyOutcome {
 	uint8_t sequence;
 	uint8_t retries;
-	ReplyOutcome():sequence(0),retries(0){}
+	ReplyOutcome():sequence(0),retries(0){
+	}
+
 };
 
 static uint8_t createFrame(uint8_t* frame,uint16_t sid,

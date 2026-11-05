@@ -160,56 +160,90 @@ static void reportPerformance() {
 // CPU time is the exclusive remainder; bg and the deferred part of pr
 // overlap rf (they must not be added to the total exchange period).
 // ACK time includes SPI reading the payload and clearing the IRQ.
-static void reportCycleTiming() {
-    // The UART ring cannot fit both lines at once. Queue the second line
-    // only when transmission of the first has freed enough space; the
-    // saved sample still refers to the SAME set of RF exchanges.
-    if(timingDetailPending) {
-        if(uart.freeSpace()<PP_TIMING_REPORT_MIN_FREE_BYTES)return;
-        const PpCycleTimingWindow::Average& t=pendingTimingDetail;
-        PpStressLine detail;
-        detail.word("A det n=");detail.decimal(t.samples);
-        detail.word(" polls=");detail.decimal(t.polls);
-        detail.word(" ps=");detail.decimal(t.pollSpiUs);
-        detail.word(" ob=");detail.decimal(t.observeUs);
-        detail.word(" fi=");detail.decimal(t.fifoUs);
-        detail.word(" dpl=");detail.decimal(t.payloadUs);
-        detail.word(" irq=");detail.decimal(t.irqUs);
-        detail.word(" ro=");detail.decimal(t.readOtherUs);
-        detail.word(" src=");detail.decimal(t.sourceUs);
-        detail.word(" enc=");detail.decimal(t.encodeUs);
-        detail.word(" mo=");detail.decimal(t.prepareOtherUs);
-        detail.word(" prf=");detail.decimal(t.protocolOverlapUs);
-        detail.word(" rest=");detail.decimal(t.cpuOtherUs);
-        detail.word("\r\n");
-        if(detail.emit(uart))timingDetailPending=false;
-        return;
-    }
-    const uint32_t now=ticks.now();
-    if(static_cast<uint32_t>(now-lastTimingReport)<
-       PP_TIMING_REPORT_INTERVAL_TICKS)return;
-    if(uart.freeSpace()<PP_TIMING_REPORT_MIN_FREE_BYTES)return;
-    PpCycleTimingWindow::Average t;
-    if(!cycleTiming.sample(t))return;
-    PpStressLine line;
-    line.word("A us n=");line.decimal(t.samples);
-    line.word(" cyc=");line.decimal(t.cycleUs);
-    line.word(" spi=");line.decimal(t.loadUs);
-    line.word(" grd=");line.decimal(t.guardUs);
-    line.word(" ce=");line.decimal(t.ceUs);
-    line.word(" rf=");line.decimal(t.waitUs);
-    line.word(" ack=");line.decimal(t.readUs);
-    line.word(" cpu=");line.decimal(t.cpuUs);
-    line.word(" mk=");line.decimal(t.prepareUs);
-    line.word(" pr=");line.decimal(t.protocolUs);
-    line.word(" bg=");line.decimal(t.backgroundUs);
-    line.word("\r\n");
-    if(line.emit(uart)) {
-        pendingTimingDetail=t;
-        timingDetailPending=true;
-        cycleTiming.clearWindow();
-        lastTimingReport=now;
-    }
+static void reportCycleTiming(){
+	// The UART ring cannot fit both lines at once. Queue the second line
+	// only when transmission of the first has freed enough space; the
+	// saved sample still refers to the SAME set of RF exchanges.
+	if(timingDetailPending){
+		if(uart.freeSpace()<PP_TIMING_REPORT_MIN_FREE_BYTES){
+			return;
+		}
+		const PpCycleTimingWindow::Average& t=pendingTimingDetail;
+		PpStressLine detail;
+		detail.word("A det n=");
+		detail.decimal(t.samples);
+		detail.word(" polls=");
+		detail.decimal(t.polls);
+		detail.word(" ps=");
+		detail.decimal(t.pollSpiUs);
+		detail.word(" ob=");
+		detail.decimal(t.observeUs);
+		detail.word(" fi=");
+		detail.decimal(t.fifoUs);
+		detail.word(" dpl=");
+		detail.decimal(t.payloadUs);
+		detail.word(" irq=");
+		detail.decimal(t.irqUs);
+		detail.word(" ro=");
+		detail.decimal(t.readOtherUs);
+		detail.word(" src=");
+		detail.decimal(t.sourceUs);
+		detail.word(" enc=");
+		detail.decimal(t.encodeUs);
+		detail.word(" mo=");
+		detail.decimal(t.prepareOtherUs);
+		detail.word(" prf=");
+		detail.decimal(t.protocolOverlapUs);
+		detail.word(" rest=");
+		detail.decimal(t.cpuOtherUs);
+		detail.word("\r\n");
+		if(detail.emit(uart)){
+			timingDetailPending=false;
+		}
+		return;
+	}
+	const uint32_t now=ticks.now();
+	if(static_cast<uint32_t>(now-lastTimingReport)<
+		PP_TIMING_REPORT_INTERVAL_TICKS){
+		return;
+	}
+	if(uart.freeSpace()<PP_TIMING_REPORT_MIN_FREE_BYTES){
+		return;
+	}
+	PpCycleTimingWindow::Average t;
+	if(!cycleTiming.sample(t)){
+		return;
+	}
+	PpStressLine line;
+	line.word("A us n=");
+	line.decimal(t.samples);
+	line.word(" cyc=");
+	line.decimal(t.cycleUs);
+	line.word(" spi=");
+	line.decimal(t.loadUs);
+	line.word(" grd=");
+	line.decimal(t.guardUs);
+	line.word(" ce=");
+	line.decimal(t.ceUs);
+	line.word(" rf=");
+	line.decimal(t.waitUs);
+	line.word(" ack=");
+	line.decimal(t.readUs);
+	line.word(" cpu=");
+	line.decimal(t.cpuUs);
+	line.word(" mk=");
+	line.decimal(t.prepareUs);
+	line.word(" pr=");
+	line.decimal(t.protocolUs);
+	line.word(" bg=");
+	line.decimal(t.backgroundUs);
+	line.word("\r\n");
+	if(line.emit(uart)){
+		pendingTimingDetail=t;
+		timingDetailPending=true;
+		cycleTiming.clearWindow();
+		lastTimingReport=now;
+	}
 }
 
 static void fatal() {

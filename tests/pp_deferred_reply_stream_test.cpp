@@ -73,7 +73,9 @@ struct DeferredPeer {
 
 struct DeferredResult {
 	uint8_t retries;
-	DeferredResult():retries(0){}
+	DeferredResult():retries(0){
+	}
+
 };
 
 int main(){
