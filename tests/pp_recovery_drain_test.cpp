@@ -63,7 +63,8 @@ int main(){
     // load; IDLE/ACK must keep the wire active without consuming data.
     assert(sender.make(tx,packet,width));
     assert(view(packet,width).header.kind()==PairedFrame::Kind::IDLE);
-    assert(src.input.available()==48);
+    // The source ring was pumped; 48 unsent bytes remain retained there.
+    assert(sender.unsentInputBytes()==48);
 
     assert(receiver.make(rx,ack,ackWidth));
     assert(view(ack,ackWidth).header.rxLast==2);
