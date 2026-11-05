@@ -1,6 +1,7 @@
 #include "../GPT_NRF2401/pp_uart_bridge_port.h"
 #include "../GPT_NRF2401/uart_reliable_stream.h"
 #include "../GPT_NRF2401/byte_ring.h"
+#include "../GPT_NRF2401/retained_byte_ring.h"
 #include <cassert>
 #include <cstring>
 
@@ -20,7 +21,12 @@
 #define PP_BRIDGE_TEST_SECOND_BYTE 0xFFU
 
 struct TestUart {
-	ByteRing<PP_BRIDGE_TEST_RING_SIZE> rx,tx;
+	RetainedByteRing rx;
+	ByteRing<PP_BRIDGE_TEST_RING_SIZE> tx;
+
+	RetainedByteRing& retainedInput(){
+		return rx;
+	}
 
 	bool read(uint8_t& value){
 		return rx.pop(value);
@@ -52,7 +58,7 @@ struct TestPeer {
 	TestUart uart;
 	PpUartBridgePort<TestUart> port;
 	PairedLink link;
-	UartReliableStream<PpUartBridgePort<TestUart> > stream;
+	UartReliableStream<PpUartBridgePort<TestUart>,true> stream;
 	uint8_t frame[PairedFrame::MAX_FRAME];
 	uint8_t width;
 

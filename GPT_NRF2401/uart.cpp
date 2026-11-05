@@ -54,24 +54,27 @@ uint8_t UART::write(const uint8_t* bytes, uint8_t count) {
     return n;
 }
 
-// A transport segment must not be partially accepted. TX has a single
-// foreground producer; USART_UDRE_vect is its only consumer. Masking
-// interrupts here preserves the all-or-none contract even if other code
-// is added later. Current maximum UART transport segment is 22 bytes.
-bool UART::writeAll(const uint8_t* bytes, uint8_t count) {
-    if (count!=0 && !bytes) return false;
-    bool ok=false;
-    ATOMIC_BLOCK(ATOMIC_RESTORESTATE) {
-        if (tx_.freeSpace() >= count) {
-            for (uint8_t i=0; i<count; ++i)
-                (void)tx_.push(bytes[i]);
-            if (count) UCSR0B |= _BV(UDRIE0);
-            ok=true;
-        } else {
-            ++tx_buffer_full_;
-        }
-    }
-    return ok;
+// One foreground producer, USART_UDRE_vect consumer. After testing
+// headroom, the consumer can only increase free space. Publishing each
+// byte is SPSC-safe without masking RX interrupts for a whole segment.
+// Only the UDRIE enable needs a short critical section.
+bool UART::writeAll(const uint8_t* bytes,uint8_t count){
+	if(count!=0 && !bytes){
+		return false;
+	}
+	if(tx_.freeSpace()<count){
+		++tx_buffer_full_;
+		return false;
+	}
+	for(uint8_t i=0;i<count;++i){
+		(void)tx_.push(bytes[i]);
+	}
+	if(count!=0){
+		ATOMIC_BLOCK(ATOMIC_RESTORESTATE){
+			UCSR0B|=_BV(UDRIE0);
+		}
+	}
+	return true;
 }
 
 UART::Counters UART::counters() const {

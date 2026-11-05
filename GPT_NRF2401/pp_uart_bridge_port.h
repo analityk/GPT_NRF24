@@ -14,6 +14,22 @@ public:
 	explicit PpUartBridgePort(Console& console):console_(console){
 	}
 
+	RetainedByteRing& retainedInput(){
+		return console_.retainedInput();
+	}
+
+	const RetainedByteRing& retainedInput() const{
+		return console_.retainedInput();
+	}
+
+	uint8_t inputFreeSpace() const{
+		return console_.retainedInput().freeSpace();
+	}
+
+	bool pauseHostInput() const{
+		return console_.retainedInput().pauseRequested();
+	}
+
 	uint8_t available() const{
 		return console_.available();
 	}

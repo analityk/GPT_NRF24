@@ -418,3 +418,9 @@ weryfikowana na zgodnych i uszkodzonych plikach. Bridge:
 Synthetic: `.text=19214`, `.data=96`, `.bss=1043` (SRAM 1139 B).
 Nie mylić kompilacji i symulacji hostowej z wynikiem testu
 fizycznego dwukierunkowego UART.
+
+## 2026-11-05 — transport UART z jednym buforem ACK-retained (`testy`)
+
+Na prośbę właściciela poprawiono granicę odpowiedzialności między UART RX a protokołem. `RetainedByteRing` ma 256 bajtów (255 użytecznych); IRQ RX zapisuje bezpośrednio do pierścienia, indeks `prepared` określa granicę danych już umieszczonych w ramkach, `acknowledged` zwalnia miejsce dopiero po aplikacyjnym ACK. Nie ma osobnego cache `slots_[4][24]`, kasowania danych po ACK ani podwójnego kopiowania BODY. `PairedLink::makeStreamFrom` i `PairedFrame::encodeFrom` czytają pierścień z uwzględnieniem zawinięcia. Go-back-N zachowuje cztery deskryptory start/długość oraz stan sesji. IDLE jest nadal emitowane przy pustej kolejce. `PpUartBridgePort` udostępnia to samo `UART::retainedInput()`; syntetyczny generator jest adapterem do własnej kolejki, ale używa wspólnego protokołu.
+
+Histereza statusu `pauseHostInput`: gdy wolnych ≤48 B, zwracamy PAUSE, gdy wolnych ≥96 B, RESUME. To tylko logiczne wskazanie dla przyszłego hosta, nie bajty w strumieniu RealTerm. `UART::writeAll` nie wyłącza przerwań RX na czas kopiowania 24 B, tylko podczas ustawienia UDRIE. Po pobraniu zmian należy ponownie wykonać host+AVR CI i na prawdziwych płytkach test dwóch równoczesnych strumieni binarnych, 255 B linii, retransmisji i osobnych resetów. Bez sprzętowej kontroli napływu z CH340 nie deklarować niezawodności przy dowolnym przeciążeniu.

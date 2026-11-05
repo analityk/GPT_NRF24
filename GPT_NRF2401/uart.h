@@ -3,6 +3,7 @@
 
 #include <stdint.h>
 #include "byte_ring.h"
+#include "retained_byte_ring.h"
 
 // USART0 hardware driver for ATmega328P, 16 MHz, 115200 8N1.
 // Exactly one UART instance may own USART0 at a time.
@@ -25,6 +26,12 @@ public:
     uint8_t write(const uint8_t* bytes, uint8_t count); // prefix actually queued
     bool writeAll(const uint8_t* bytes, uint8_t count); // atomic all-or-none TX enqueue
     uint8_t available() const;
+	RetainedByteRing& retainedInput(){
+		return rx_;
+	}
+	bool rxPauseRequested() const{
+		return rx_.pauseRequested();
+	}
     uint8_t freeSpace() const;         // TX queue free capacity
     Counters counters() const;         // atomic snapshot
 
@@ -37,7 +44,7 @@ private:
     UART& operator=(const UART&) = delete;
 
     static UART* active_;
-    ByteRing<128> rx_;
+    RetainedByteRing rx_;
     ByteRing<128> tx_;
     volatile uint16_t rx_buffer_full_;
     volatile uint16_t rx_framing_;

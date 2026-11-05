@@ -18,8 +18,8 @@ public:
         Pair(uint8_t t=0,uint8_t r=0):tx(t),rx(r){}
     };
     static Pair snapshot(const PpRecoveryControl& recovery,
-                         uint16_t txFree,uint16_t rxFree) {
-        const bool ready=recovery.canProduce();
+		uint16_t txFree,uint16_t rxFree,bool inputPause=false){
+		const bool ready=recovery.canProduce() && !inputPause;
         return Pair(static_cast<uint8_t>((ready?units(txFree):0U)|
                      (ready?0U:static_cast<uint8_t>(STOP))|
                      (recovery.uncertainty()?static_cast<uint8_t>(UNCERTAIN):0U)),

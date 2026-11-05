@@ -43,28 +43,53 @@ public:
         localDrops_=static_cast<uint8_t>((localDrops_+1U)&15U);
         ++counters_.rxDrops;
     }
-    // Paired stream: MAC TX_SEQ is the user DATA sequence, RX_LAST is
-    // the cumulative acceptance ACK. BODY contains only user bytes.
-    PairedFrame::Error makeStream(uint8_t seq,uint8_t ack,uint8_t credit,
-                         const uint8_t* data,uint8_t length,
-                         uint8_t* out,uint8_t& width,
-                         bool missingPrefix=false) {
-        PairedFrame::Header h;
-        h.txSeq=seq;h.rxLast=ack;
-        h.lossAB=isA_?remoteLoss_:localLoss_;
-        h.lossBA=isA_?localLoss_:remoteLoss_;
-        h.arcLast=arc_;h.rxDrop=localDrops_;h.rxCredit=credit;
-        h.flags=static_cast<uint8_t>(length?PairedFrame::Kind::DATA:
-                                           PairedFrame::Kind::IDLE);
-        // The existing URGENT bit requests the missing cumulative-ACK
-        // successor; it adds no bytes to the over-the-air header.
-        if(missingPrefix)h.flags|=PairedFrame::URGENT;
-        h.sessionId=sid_;
-        const PairedFrame::Error e=PairedFrame::encode(
-            h,data,length,out,width);
-        if(e==PairedFrame::Error::OK)++counters_.txFrames;
-        return e;
-    }
+    // Paired stream: MAC TX_SEQ is user DATA sequence and RX_LAST is
+    // cumulative acceptance ACK. Both source types share the same header.
+	PairedFrame::Header streamHeader(uint8_t seq,uint8_t ack,uint8_t credit,
+		uint8_t length,bool missingPrefix) const{
+		PairedFrame::Header h;
+		h.txSeq=seq;
+		h.rxLast=ack;
+		h.lossAB=isA_?remoteLoss_:localLoss_;
+		h.lossBA=isA_?localLoss_:remoteLoss_;
+		h.arcLast=arc_;
+		h.rxDrop=localDrops_;
+		h.rxCredit=credit;
+		h.flags=static_cast<uint8_t>(
+			length!=0?PairedFrame::Kind::DATA:PairedFrame::Kind::IDLE);
+		if(missingPrefix){
+			h.flags=static_cast<uint8_t>(h.flags|PairedFrame::URGENT);
+		}
+		h.sessionId=sid_;
+		return h;
+	}
+
+	PairedFrame::Error makeStream(uint8_t seq,uint8_t ack,uint8_t credit,
+		const uint8_t* data,uint8_t length,uint8_t* out,uint8_t& width,
+		bool missingPrefix=false){
+		const PairedFrame::Header h=streamHeader(seq,ack,credit,length,
+			missingPrefix);
+		const PairedFrame::Error error=PairedFrame::encode(
+			h,data,length,out,width);
+		if(error==PairedFrame::Error::OK){
+			++counters_.txFrames;
+		}
+		return error;
+	}
+
+	template<class Source>
+	PairedFrame::Error makeStreamFrom(uint8_t seq,uint8_t ack,uint8_t credit,
+		const Source& source,uint8_t first,uint8_t length,
+		uint8_t* out,uint8_t& width,bool missingPrefix=false){
+		const PairedFrame::Header h=streamHeader(seq,ack,credit,length,
+			missingPrefix);
+		const PairedFrame::Error error=PairedFrame::encodeFrom(
+			h,source,first,length,out,width);
+		if(error==PairedFrame::Error::OK){
+			++counters_.txFrames;
+		}
+		return error;
+	}
 
     // Repeated DATA may contain a newer ACK and credit. All valid frames
     // reach the stream, which owns user-level deduplication.

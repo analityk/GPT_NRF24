@@ -344,3 +344,14 @@
 - [ ] Wspólny firmwarowy boot dispatcher PP/BURST20 po A1 dopiero gdy BURST profile jest kompletny; obecny main **nie czyta jeszcze A1 i nadal uruchamia PP niezależnie od strapu**.
 - [ ] Zmierzyć na fizycznych RF-Nano pakiety/5ms i czy ramka REPORT mieści się w przeznaczonym 1ms, przesunięcie roli 0,3ms, 10/10 i następnie 5/15; nie interpretować modelu jako pomiaru.
 - [ ] Dla 5/15 przeprojektować świadomie UART ingress: 15ms przy 115200 8N1 to ~173B, więcej niż 127B RX ring; zatwierdzić flow control lub większy bufor/mniejszy baud na BURST bez zmieniania PP.
+
+## Uproszczenie ścieżki TX, 2026-11-05 (`testy`)
+
+- [x] Jeden ACK-retained ring na fizycznym RX UART, 256 B, wskaźniki atomowe 8-bitowe i deskryptory 4 ramek; zwalnianie miejsca wyłącznie po ACK aplikacyjnym, bez zerowania RAM.
+- [x] Serializer odczytuje BODY do bufora ramki SPI bez drugiej kopii, działa przy zawinięciu indeksu.
+- [x] Osobny test źródła dla generatora; ten sam algorytm ramek i retransmisji w obu trybach.
+- [x] Histereza `pauseHostInput`: mniej niż 2×24 B wolnych oznacza STOP, po odzyskaniu ≥4×24 B oznacza RESUME; bez XON/XOFF w danych.
+- [x] Skrócono sekcję atomową `UART::writeAll` do przełączenia UDRIE.
+- [ ] Zmierzyć `rx_buffer_full/rx_overrun` po równoczesnym wysłaniu 255-bajtowych linii bez przerw wewnątrz linii, oraz porównać binarne capture obu portów.
+- [ ] Potwierdzić osobny reset A i B, przekroczenie indeksu 255, długie retransmisje pod tłumieniem RF i brak danych IDLE przy aktywnym kanale.
+- [ ] Jeśli pełne 115200 8N1 z obu hostów nie mieści się w przepustowości RF, podłączyć fizyczny flow control do `pauseHostInput` albo użyć nadawcy respektującego dwa bajty statusowe.

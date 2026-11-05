@@ -37,24 +37,68 @@ namespace PairedFrame {
         if (h.kind()==Kind::CONTROL && length==0) return Error::BAD_TYPE;
         return Error::OK;
     }
-    // Outputs exactly 8+length bytes. On error leaves destination untouched.
-    inline Error encode(const Header& h,const uint8_t* body,uint8_t length,
-                        uint8_t* dst,uint8_t& width) {
-        if (!dst || (length && !body)) return Error::NULL_BUFFER;
-        const Error e=validate(h,length);
-        if (e!=Error::OK) return e;
-        dst[0]=h.txSeq;
-        dst[1]=h.rxLast;
-        dst[2]=static_cast<uint8_t>((h.lossBA<<4U)|h.lossAB);
-        dst[3]=static_cast<uint8_t>((h.rxDrop<<4U)|h.arcLast);
-        dst[4]=h.rxCredit;
-        dst[5]=h.flags;
-        dst[6]=static_cast<uint8_t>(h.sessionId);
-        dst[7]=static_cast<uint8_t>(h.sessionId>>8);
-        for(uint8_t i=0;i<length;++i)dst[HEADER_SIZE+i]=body[i];
-        width=static_cast<uint8_t>(HEADER_SIZE+length);
-        return Error::OK;
-    }
+    // Header offsets are the on-air protocol layout, not an AVR ABI.
+#define PAIRED_FRAME_TX_SEQ_OFFSET 0U
+#define PAIRED_FRAME_RX_LAST_OFFSET 1U
+#define PAIRED_FRAME_LOSS_OFFSET 2U
+#define PAIRED_FRAME_DROP_RETRY_OFFSET 3U
+#define PAIRED_FRAME_CREDIT_OFFSET 4U
+#define PAIRED_FRAME_FLAGS_OFFSET 5U
+#define PAIRED_FRAME_SID_LOW_OFFSET 6U
+#define PAIRED_FRAME_SID_HIGH_OFFSET 7U
+#define PAIRED_FRAME_NIBBLE_SHIFT 4U
+
+	inline void encodeHeader(const Header& h,uint8_t* dst){
+		dst[PAIRED_FRAME_TX_SEQ_OFFSET]=h.txSeq;
+		dst[PAIRED_FRAME_RX_LAST_OFFSET]=h.rxLast;
+		dst[PAIRED_FRAME_LOSS_OFFSET]=static_cast<uint8_t>(
+			(h.lossBA<<PAIRED_FRAME_NIBBLE_SHIFT)|h.lossAB);
+		dst[PAIRED_FRAME_DROP_RETRY_OFFSET]=static_cast<uint8_t>(
+			(h.rxDrop<<PAIRED_FRAME_NIBBLE_SHIFT)|h.arcLast);
+		dst[PAIRED_FRAME_CREDIT_OFFSET]=h.rxCredit;
+		dst[PAIRED_FRAME_FLAGS_OFFSET]=h.flags;
+		dst[PAIRED_FRAME_SID_LOW_OFFSET]=static_cast<uint8_t>(h.sessionId);
+		dst[PAIRED_FRAME_SID_HIGH_OFFSET]=static_cast<uint8_t>(
+			h.sessionId>>8U);
+	}
+
+	inline Error encode(const Header& h,const uint8_t* body,uint8_t length,
+		uint8_t* dst,uint8_t& width){
+		if(!dst || (length!=0 && !body)){
+			return Error::NULL_BUFFER;
+		}
+		const Error error=validate(h,length);
+		if(error!=Error::OK){
+			return error;
+		}
+		encodeHeader(h,dst);
+		for(uint8_t i=0;i<length;++i){
+			dst[HEADER_SIZE+i]=body[i];
+		}
+		width=static_cast<uint8_t>(HEADER_SIZE+length);
+		return Error::OK;
+	}
+
+	// Serialize from a retained ring straight into the one radio frame.
+	// The source may wrap at 255 -> 0; no staging BODY array is required.
+	template<class Source>
+	inline Error encodeFrom(const Header& h,const Source& source,uint8_t first,
+		uint8_t length,uint8_t* dst,uint8_t& width){
+		if(!dst){
+			return Error::NULL_BUFFER;
+		}
+		const Error error=validate(h,length);
+		if(error!=Error::OK){
+			return error;
+		}
+		encodeHeader(h,dst);
+		for(uint8_t i=0;i<length;++i){
+			dst[HEADER_SIZE+i]=source.at(static_cast<uint8_t>(first+i));
+		}
+		width=static_cast<uint8_t>(HEADER_SIZE+length);
+		return Error::OK;
+	}
+
     // RF dynamic width is the ONLY length source; do not require zero padding.
     inline Error decode(const uint8_t* src,uint8_t width,View& dst) {
         if (!src) return Error::NULL_BUFFER;

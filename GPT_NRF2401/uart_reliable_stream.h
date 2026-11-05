@@ -2,7 +2,10 @@
 #define GPT_NRF24_UART_RELIABLE_STREAM_H
 #include <stdint.h>
 #define UART_RELIABLE_MAX_NO_ACK_TURNS UINT8_MAX
+#define UART_RELIABLE_TX_WINDOW_FRAMES 4U
+#define UART_RELIABLE_REPLAY_AFTER_TURNS 8U
 #include "paired_link.h"
+#include "reliable_input_source.h"
 
 // Optional phase callbacks; the ordinary transport API compiles them away.
 struct UartMakeNoopTrace {
@@ -21,21 +24,24 @@ struct UartMakeNoopTrace {
 // IDLE still carries ACK/credit, but fresh DATA is not admitted until all
 // previously cached segments are confirmed. No radio timing adjustment.
 // All state is independent of AVR, UART registers, and radio implementation.
-template<class Port>
+template<class Port,bool SharedSource=false>
 class UartReliableStream {
 public:
     static const uint8_t MAX_USER_BYTES=PairedFrame::MAX_BODY;
-    static const uint8_t WINDOW=4;
-    static const uint8_t REPLAY_AFTER=8; // multiple queued RF/ACK turns
+    static const uint8_t WINDOW=UART_RELIABLE_TX_WINDOW_FRAMES;
+    static const uint8_t REPLAY_AFTER=UART_RELIABLE_REPLAY_AFTER_TURNS;
 
     explicit UartReliableStream(Port& port)
-       :port_(port),session_(0),baseSeq_(0),nextSeq_(0),headIndex_(0),
+       :port_(port),source_(port),session_(0),baseSeq_(0),nextSeq_(0),headIndex_(0),
         recvNext_(0),outstanding_(0),replayCount_(0),replaySeq_(0),
         noAckTurns_(0),gapPending_(false),nackSeen_(false),nackForBase_(0),
         draining_(false),
         acceptedBytes_(0),acknowledgedBytes_(0),
         duplicates_(0),blocked_(0),badFrames_(0),retransmits_(0) {
-        for(uint8_t i=0;i<WINDOW;++i)slotLength_[i]=0;
+        for(uint8_t i=0;i<WINDOW;++i){
+			slotLength_[i]=0;
+			slotStart_[i]=0;
+		}
     }
 
     // A new RF session starts a new 8-bit stream numbering epoch.
@@ -59,7 +65,13 @@ public:
     }
     void disconnect(){beginSession(0);}
     bool hasPending()const{return outstanding_!=0;}
-    bool hasInput()const{return port_.available()!=0;}
+    bool hasInput()const{return source_.hasInput();}
+	bool pauseHostInput()const{
+		return source_.ring().pauseRequested();
+	}
+	uint8_t inputFreeSpace()const{
+		return source_.ring().freeSpace();
+	}
     bool hasWork()const{return hasPending()||hasInput();}
     uint16_t acceptedBytes()const{return acceptedBytes_;}
     uint16_t acknowledgedBytes()const{return acknowledgedBytes_;}
@@ -93,12 +105,17 @@ public:
 		if(session_==0 || link.sessionId()!=session_){
 			return false;
 		}
-		uint8_t body[PairedFrame::MAX_BODY];
+		source_.pump();
+		RetainedByteRing& ring=source_.ring();
 		uint8_t seq=nextSeq_;
 		uint8_t count=0;
+		uint8_t first=ring.prepared();
+		uint8_t slot=0;
+		bool replay=false;
+		bool fresh=false;
 		const uint8_t peerCredit=link.peerCredit();
-
 		const bool maySend=permitData && peerCredit!=0;
+
 		if(maySend && outstanding_!=0 &&
 			noAckTurns_<UART_RELIABLE_MAX_NO_ACK_TURNS){
 			++noAckTurns_;
@@ -113,38 +130,44 @@ public:
 
 		if(maySend && replayCount_!=0){
 			seq=replaySeq_;
-			const uint8_t slot=slotIndex(seq);
+			slot=slotIndex(seq);
+			first=slotStart_[slot];
 			count=slotLength_[slot];
-			for(uint8_t i=0;i<count;++i){
-				body[i]=slots_[slot][i];
+			replay=true;
+		} else if(maySend && !draining_ && outstanding_<WINDOW &&
+			outstanding_<peerCredit){
+			count=ring.availableToPrepare();
+			if(count>MAX_USER_BYTES){
+				count=MAX_USER_BYTES;
 			}
+			if(count!=0){
+				seq=nextSeq_;
+				slot=slotIndex(seq);
+				first=ring.prepared();
+				fresh=true;
+			}
+		}
+
+		trace.sourceReady();
+		const PairedFrame::Error encoded=link.makeStreamFrom(
+			seq,static_cast<uint8_t>(recvNext_-1U),credit(),
+			ring,first,count,dst,width,gapPending_);
+		trace.frameEncoded();
+		if(encoded!=PairedFrame::Error::OK){
+			return false;
+		}
+		if(replay){
 			++replaySeq_;
 			--replayCount_;
 			++retransmits_;
-		} else if(maySend && !draining_ && outstanding_<WINDOW &&
-			outstanding_<peerCredit && port_.available()!=0){
-			seq=nextSeq_;
-			const uint8_t slot=slotIndex(seq);
-			uint8_t value=0;
-			while(count<MAX_USER_BYTES && port_.read(value)){
-				// Cache and build the outgoing BODY in one pass.
-				// Never commit an uncached byte to the wire.
-				slots_[slot][count]=value;
-				body[count]=value;
-				++count;
-			}
-			if(count!=0){
-				slotLength_[slot]=count;
-				++nextSeq_;
-				++outstanding_;
-			}
+		} else if(fresh){
+			slotStart_[slot]=first;
+			slotLength_[slot]=count;
+			ring.markPrepared(count);
+			++nextSeq_;
+			++outstanding_;
 		}
-		trace.sourceReady();
-		const PairedFrame::Error encoded=link.makeStream(
-			seq,static_cast<uint8_t>(recvNext_-1U),
-			credit(),body,count,dst,width,gapPending_);
-		trace.frameEncoded();
-		return encoded==PairedFrame::Error::OK;
+		return true;
 	}
 
     // Return whether a nonempty user segment was received. This is NOT
@@ -196,54 +219,61 @@ public:
     }
 
 private:
-    // Physical slots follow the oldest unacknowledged DATA, not the
-    // current 8-bit wire sequence. This preserves all pending bytes on
+    // Descriptors follow the oldest unacknowledged DATA, not the
+    // current 8-bit wire sequence. This preserves retained bytes on
     // session reset even when the old sendBase had wrapped or advanced.
     uint8_t slotIndex(uint8_t seq) const {
         const uint8_t offset=static_cast<uint8_t>(seq-baseSeq_);
         return static_cast<uint8_t>((headIndex_+offset)%WINDOW);
     }
-    void acceptAck(uint8_t ack) {
-        if(!outstanding_)return;
-        // Modulo arithmetic valid with WINDOW<128 and non-aliased epochs.
-        const uint8_t distance=static_cast<uint8_t>(ack-baseSeq_);
-        if(distance>=outstanding_)return; // stale/future/unknown ACK
-        const uint8_t n=static_cast<uint8_t>(distance+1U);
-        for(uint8_t i=0;i<n;++i) {
-            const uint8_t slot=slotIndex(static_cast<uint8_t>(baseSeq_+i));
-            acknowledgedBytes_=static_cast<uint16_t>(
-                acknowledgedBytes_+slotLength_[slot]);
-            slotLength_[slot]=0;
-        }
-        headIndex_=static_cast<uint8_t>((headIndex_+n)%WINDOW);
-        baseSeq_=static_cast<uint8_t>(baseSeq_+n);
-        outstanding_=static_cast<uint8_t>(outstanding_-n);
-        if(outstanding_==0)draining_=false;
-        noAckTurns_=0;
-        nackSeen_=false;
-        // ACK progress must NOT cancel the yet-unsent tail of a replay.
-        // In particular after a peer reset, replay 0..3 may be queued in
-        // ACK Payload while the new peer already ACKs 0. Dropping replay
-        // 1..3 here would emit fresh DATA 4 into a hole and lock the
-        // receiver into a repeating out-of-order/replay cycle.
-        if(replayCount_!=0) {
-            const uint8_t delta=static_cast<uint8_t>(baseSeq_-replaySeq_);
-            if(delta<=WINDOW) {
-                const uint8_t covered=delta<replayCount_?delta:replayCount_;
-                replaySeq_=static_cast<uint8_t>(replaySeq_+covered);
-                replayCount_=static_cast<uint8_t>(replayCount_-covered);
-            }
-        }
-        if(replayCount_==0)replaySeq_=baseSeq_;
-    }
+	void acceptAck(uint8_t ack){
+		if(outstanding_==0){
+			return;
+		}
+		// Acknowledge at most the outstanding window, not a stale epoch.
+		const uint8_t distance=static_cast<uint8_t>(ack-baseSeq_);
+		if(distance>=outstanding_){
+			return;
+		}
+		const uint8_t n=static_cast<uint8_t>(distance+1U);
+		for(uint8_t i=0;i<n;++i){
+			const uint8_t slot=slotIndex(static_cast<uint8_t>(baseSeq_+i));
+			acknowledgedBytes_=static_cast<uint16_t>(
+				acknowledgedBytes_+slotLength_[slot]);
+			// No memset: releasing the tail makes the space reusable by the ISR.
+			source_.ring().acknowledge(slotLength_[slot]);
+		}
+		headIndex_=static_cast<uint8_t>((headIndex_+n)%WINDOW);
+		baseSeq_=static_cast<uint8_t>(baseSeq_+n);
+		outstanding_=static_cast<uint8_t>(outstanding_-n);
+		if(outstanding_==0){
+			draining_=false;
+		}
+		noAckTurns_=0;
+		nackSeen_=false;
+		// ACK progress cannot skip the unsent tail of a replay sequence.
+		if(replayCount_!=0){
+			const uint8_t delta=static_cast<uint8_t>(baseSeq_-replaySeq_);
+			if(delta<=WINDOW){
+				const uint8_t covered=delta<replayCount_?delta:replayCount_;
+				replaySeq_=static_cast<uint8_t>(replaySeq_+covered);
+				replayCount_=static_cast<uint8_t>(replayCount_-covered);
+			}
+		}
+		if(replayCount_==0){
+			replaySeq_=baseSeq_;
+		}
+	}
+
     Port& port_;
+	ReliableInputSource<Port,SharedSource> source_;
     uint16_t session_;
     uint8_t baseSeq_,nextSeq_,headIndex_,recvNext_,outstanding_;
     uint8_t replayCount_,replaySeq_,noAckTurns_;
     bool gapPending_,nackSeen_;
     uint8_t nackForBase_;
     bool draining_;
-    uint8_t slots_[WINDOW][MAX_USER_BYTES];
+    uint8_t slotStart_[WINDOW];
     uint8_t slotLength_[WINDOW];
     uint16_t acceptedBytes_,acknowledgedBytes_;
     uint16_t duplicates_,blocked_,badFrames_,retransmits_;

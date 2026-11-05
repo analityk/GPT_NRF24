@@ -813,3 +813,9 @@ strumienia PASS, obydwa profile AVR PASS (UART BRIDGE:
 `.text=12712`, `.data=96`, `.bss=865`, statyczny SRAM=961 B;
 SYNTHETIC RADIO: `.text=19214`, `.data=96`, `.bss=1043`, SRAM=1139 B).
 Nie jest to jeszcze wynik sprzętowy z równoczesnymi transmisjami UART.
+
+## 2026-11-05 — ACK-retained UART ring, hardware bridge on `testy`
+
+Po testach właściciela: osobne kierunki UART 115200 8N1 działają, jednoczesne pliki z liniami ~128 B działają przy 20 ms opóźnienia po LF, a dłuższe bursty 255 B powodują widoczne uszkodzenie nawet przy wydłużaniu przerwy. Po analizie architektury usunięto osobną tablicę cache czterech ramek `slots_[4][24]` oraz tymczasową tablicę BODY: nowy `RetainedByteRing` o fizycznej pojemności 256 B (255 użytecznych) przechowuje bajty do aplikacyjnego ACK. Trzy kursory 8-bitowe (ISR write, prepared, acknowledged) pozwalają retransmitować z oryginalnej pozycji; descriptor `slotStart/slotLength` opisuje cztery ramki. UART RX w trybie mostu jest dokładnie tą kolejką, bez kopii pośredniej. Serializer czyta dane bezpośrednio z pierścienia do pojedynczej ramki SPI, również na zawinięciu indeksu 255→0. ACK jedynie przesuwa potwierdzoną granicę; pamięć zostanie nadpisana przez kolejne bajty.
+
+Próg `pauseHostInput()` z histerezą (48 wolnych → PAUSE, 96 wolnych → RESUME) i dostępny status logiczny nie ingerują w binarny UART. Podłączenie fizycznego sterowania przepływem zależy od przyszłego hosta; obecny CH340/RealTerm nie zatrzyma się bez obsługi RTS/CTS lub innego kanału. TX USART `writeAll` wpuszcza cały segment do SPSC bez długiego blokowania przerwania RX. Puste źródło nie zatrzymuje IDLE/ACK radio. Tryb generatora zachowano przez osobny adapter wejścia do tego samego rdzenia. Wymagane testy CI i potwierdzenie na dwóch urządzeniach, bez twierdzenia o bezstratności pełnego dupleksu przy przeciążeniu UART.

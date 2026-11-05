@@ -71,7 +71,8 @@ static Timer1Clock ticks;
 static AckPhy phy(radio,delay,ticks);
 static PairedLink linkState(true,0);
 static PairedSession session(true,PairedSession::Identity());
-static UartReliableStream<ActivePort> stream(diagnosticPort);
+static UartReliableStream<ActivePort,
+	PP_TEST_TRAFFIC_MODE==PP_TRAFFIC_MODE_UART_BRIDGE> stream(diagnosticPort);
 static bool isLeader=false;
 static uint32_t lastPeerProgress=0;
 // Bench stress mode explicitly retries uncertain bytes after a cold peer
