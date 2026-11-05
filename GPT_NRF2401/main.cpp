@@ -41,6 +41,9 @@
 #include "host_flow_status.h"
 
 #define PP_PTX_PEER_STARTUP_MS 150U
+#define PP_TEST_RADIO_STARTUP_MS 110U
+#define PP_TEST_ACK_RETRY_SETUP 0x23U
+#define PP_TEST_RECOVERY_REPORT_INITIAL_OFFSET_TICKS 400000UL
 #define PP_OFFLINE_PROBE_INTERVAL_TICKS 40000UL
 #define PP_OFFLINE_IDLE_US 100U
 #define PP_PTX_HANDSHAKE_TIMEOUT_TICKS 2000000UL
@@ -464,33 +467,46 @@ static void runB() {
     }
 }
 
-int main() {
-    uart.begin();
-    Timer1Clock::begin();
-    sei();
-    ce.clear();csn.set();
-    delay.ms(110);
-    if(radio.probeAndConfigure(PP_TEST_RF_SETUP_VALUE).result!=
-       Radio::Result::OK)fatal();
-    spi.setSpeed(SpiMaster::Speed::MHz8);
-    if(!radio.enableAckPayload(0x23))fatal();
-    uint16_t adc=0;
-    if(!Adc0::sample(adc))fatal();
-    isLeader=(Adc0::classForM1(adc)==0);
-    diagnosticPort.configure(isLeader,ticks.now(),
-        PpEchoRampPort<UART>::Mode::RADIO_STRESS);
-    uint32_t epoch=0;
-    if(!BootEpoch::advance(epoch))fatal();
-    session.configure(isLeader,PairedSession::Identity(epoch,0));
-    linkState.configure(isLeader,0);
-    stream.disconnect();
-    lastPeerProgress=ticks.now();
-    recovery.reset(lastPeerProgress);
-    lastProbe=lastPeerProgress;
-    lastRecoveryReport=lastPeerProgress-400000UL;
-    lastReport=lastPeerProgress;
-    lastTimingReport=lastReport-PP_TIMING_REPORT_PHASE_OFFSET_TICKS;
-    performance.start(lastReport,performanceSnapshot());
-    if(isLeader)runA();
-    else runB();
+int main(){
+	uart.begin();
+	Timer1Clock::begin();
+	sei();
+	ce.outputLow();
+	csn.outputHigh();
+	delay.ms(PP_TEST_RADIO_STARTUP_MS);
+	if(radio.probeAndConfigure(PP_TEST_RF_SETUP_VALUE).result !=
+		Radio::Result::OK){
+		fatal();
+	}
+	spi.setSpeed(SpiMaster::Speed::MHz8);
+	if(!radio.enableAckPayload(PP_TEST_ACK_RETRY_SETUP)){
+		fatal();
+	}
+	uint16_t adc=0;
+	if(!Adc0::sample(adc)){
+		fatal();
+	}
+	isLeader=(Adc0::classForM1(adc)==0);
+	diagnosticPort.configure(isLeader,ticks.now(),
+		PpEchoRampPort<UART>::Mode::RADIO_STRESS);
+	uint32_t epoch=0;
+	if(!BootEpoch::advance(epoch)){
+		fatal();
+	}
+	session.configure(isLeader,PairedSession::Identity(epoch,0));
+	linkState.configure(isLeader,0);
+	stream.disconnect();
+	lastPeerProgress=ticks.now();
+	recovery.reset(lastPeerProgress);
+	lastProbe=lastPeerProgress;
+	lastRecoveryReport=lastPeerProgress-
+		PP_TEST_RECOVERY_REPORT_INITIAL_OFFSET_TICKS;
+	lastReport=lastPeerProgress;
+	lastTimingReport=lastReport-PP_TIMING_REPORT_PHASE_OFFSET_TICKS;
+	performance.start(lastReport,performanceSnapshot());
+	if(isLeader){
+		runA();
+	} else {
+		runB();
+	}
 }

@@ -50,6 +50,34 @@ Instrukcje muszą być samowystarczalne. Fakty wymagające zachowania należy za
   katalogowej. Neutralne operacje języka, takie jak wyzerowanie licznika
   czy zwiększenie go o jeden, nie są parametrami sprzętu ani protokołu.
 
+## Obowiązkowe formatowanie C/C++
+
+- Wcięcie jest **prawdziwym znakiem tabulacji (TAB)**, wyświetlanym
+  z szerokością **4 kolumn**. Nie zastępuj tabulatora czterema spacjami.
+- Każda definicja funkcji ma ciało w osobnych wierszach, również gdy
+  zawiera tylko jedną instrukcję. Nawias `{` należy do wiersza
+  deklaracji, zamykający `}` jest w osobnym wierszu. Po każdej
+  definicji funkcji zostaw pusty wiersz.
+- Każda instrukcja sterująca (`if`, `else`, `for`, `while`, `switch`)
+  ma jawny blok `{ ... }`, także gdy wykonuje tylko jedną instrukcję.
+  Zakazane są konstrukcje `if(warunek)instrukcja;`, inne jednolinijkowe
+  ciała sterujące i dopisywanie średnika po zamykającym `}` bloku `if`.
+- Nie łącz kilku instrukcji w jednym wierszu. Przy edycji istniejącej
+  funkcji uporządkuj **całe jej ciało** według tych zasad; nie zmieniaj
+  automatycznie całego repozytorium bez odrębnego zadania.
+
+Wymagany wzorzec (wcięcie przed `instrukcja();` jest znakiem TAB):
+
+```cpp
+void funkcja(uint8_t argument){
+	instrukcja();
+}
+
+if(!radio.enableAckPayload(NAZWANA_KONFIGURACJA)){
+	fatal();
+}
+```
+
 ## Fizyka łącza — sedno projektu
 
 nRF24L01+ jest radiem **półdupleksowym**. Jednoczesne użytkowanie dwóch kierunków komunikacji ma zapewniać **logiczny full duplex**, realizowany przez sterowanie nadawaniem i odbiorem, koordynację transmisji i obsługę kolizji. Nie należy przedstawiać tego jako fizycznego jednoczesnego TX/RX.

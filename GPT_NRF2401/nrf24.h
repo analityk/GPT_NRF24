@@ -41,11 +41,13 @@ public:
 
     Nrf24(Spi& spi, Pin& ce, Pin& csn) : spi_(spi), ce_(ce), csn_(csn) {}
 
-    void begin() {
-        ce_.clear();    // standby/power-down: never pulse CE during SPI setup
-        csn_.set();     // deselect chip
-        spi_.begin();
-    }
+    void begin(){
+		// Prepare GPIO output direction once. Older Pin adapters still use
+		// set()/clear(), without an extra requirement on portable mocks.
+		prepareLow(ce_, 0);  // standby/power-down before SPI setup
+		prepareHigh(csn_, 0); // deselect chip
+		spi_.begin();
+	}
 
     // Hardware CE belongs to this radio instance; PHY owns its transitions.
     void ceHigh() { ce_.set(); }
@@ -214,6 +216,28 @@ private:
     Spi& spi_;
     Pin& ce_;
     Pin& csn_;
+
+	template<class P>
+	static auto prepareLow(P& pin, int)
+		-> decltype(pin.outputLow(), void()){
+		pin.outputLow();
+	}
+
+	template<class P>
+	static void prepareLow(P& pin, long){
+		pin.clear();
+	}
+
+	template<class P>
+	static auto prepareHigh(P& pin, int)
+		-> decltype(pin.outputHigh(), void()){
+		pin.outputHigh();
+	}
+
+	template<class P>
+	static void prepareHigh(P& pin, long){
+		pin.set();
+	}
 
     static Probe failure(Probe& p, Result result, uint8_t reg) {
         p.result=result;

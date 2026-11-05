@@ -700,3 +700,27 @@ Przyszłe wpisy powinny zawierać datę, zakres faktycznie wykonanej zmiany, com
   `rf` i nie mogą być sumowane z `cyc`. Każdy nowy odczyt Timer1 ma
   pewien koszt; konieczny jest nowy pomiar sprzętowy. Host **25/25 PASS**,
   AVR i płytki dla tej nowszej sondy pozostają jeszcze do sprawdzenia.
+
+## 2026-11-05 — rozdzielenie konfiguracji GPIO od sterowania CSN/CE na `testy`
+
+- Fizyczny raport A przy 2 Mb/s i ~15,9 kB/s pokazał
+  `polls≈9`, `ps≈251 µs`, `spi≈123 µs`, `ack≈262 µs`,
+  `src≈158 µs`, `enc≈51 µs`. Zrzut jest wynikiem **starszego GPIO**;
+  nie mierzy jeszcze nowej optymalizacji.
+- Plik `.lss` Microchip Studio wykazał, że każde `GPIO::set()/clear()`
+  wykonywało `valid()`, a ponadto ponownie modyfikowało DDR. Użytkownik
+  nakazał usunąć te powtarzalne kontrole i wprowadzić jawne formatowanie.
+- Przebudowano `GPIO`: operacje `set/clear/flip` zmieniają tylko PORT,
+  inicjalizacja `outputHigh/outputLow` ustala zatrzask przed DDR,
+  open-drain ma jawne przełączanie trybu, `read` nie zmienia konfiguracji.
+  Usunięto `valid`, domyślny konstruktor oraz złożone odczyty
+  `readOpenDrain`/`readPullUp`. `Nrf24::begin()` wykrywa nowy interfejs
+  wyjść przy kompilacji i zachowuje starsze adaptery Pin; na płycie
+  CE/CSN są zainicjalizowane bezpiecznymi poziomami przed startupem.
+- Dodano test przenośnej klasy GPIO i konfiguracji pinów przez radio.
+  Wynik lokalnych testów: **26/26 PASS**. Oczekuje na cross-build AVR
+  i F7/F12; nie deklarowano przyspieszenia na rzeczywistym sprzęcie.
+- `AGENTS.md` i `.editorconfig`: wymagany fizyczny TAB szerokości 4,
+  bloki nawet dla jednej instrukcji/funkcji, pusta linia po funkcjach,
+  jawne makra zamiast liczb konfiguracyjnych. W `main` nazwano użyte
+  parametry startu/RETR bez ingerowania w odłożone `pairs[][2]`.

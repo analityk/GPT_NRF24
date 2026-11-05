@@ -1,4 +1,23 @@
-**NAJNOWSZY PUNKT KONTYNUACJI: 2026-11-05 — blokowe SPI potwierdzone sprzętowo, szczegółowa sonda na `testy` do sprawdzenia rano.**
+**NAJNOWSZY PUNKT KONTYNUACJI: 2026-11-05 — GPIO/CSN na `testy` zoptymalizowane, pomiar sprzętowy oczekuje.**
+Po przejrzeniu plików `.lss` i `.map` z Microchip Studio
+zidentyfikowano wielokrotny `GPIO::valid()` i zapis DDR przy każdym
+CSN HIGH/LOW. Na żądanie właściciela `GPIO` ma teraz osobne
+`outputHigh()/outputLow()` do jednorazowego skonfigurowania wyjścia
+bez impulsu przejściowego, a `set()/clear()/flip()` wykonują tylko
+operację PORT bez sprawdzania wskaźników i kierunku. Konstruktor
+domyślny usunięto; niepoprawna konfiguracja rejestrów jest błędem
+programisty. `release()/i2c_set()/i2c_clr()` jawnie przełączają tryb,
+`read()` tylko odczytuje PIN; zbędne `readOpenDrain/readPullUp` usunięto.
+`Nrf24::begin()` wykorzystuje nową konfigurację, zachowując zgodność
+ze starszymi atrapami Pin. `main` inicjalizuje CE LOW i CSN HIGH
+przed startem radia. Testy hostowe **26/26 PASS**; AVR i test dwóch
+RF-Nano tej zmiany **jeszcze niepotwierdzone**. W `AGENTS.md` oraz
+`.editorconfig` zapisano obowiązkowy TAB 4 kolumny, blokowe funkcje
+i instrukcje sterujące oraz zakaz magicznych liczb. Przed kolejną
+optymalizacją SPI porównać sprzętowy `cps`, `ps` i `spi` do `9cf4da6`.
+Nie zmieniono protokołu, radio nadal 2 Mb/s, `main` (branch) nietknięty.
+
+**Poprzedni punkt kontynuacji: 2026-11-05 — blokowe SPI potwierdzone sprzętowo, szczegółowa sonda na `testy` do sprawdzenia rano.**
 Właściciel uruchomił dwa RF-Nano z blokowym SPI na 2 Mb/s i
 potwierdził ~16 824 B/s, `cyc≈1427`, `spi≈123`, `ack≈227` µs,
 `sid=6380`, `ret=bad=0`. Poprzednio było ~15 336 B/s, `cyc≈1567`,

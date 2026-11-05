@@ -1,5 +1,21 @@
 # TODO — aktywny transport dwukierunkowy UART / ACK Payload
 
+## Optymalizacja GPIO/CSN — 2026-11-05, `testy`
+
+- [x] Rozdzielono konfigurację wyjścia (`GPIO::outputHigh/Low`) od
+  szybkich zmian zatrzasku PORT (`set/clear/flip`), bez `valid()` i
+  ponownego zapisu DDR podczas każdego odczytu rejestru nRF. Wejście
+  jest próbkowane wyłącznie przez `read()`, a przejścia open-drain
+  są jawne. `Nrf24::begin()` konfiguruje wyjście, zachowując stary
+  interfejs atrap Pin. Test GPIO i pozostałe 25 testów hostowych PASS.
+- [x] Utrwalono styl C++ w `AGENTS.md` i `.editorconfig`:
+  rzeczywisty TAB o szerokości 4, funkcje i `if` zawsze blokowe,
+  pusta linia po funkcji, parametry liczbowe wyłącznie nazwane.
+- [ ] Zweryfikować nową wersję przez AVR-GCC/F7 i ręczne F12 obu
+  płytek, po czym porównać `A us`/`A det`, `cps`, `ret/bad`, reset B/A
+  z poprzednią wersją `testy` (`9cf4da6`). Bez testu fizycznego
+  **nie przypisywać GPIO żadnego zysku czasowego ani poprawy CPS**.
+
 ## Pierwsza zaakceptowana wersja PP i dalsze eksperymenty — 2026-11-05
 
 - [ ] **Usunąć magiczne liczby z konfiguracji rejestrów nRF24**
