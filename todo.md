@@ -2,6 +2,17 @@
 
 ## Pierwsza zaakceptowana wersja PP i dalsze eksperymenty — 2026-11-05
 
+- [ ] **Usunąć magiczne liczby z konfiguracji rejestrów nRF24**
+  w `Nrf24::probeAndConfigure()` (`GPT_NRF2401/nrf24.h`): tablica
+  `pairs[][2]` nadal zawiera nienazwane wartości `CONFIG`, `EN_AA`,
+  `EN_RXADDR`, `SETUP_AW`, `SETUP_RETR`, `RF_CH`, `RX_PW_P0`, `DYNPD`
+  i `FEATURE`. Sam komentarz nie spełnia zakazu z `AGENTS.md`.
+  Ustalić nazwy i znaczenie każdego pola, wprowadzić opisowe
+  `#define` w odpowiedzialnej warstwie, wykorzystać je w konfiguracji
+  i testach; przy okazji skontrolować pozostałe modyfikowane fragmenty
+  sterownika pod tym samym kątem. Zachować dokładnie dotychczasowe
+  wartości bitowe, ustawienie 2 Mb/s w teście i zachowanie sprzętu.
+  **Zadanie odłożone na polecenie właściciela — teraz nie zmieniać kodu.**
 - [x] Wersja `pp-window-drain`: 23/23 testy hostowe PASS i pozytywne
   próby dwóch RF-Nano po uruchomieniu B→A, resecie B i resecie A.
   Właściciel zaakceptował ją jako bazę `main`.
