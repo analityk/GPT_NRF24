@@ -583,9 +583,13 @@ Przyszłe wpisy powinny zawierać datę, zakres faktycznie wykonanej zmiany, com
   brak blokady SPI, odebranie ACK, przepełnienie licznika Timer1,
   MAX_RT, timeout i błąd statusu. `pp_echo_ramp_test` bada porcjowanie
   producenta; zachowano resztę testów sesji, warm/cold recovery i replay.
-  `sh tests/run_host_tests.sh`: **24/24 PASS**. Lokalnie brak AVR-GCC;
-  nie wykonano jeszcze F7/F12 ani testów na rzeczywistych RF-Nano.
-  Workflow CI obsługuje teraz również push do `testy` (host i AVR-GCC).
+  `sh tests/run_host_tests.sh`: **24/24 PASS**. Workflow CI obsługuje
+  teraz również push do `testy`. Dla eksperymentu `7829482` zadania
+  **host-protocol i avr-firmware przeszły** (GitHub Actions run #91,
+  2026-11-05). `avr-size`: `.text=17740 B`, `.data=96 B`,
+  `.bss=878 B`, razem **974 B statycznego SRAM** z 2048 B ATmega328P.
+  Lokalnie brak AVR-GCC; nie wykonano jeszcze ręcznego F7/F12 ani
+  testów tej zmiany na rzeczywistych RF-Nano.
 - **Brak potwierdzonego zysku w kB/s i brak sprzętowego odbioru tej
   wersji.** Konieczny pomiar na obu urządzeniach i porównanie z
   zatwierdzonym `main`, zwłaszcza po samotnym resecie A, B oraz przy

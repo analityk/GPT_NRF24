@@ -9,6 +9,8 @@
   wydzielono nieblokujący automat PHY z kolejką FIFO i rozdzielono
   obsługę IRQ/statusu od pracy generatora podczas `ON_AIR`. Okno4,
   SID, kredyty, retransmisje i replay bez zmian; 24 testy hostowe PASS.
+- [x] GitHub Actions `testy` run #91: host i AVR-GCC **PASS**;
+  statycznie 974 B SRAM (`96 B .data + 878 B .bss`), kod 17740 B.
 - [ ] **F7 i ręczne F12 na obu RF-Nano.** Sprawdzić w RealTerm:
   start B→A i A→B, reset samego B, reset samego A, reset obu i
   odtworzenie po osłabieniu RF. Porównać `cps`, `arc/max`, `ret/bad`,
@@ -18,7 +20,7 @@
 - [ ] **Osobno zmierzyć koszt nowego cyklu** (czas od zapisu TX FIFO do
   zakończenia, udział GUARD/CE/ON_AIR, opóźnienie po `TX_DS/MAX_RT`),
   zanim zaczniemy zmieniać odstępy lub częstotliwość odpytywania SPI.
-  Lokalnie brak AVR-GCC; hostowe testy nie mierzą rzeczywistych µs.
+  Hostowe testy ani AVR build nie mierzą rzeczywistych µs.
 - [ ] **Dopiero po pomiarze** ocenić transakcyjne przygotowanie
   kolejnej ramki podczas bieżącego RF: bez cofania przyjętych danych,
   bez utraty cache przy rekey/NACK/kredycie=0 i bez spekulacyjnego

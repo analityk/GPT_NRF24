@@ -14,8 +14,11 @@ ramki spekulacyjnie przed odebraniem poprzedniego ACK**, bo obecne
 `stream.make` zużywa dane i modyfikuje okno — wymagałoby osobnego
 transakcyjnego API i prób przy rekey.
 `sh tests/run_host_tests.sh`: **24/24 PASS**, w tym nowe testy etapów
-CE/status/timeout/timer wrap oraz porcjowania producenta. Kompilatora
-AVR-GCC nie ma lokalnie. Następny krok: F7, ręczne F12 obu, pomiar
+CE/status/timeout/timer wrap oraz porcjowania producenta. GitHub Actions
+run #91 na `testy` potwierdza **PASS host i AVR-GCC** dla commita
+`7829482`; `.text=17740`, `.data=96`, `.bss=878` bajtów, statyczny
+SRAM=974/2048 B. Kompilatora AVR-GCC nie ma lokalnie.
+Następny krok: F7, ręczne F12 obu, pomiar
 `cps/arc/max/ret/bad/sid/up` w dobrym zasięgu, po resecie A/B/obu,
 pod ekranowaniem i porównanie z zaakceptowanym `main`. **Nie scalać
 eksperymentu do `main` bez wyraźnej akceptacji właściciela po wynikach.**
