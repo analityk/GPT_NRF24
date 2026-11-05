@@ -72,6 +72,9 @@ public:
 	uint8_t inputFreeSpace()const{
 		return source_.ring().freeSpace();
 	}
+	uint8_t unsentInputBytes() const{
+		return source_.ring().availableToPrepare();
+	}
     bool hasWork()const{return hasPending()||hasInput();}
     uint16_t acceptedBytes()const{return acceptedBytes_;}
     uint16_t acknowledgedBytes()const{return acknowledgedBytes_;}

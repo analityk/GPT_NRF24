@@ -41,7 +41,7 @@ int main(){
         assert(b.make(bLink,packet,width));
         assert(decode(packet,width).header.txSeq==i);
     }
-    assert(b.outstanding()==4 && bPort.input.available()==24);
+    assert(b.outstanding()==4 && b.unsentInputBytes()==24);
 
     // New A starts with an empty receiver; B preserves all old cache.
     a.beginSession(0x2222);
