@@ -368,7 +368,7 @@
 ## 2026-11-05 — jednoogniskowy pomiar przy dwóch wejściach UART
 
 - [x] Włączono przełączalny build diagnostyczny `PP_UART_DIAG_ENABLED=1` dla BRIDGE. Normalne pakiety nie są zmienione; ASCII dopisuje się dopiero po 0,8 s bez danych/postępu.
-- [x] 16-bitowy Timer1 mierzy **tylko start→start A** dla udanej wymiany DATA32↔ACK32, bez ARC; wynik `A rf n/cyc/lo/hi` w µs.
+- [x] 16-bitowy Timer1 mierzy **tylko start→start A** dla udanej wymiany z DATA w przynajmniej jednym kierunku, bez ARC; wynik `A rf n/cyc/lo/hi` w µs.
 - [x] Oba UART mają osobne 16-bitowe liczniki przyjętych bajtów i rzeczywistych zapisów do UDR0. Raporty `A/B uart` (in/out/full/dor/fe/free) i `A/B pp` (ack/rx/ret/blk/bad/win/cr/sid) pozwalają zlokalizować granicę strat. Jedna 10ms przerwa po CRLF nie generuje raportu.
 - [x] Dodano test portable ciszy, powtarzanych przerw 10ms, overflow16 i długości tekstu. Pierwsze CI [#42108719539](https://github.com/analityk/GPT_NRF24/actions/runs/42108719539): **35/35 testy hostowe PASS**, oba AVR PASS, BRIDGE statyczne SRAM 1107B, FLASH 15884B.
 - [ ] Wykonać 2×RealTerm bez zwory TX–RX, `Delays=0,20` i `0,10`, odczytać komplet pięciu linii diagnostyki, porównać A/B osobno.

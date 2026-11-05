@@ -5,8 +5,9 @@
 ## Co mierzymy
 
 Głównym pomiarem czasu jest **odstęp między rozpoczęciem dwóch kolejnych
-transakcji PTX (A)**, ale tylko gdy poprzednia wymiana zakończyła się
-poprawnym DATA 32 B z A i ACK Payload 32 B z B, bez ARC/retransmisji.
+transakcji PTX (A)**, ale tylko gdy poprzednia wymiana była poprawna, miała zerowy ARC
+i przeniosła dane użytkownika w co najmniej jednym kierunku.
+Dopuszczamy krótsze ramki DATA, aby próba przy 6 kB/s też dała próbki.
 Mierzone są różnice odczytów 16-bitowego Timer1 (`TCNT1`, 2 MHz),
 z rozdzielczością 0,5 µs, bez 32-bitowego znacznika czasu dla cyklu.
 Miernik zachowuje średnią, minimum i maksimum do 1024 próbek.

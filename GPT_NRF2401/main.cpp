@@ -113,28 +113,28 @@ static uint16_t diagnosticTxBytes=0;
 static PpShortProbeWindow rfCycleProbe;
 static uint16_t previousRfStart=0;
 static bool previousRfStartValid=false;
-static bool previousRfFullReply=false;
+static bool previousRfDataExchange=false;
 
 enum class UartDiagnosticPhase : uint8_t {
 	OBSERVE,UART_COUNTS,PROTOCOL_COUNTS,RF_CYCLE
 };
 static UartDiagnosticPhase uartDiagnosticPhase=UartDiagnosticPhase::OBSERVE;
 
-// One timing region: PTX start-to-start, with a complete 32 B DATA
-// and 32 B ACK Payload in the preceding successful radio exchange.
+// One timing region: PTX start-to-start after a successful radio exchange
+// carrying DATA in at least one direction (variable payload lengths).
 static void markRfCycle(uint16_t started,bool successful){
 	if(!successful){
 		previousRfStartValid=false;
-		previousRfFullReply=false;
+		previousRfDataExchange=false;
 		return;
 	}
-	if(previousRfStartValid && previousRfFullReply){
+	if(previousRfStartValid && previousRfDataExchange){
 		rfCycleProbe.observe(static_cast<uint16_t>(
 			started-previousRfStart));
 	}
 	previousRfStart=started;
 	previousRfStartValid=true;
-	previousRfFullReply=false;
+	previousRfDataExchange=false;
 }
 
 static PpUartDiagSnapshot uartDiagnosticSnapshot(){
@@ -224,7 +224,7 @@ static void serviceUartDiagnostic(){
 			line.decimal(cycle.maxUs);
 			line.word("\r\n");
 		} else {
-			line.word("A rf n=0 (no full DATA+ACK sample)\r\n");
+			line.word("A rf n=0 (no valid DATA exchange sample)\r\n");
 		}
 	}
 	if(!line.emit(uart)){
@@ -616,13 +616,13 @@ static void runA(){
 			// A control/foreign/invalid reply can trigger a session reset
 			// and must be processed before any later payload is queued.
 #if PP_UART_DIAG_ENABLED
-			previousRfFullReply=wasActive && session.active() &&
+			previousRfDataExchange=wasActive && session.active() &&
 				oldSid==session.sid() &&
 				recovery.state()==PpRecoveryControl::State::HEALTHY &&
 				tx.code==AckPhy::TxCode::ACK_WITH_DATA &&
 				tx.retries==0 &&
-				inFlightWidth==PairedFrame::MAX_FRAME &&
-				incomingWidth==PairedFrame::MAX_FRAME;
+				(inFlightWidth>PairedFrame::HEADER_SIZE ||
+				 incomingWidth>PairedFrame::HEADER_SIZE);
 #endif
 			const bool defer=tx.code==AckPhy::TxCode::ACK_WITH_DATA &&
 				PpReplyMailbox<AckPhy::TxResult>::canDefer(
