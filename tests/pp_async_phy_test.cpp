@@ -11,6 +11,12 @@
 #define PP_ASYNC_TEST_CONFIG_REGISTER 0x00U
 #define PP_ASYNC_TEST_FIFO_REGISTER 0x17U
 #define PP_ASYNC_TEST_OBSERVE_REGISTER 0x08U
+#define PP_ASYNC_TEST_SPI_LOAD_TICKS 80UL
+#define PP_ASYNC_TEST_SPI_STATUS_TICKS 4UL
+#define PP_ASYNC_TEST_SPI_REGISTER_TICKS 4UL
+#define PP_ASYNC_TEST_SPI_PAYLOAD_TICKS 64UL
+#define PP_ASYNC_TEST_SPI_IRQ_TICKS 4UL
+#define PP_ASYNC_TEST_RF_WAIT_TICKS 1000UL
 
 struct TestClock {
     uint32_t ticks=0;
@@ -30,28 +36,34 @@ struct TestRadio {
     uint8_t width=PP_ASYNC_TEST_REPLY_BYTES;
     uint8_t irq=0;
     bool ce=false,rxPresent=false,failStatus=false;
+    TestClock* measuredClock=nullptr;
     unsigned statusReads=0,cePulses=0,txFlushes=0,rxFlushes=0;
+    void lapse(uint32_t elapsed){if(measuredClock)measuredClock->advance(elapsed);}
     void ceLow(){ce=false;}
     void ceHigh(){ce=true;++cePulses;}
-    bool writeRegister(uint8_t,uint8_t){return true;}
+    bool writeRegister(uint8_t,uint8_t){lapse(PP_ASYNC_TEST_SPI_REGISTER_TICKS);return true;}
     bool readRegister(uint8_t reg,uint8_t& value){
+        lapse(PP_ASYNC_TEST_SPI_REGISTER_TICKS);
         if(reg==FIFO_STATUS)
             value=rxPresent?0:NRF24_PHY_RX_EMPTY_MASK;
         else if(reg==OBSERVE_TX)value=PP_ASYNC_TEST_RETRIES;
         return true;
     }
-    bool clearIrq(uint8_t){irq=0;return true;}
+    bool clearIrq(uint8_t){lapse(PP_ASYNC_TEST_SPI_IRQ_TICKS);irq=0;return true;}
     bool writeDynamicPayload(const uint8_t* bytes,uint8_t n){
+        lapse(PP_ASYNC_TEST_SPI_LOAD_TICKS);
         std::memcpy(tx,bytes,n);
         return true;
     }
     bool status(uint8_t& value){
+        lapse(PP_ASYNC_TEST_SPI_STATUS_TICKS);
         ++statusReads;
         if(failStatus)return false;
         value=irq;
         return true;
     }
     bool readDynamicPayload(uint8_t* bytes,uint8_t& n){
+        lapse(PP_ASYNC_TEST_SPI_PAYLOAD_TICKS);
         n=width;
         if(n>NRF24_PHY_MAX_FRAME_BYTES || !n)return false;
         std::memcpy(bytes,rx,n);
@@ -63,7 +75,7 @@ struct TestRadio {
     bool flushRx(){++rxFlushes;return true;}
 };
 
-typedef NrfAckPayloadPhy<TestRadio,TestDelay,TestClock> Phy;
+typedef NrfAckPayloadPhy<TestRadio,TestDelay,TestClock,true> Phy;
 
 static void pulse(Phy& phy,TestRadio& radio,TestClock& clock,
                   uint8_t (&rx)[NRF24_PHY_MAX_FRAME_BYTES],
@@ -110,6 +122,10 @@ int main() {
     assert(result.code==Phy::TxCode::ACK_WITH_DATA &&
            result.retries==PP_ASYNC_TEST_RETRIES &&
            width==PP_ASYNC_TEST_REPLY_BYTES);
+    assert(phy.lastTiming().ceTicks==NRF24_PHY_CE_PULSE_TICKS);
+    assert(phy.lastTiming().loadTicks==0);
+    assert(phy.lastTiming().guardTicks==0);
+    assert(phy.lastCompletedAt()==clock.now());
     assert(!std::memcmp(reply,radio.rx,PP_ASYNC_TEST_REPLY_BYTES));
     assert(!phy.txBusy());
 
@@ -133,6 +149,7 @@ int main() {
     clock.advance(PP_ASYNC_TEST_LAST_TICK);
     assert(phy.pollTransfer(reply,width,result)==Phy::TxStep::COMPLETE);
     assert(result.code==Phy::TxCode::TIMEOUT && !phy.txBusy());
+    assert(phy.lastTiming().waitTicks>=NRF24_PHY_TX_TIMEOUT_TICKS);
     assert(radio.txFlushes>=1U);
 
     // Interrupted SPI status read terminates the state machine. The next
@@ -145,4 +162,29 @@ int main() {
     assert(phy.pollTransfer(reply,width,result)==Phy::TxStep::COMPLETE);
     assert(result.code==Phy::TxCode::IO_ERROR && !phy.txBusy());
     assert(phy.pollTransfer(reply,width,result)==Phy::TxStep::IDLE);
+
+    // An instrumented transceiver with modeled SPI latency must attribute
+    // each disjoint interval to the correct phase, without counting the
+    // previous cycle or the background work a second time.
+    TestClock measuredClock;TestDelay measuredDelay;TestRadio measuredRadio;
+    measuredRadio.measuredClock=&measuredClock;
+    Phy measuredPhy(measuredRadio,measuredDelay,measuredClock);
+    assert(measuredPhy.beginPtx());
+    measuredRadio.rxPresent=true;
+    measuredRadio.irq=NRF24_PHY_IRQ_TX_DONE_MASK;
+    assert(measuredPhy.startTransfer(out,NRF24_PHY_MIN_FRAME_BYTES));
+    pulse(measuredPhy,measuredRadio,measuredClock,reply,width,result);
+    measuredClock.advance(PP_ASYNC_TEST_RF_WAIT_TICKS);
+    assert(measuredPhy.pollTransfer(reply,width,result)==Phy::TxStep::COMPLETE);
+    assert(result.code==Phy::TxCode::ACK_WITH_DATA);
+    const Phy::Timing& elapsed=measuredPhy.lastTiming();
+    assert(elapsed.loadTicks==PP_ASYNC_TEST_SPI_LOAD_TICKS);
+    assert(elapsed.guardTicks==0);
+    assert(elapsed.ceTicks==NRF24_PHY_CE_PULSE_TICKS);
+    assert(elapsed.waitTicks==PP_ASYNC_TEST_RF_WAIT_TICKS+
+                              PP_ASYNC_TEST_SPI_STATUS_TICKS);
+    assert(elapsed.readTicks==PP_ASYNC_TEST_SPI_REGISTER_TICKS+
+                              PP_ASYNC_TEST_SPI_REGISTER_TICKS+
+                              PP_ASYNC_TEST_SPI_PAYLOAD_TICKS+
+                              PP_ASYNC_TEST_SPI_IRQ_TICKS);
 }

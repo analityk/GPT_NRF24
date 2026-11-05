@@ -594,3 +594,35 @@ Przyszłe wpisy powinny zawierać datę, zakres faktycznie wykonanej zmiany, com
   wersji.** Konieczny pomiar na obu urządzeniach i porównanie z
   zatwierdzonym `main`, zwłaszcza po samotnym resecie A, B oraz przy
   celowym pogorszeniu zasięgu. Bez tej próby nie wolno scalać do `main`.
+
+## 2026-11-05 — sonda czasu cyklu DATA↔ACK, tylko `testy`
+
+- Właściciel pokazał testy obu RF-Nano: przy wcześniejszym ustawieniu
+  1 Mb/s nieblokujący PP osiągał około **13 306 B/s**, a po ręcznej
+  zmianie do **2 Mb/s** osiągał około **16 128 B/s** w obu kierunkach,
+  przy `ret=bad=0`. Pokazał też poprawny samoczynny powrót po resecie
+  B. **To wyniki fizyczne przed dołączeniem sondy czasu**; nie są
+  jej jeszcze wynikiem ani dowodem odzyskania całego narzutu CPU.
+- Na prośbę właściciela dodano instrumentację `NrfAckPayloadPhy`:
+  niezależne od AVR, opcjonalne `Timing` z pięcioma fazami: zapis
+  TX przez SPI, opóźnienie do CE, impuls CE, oczekiwanie na
+  **odczyt statusu** i transakcje odczytu ACK/IRQ. Timer1 ma 2 MHz,
+  a status nadal jest odpytywany — bez nowego ISR SPI i bez
+  deklarowania `rf` jako fizycznego czasu samego eteru.
+- `PpCycleTimingWindow` liczy średnie okresów zakończenie→zakończenie
+  wyłącznie dla kolejnych, poprawnych 32B TX + 32B ACK w zdrowej
+  sesji, bez sprzętowych retry. Oddziela okres poza etapami PHY
+  (`cpu`), składanie pakietu (`mk`), obsługę protokołu poprzedniego
+  ACK (`pr`) oraz tło nakładające się na ON_AIR (`bg`). Dla resetu,
+  rekey, błędu i krótkich ramek okno porównywalności jest zerowane.
+- Osobna linia `A us n=... cyc=... spi=... grd=... ce=... rf=...`
+  `ack=... cpu=... mk=... pr=... bg=...` jest wysyłana nieblokująco
+  przez istniejący bufor UART A, z rozdzieleniem czasu względem
+  zwykłego raportu CPS. Wyłącznie eksperymentalny `main.cpp` na
+  `testy` jawnie wybiera `NRF24_RF_SETUP_2_MBPS`; domyślne 1 Mb/s
+  w wielokrotnego użytku sterowniku `Nrf24` zostało zachowane.
+- Dodano hostowe testy średnich, rollover i wyłączania próbek po
+  błędzie oraz symulowane czasy transakcji SPI w teście PHY;
+  `sh tests/run_host_tests.sh`: **25/25 PASS**. Procedura i zakres
+  interpretacji: `pp-cycle-timing-test.md`. **Odczyty mikrosekundowe
+  z fizycznych ATmeg są nadal nieznane; nie ogłoszono poprawy CPS.**

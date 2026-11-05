@@ -25,8 +25,9 @@
 #define NRF24_PHY_RX_FULL_MASK 0x02U
 #define NRF24_PHY_TX_FULL_MASK 0x20U
 #define NRF24_PHY_ACK_PIPE 0U
+#define NRF24_PHY_TIMING_MAX_TICKS 0xFFFFUL
 
-template<class Radio,class Delay,class Clock>
+template<class Radio,class Delay,class Clock,bool MeasureTiming=false>
 class NrfAckPayloadPhy {
 public:
     enum class TxCode : uint8_t {
@@ -41,6 +42,11 @@ public:
         uint8_t retries;
         TxResult():code(TxCode::IO_ERROR),retries(0) {}
     };
+    struct Timing {
+        uint16_t loadTicks,guardTicks,ceTicks,waitTicks,readTicks;
+        Timing():loadTicks(0),guardTicks(0),ceTicks(0),
+                 waitTicks(0),readTicks(0){}
+    };
 
     NrfAckPayloadPhy(Radio& radio,Delay& delay,Clock& clock)
         : radio_(radio),delay_(delay),clock_(clock),lastCompleted_(0),
@@ -54,6 +60,8 @@ public:
     TxPhase txPhase()const{return phase_;}
     bool txBusy()const{return phase_!=TxPhase::IDLE;}
     bool txOnAir()const{return phase_==TxPhase::ON_AIR;}
+    const Timing& lastTiming()const{return timing_;}
+    uint32_t lastCompletedAt()const{return lastCompleted_;}
 
     // Power up exactly once. Subsequent TX operations remain in PTX and
     // incur no 1.5/2 ms oscillator start penalties.
@@ -80,7 +88,14 @@ public:
                        uint8_t txWidth) {
         if(txBusy() || txWidth<NRF24_PHY_MIN_FRAME_BYTES ||
            txWidth>NRF24_PHY_MAX_FRAME_BYTES)return false;
+        const uint32_t started=MeasureTiming?clock_.now():0;
         if(!radio_.writeDynamicPayload(out,txWidth))return false;
+        if(MeasureTiming) {
+            const uint32_t loaded=clock_.now();
+            timing_=Timing();
+            timing_.loadTicks=measuredSpan(loaded-started);
+            phaseStarted_=loaded;
+        }
         phase_=TxPhase::GUARD;
         return true;
     }
@@ -99,6 +114,8 @@ public:
             if(haveLast_ &&
                static_cast<uint32_t>(clock_.now()-lastCompleted_)<
                    NRF24_PHY_PTX_GUARD_TICKS)return TxStep::PENDING;
+            if(MeasureTiming)
+                timing_.guardTicks=measuredSpan(clock_.now()-phaseStarted_);
             radio_.ceHigh();
             phaseStarted_=clock_.now();
             phase_=TxPhase::CE_PULSE;
@@ -107,6 +124,8 @@ public:
         if(phase_==TxPhase::CE_PULSE) {
             if(static_cast<uint32_t>(clock_.now()-phaseStarted_)<
                    NRF24_PHY_CE_PULSE_TICKS)return TxStep::PENDING;
+            if(MeasureTiming)
+                timing_.ceTicks=measuredSpan(clock_.now()-phaseStarted_);
             radio_.ceLow();
             phaseStarted_=clock_.now();
             phase_=TxPhase::ON_AIR;
@@ -117,14 +136,17 @@ public:
         if(!radio_.status(flags))return finishError(result);
         if((flags&(NRF24_PHY_IRQ_TX_DONE_MASK|
                    NRF24_PHY_IRQ_MAX_RT_MASK))==0) {
-            if(static_cast<uint32_t>(clock_.now()-phaseStarted_)<
+            const uint32_t now=clock_.now();
+            if(static_cast<uint32_t>(now-phaseStarted_)<
                    NRF24_PHY_TX_TIMEOUT_TICKS)return TxStep::PENDING;
+            if(MeasureTiming)markTerminal(now);
             result.code=TxCode::TIMEOUT;
             if(!radio_.flushTx() ||
                !radio_.clearIrq(NRF24_PHY_IRQ_CLEAR_MASK))
                 result.code=TxCode::IO_ERROR;
             return finish();
         }
+        if(MeasureTiming)markTerminal(clock_.now());
         uint8_t observe=0;
         if(!radio_.readRegister(Radio::OBSERVE_TX,observe))
             return finishError(result);
@@ -214,8 +236,19 @@ public:
     bool clearPrxFlags() { return radio_.clearIrq(NRF24_PHY_IRQ_CLEAR_MASK); }
 
 private:
+    static uint16_t measuredSpan(uint32_t ticks) {
+        return static_cast<uint16_t>(ticks>NRF24_PHY_TIMING_MAX_TICKS?
+                                     NRF24_PHY_TIMING_MAX_TICKS:ticks);
+    }
+    void markTerminal(uint32_t now) {
+        timing_.waitTicks=measuredSpan(now-phaseStarted_);
+        phaseStarted_=now;
+    }
     TxStep finish() {
-        lastCompleted_=clock_.now();
+        const uint32_t now=clock_.now();
+        if(MeasureTiming)
+            timing_.readTicks=measuredSpan(now-phaseStarted_);
+        lastCompleted_=now;
         haveLast_=true;
         phase_=TxPhase::IDLE;
         return TxStep::COMPLETE;
@@ -235,5 +268,6 @@ private:
     bool haveLast_;
     uint16_t rxFifoFullSamples_;
     TxPhase phase_;
+    Timing timing_;
 };
 #endif

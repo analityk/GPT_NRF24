@@ -34,6 +34,7 @@
 #include "uart_reliable_stream.h"
 #include "pp_echo_ramp_port.h"
 #include "pp_stress_telemetry.h"
+#include "pp_cycle_timing.h"
 #include "boot_epoch.h"
 #include "nrf24_ack_phy.h"
 #include "pp_recovery_control.h"
@@ -44,9 +45,15 @@
 #define PP_OFFLINE_IDLE_US 100U
 #define PP_PTX_HANDSHAKE_TIMEOUT_TICKS 2000000UL
 #define PP_PTX_BACKGROUND_MAX_GENERATED_BYTES PairedFrame::MAX_BODY
+#define PP_TEST_RF_SETUP_VALUE NRF24_RF_SETUP_2_MBPS
+#define PP_PTX_TIMING_PROBE_ENABLED true
+#define PP_TIMING_REPORT_INTERVAL_TICKS 2000000UL
+#define PP_TIMING_REPORT_PHASE_OFFSET_TICKS 1000000UL
+#define PP_TIMING_REPORT_MIN_FREE_BYTES 120U
 
 typedef Nrf24<SpiMaster,GPIO> Radio;
-typedef NrfAckPayloadPhy<Radio,AvrDelay,Timer1Clock> AckPhy;
+typedef NrfAckPayloadPhy<Radio,AvrDelay,Timer1Clock,
+                        PP_PTX_TIMING_PROBE_ENABLED> AckPhy;
 static UART uart;
 static PpEchoRampPort<UART> diagnosticPort(uart);
 static SpiMaster spi;
@@ -77,7 +84,9 @@ static uint8_t packet[32],incoming[32];
 static uint8_t ackStaged[32],ackSize=0;
 static bool ackWaiting=false;
 static PpStressWindow performance;
+static PpCycleTimingWindow cycleTiming;
 static uint32_t hardwareRetries=0,maxRetries=0,lastReport=0;
+static uint32_t lastTimingReport=0;
 static uint16_t ackFifoFull=0;
 
 static void reportRecoveryTransition() {
@@ -139,6 +148,35 @@ static void reportPerformance() {
     PpStressSample sample;
     if(performance.take(now,snapshot,sample))
         (void)printPpStressLine(uart,isLeader,sample);
+}
+
+// Separate, short diagnostic line: per-exchange averages in microseconds.
+// CPU time is the exclusive remainder; bg overlaps rf (not additive).
+// ACK time includes SPI reading the payload and clearing the IRQ.
+static void reportCycleTiming() {
+    const uint32_t now=ticks.now();
+    if(static_cast<uint32_t>(now-lastTimingReport)<
+       PP_TIMING_REPORT_INTERVAL_TICKS)return;
+    if(uart.freeSpace()<PP_TIMING_REPORT_MIN_FREE_BYTES)return;
+    PpCycleTimingWindow::Average t;
+    if(!cycleTiming.sample(t))return;
+    PpStressLine line;
+    line.word("A us n=");line.decimal(t.samples);
+    line.word(" cyc=");line.decimal(t.cycleUs);
+    line.word(" spi=");line.decimal(t.loadUs);
+    line.word(" grd=");line.decimal(t.guardUs);
+    line.word(" ce=");line.decimal(t.ceUs);
+    line.word(" rf=");line.decimal(t.waitUs);
+    line.word(" ack=");line.decimal(t.readUs);
+    line.word(" cpu=");line.decimal(t.cpuUs);
+    line.word(" mk=");line.decimal(t.prepareUs);
+    line.word(" pr=");line.decimal(t.protocolUs);
+    line.word(" bg=");line.decimal(t.backgroundUs);
+    line.word("\r\n");
+    if(line.emit(uart)) {
+        cycleTiming.clearWindow();
+        lastTimingReport=now;
+    }
 }
 
 static void fatal() {
@@ -226,12 +264,15 @@ static void serviceAInFlight() {
                            PP_PTX_BACKGROUND_MAX_GENERATED_BYTES);
     reportPerformance();
     reportRecoveryTransition();
+    if(PP_PTX_TIMING_PROBE_ENABLED)reportCycleTiming();
 }
 
 static void runA() {
     if(!phy.beginPtx())fatal();
     delay.ms(PP_PTX_PEER_STARTUP_MS); // one-time peer power-on
     bool servicedInFlight=false;
+    uint8_t inFlightWidth=0;
+    uint16_t prepareTicks=0,backgroundTicks=0,previousProtocolTicks=0;
     // P1: immediate SPI FIFO/IRQ service and CE transitions.
     // P2: other bounded work executes while the nRF is on air.
     for(;;) {
@@ -242,12 +283,21 @@ static void runA() {
                 phy.pollTransfer(incoming,incomingWidth,tx);
             if(step==AckPhy::TxStep::PENDING) {
                 if(phy.txOnAir() && !servicedInFlight) {
+                    const uint32_t workStart=PP_PTX_TIMING_PROBE_ENABLED?
+                        ticks.now():0;
                     serviceAInFlight();
+                    if(PP_PTX_TIMING_PROBE_ENABLED)
+                        backgroundTicks=PpCycleTimingWindow::clampTicks(
+                            static_cast<uint32_t>(ticks.now()-workStart));
                     servicedInFlight=true;
                 }
                 continue;
             }
             if(step!=AckPhy::TxStep::COMPLETE)fatal();
+            const uint32_t protocolStart=PP_PTX_TIMING_PROBE_ENABLED?
+                ticks.now():0;
+            const bool wasActive=session.active();
+            const uint16_t oldSid=session.sid();
             linkState.notePtxRetries(tx.retries);
             hardwareRetries+=tx.retries;
             if(tx.code==AckPhy::TxCode::MAX_RT)++maxRetries;
@@ -257,8 +307,25 @@ static void runA() {
                     tx.code==AckPhy::TxCode::IO_ERROR ||
                     tx.code==AckPhy::TxCode::TIMEOUT)
                 ++radioErrors;
+            if(PP_PTX_TIMING_PROBE_ENABLED) {
+                const uint16_t protocolTicks=PpCycleTimingWindow::clampTicks(
+                    static_cast<uint32_t>(ticks.now()-protocolStart));
+                const bool cleanFullExchange=wasActive && session.active() &&
+                    oldSid==session.sid() &&
+                    recovery.state()==PpRecoveryControl::State::HEALTHY &&
+                    tx.code==AckPhy::TxCode::ACK_WITH_DATA && tx.retries==0 &&
+                    inFlightWidth==PairedFrame::MAX_FRAME &&
+                    incomingWidth==PairedFrame::MAX_FRAME;
+                // Cycle n runs from completion n-1 to completion n.
+                // Protocol processing after completion n belongs to n+1.
+                cycleTiming.observe(phy.lastCompletedAt(),phy.lastTiming(),
+                                    prepareTicks,previousProtocolTicks,
+                                    backgroundTicks,cleanFullExchange);
+                previousProtocolTicks=protocolTicks;
+            }
             if(!servicedInFlight)serviceAInFlight();
             servicedInFlight=false;
+            backgroundTicks=0;
             // Negotiation timeout is different from ACTIVE radio silence.
             // Silence NEVER invalidates a living peer's session state.
             if(!session.active() &&
@@ -286,9 +353,16 @@ static void runA() {
         }
         lastProbe=now;
         uint8_t width=0;
+        const uint32_t prepareStart=PP_PTX_TIMING_PROBE_ENABLED?
+            ticks.now():0;
         if(!makePacket(packet,width))fatal();
+        if(PP_PTX_TIMING_PROBE_ENABLED)
+            prepareTicks=PpCycleTimingWindow::clampTicks(
+                static_cast<uint32_t>(ticks.now()-prepareStart));
+        inFlightWidth=width;
         if(!phy.startTransfer(packet,width)) {
             ++radioErrors;
+            if(PP_PTX_TIMING_PROBE_ENABLED)cycleTiming.clearWindow();
             if(!phy.resetPtxFifos())fatal();
         }
     }
@@ -357,7 +431,8 @@ int main() {
     sei();
     ce.clear();csn.set();
     delay.ms(110);
-    if(radio.probeAndConfigure().result!=Radio::Result::OK)fatal();
+    if(radio.probeAndConfigure(PP_TEST_RF_SETUP_VALUE).result!=
+       Radio::Result::OK)fatal();
     spi.setSpeed(SpiMaster::Speed::MHz8);
     if(!radio.enableAckPayload(0x23))fatal();
     uint16_t adc=0;
@@ -375,6 +450,7 @@ int main() {
     lastProbe=lastPeerProgress;
     lastRecoveryReport=lastPeerProgress-400000UL;
     lastReport=lastPeerProgress;
+    lastTimingReport=lastReport-PP_TIMING_REPORT_PHASE_OFFSET_TICKS;
     performance.start(lastReport,performanceSnapshot());
     if(isLeader)runA();
     else runB();

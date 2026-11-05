@@ -3,6 +3,9 @@
 
 #include <stdint.h>
 
+#define NRF24_RF_SETUP_1_MBPS 0x06U
+#define NRF24_RF_SETUP_2_MBPS 0x0EU
+
 // A testable nRF24L01+ SPI command/registry/FIFO layer.
 // Spi must implement begin() and bool transfer(uint8_t, uint8_t&).
 // Pin must implement set() (HIGH) and clear() (LOW).
@@ -120,7 +123,7 @@ public:
 
     // Safe bring-up: register read/write/restore test, then deterministic
     // RF settings, leaving PWR_UP=0 and CE LOW. No RF transmission occurs.
-    Probe probeAndConfigure() {
+    Probe probeAndConfigure(uint8_t rfSetup=NRF24_RF_SETUP_1_MBPS) {
         Probe p;
         begin();
         if (!status(p.status)) return failure(p, Result::SPI_ERROR, STATUS);
@@ -150,12 +153,13 @@ public:
         if (!writeRegister(RF_CH, oldChannel))
             return failure(p, Result::SPI_ERROR, RF_CH);
 
-        // CRC16, radio powered down, initial width 32 B, 1 Mbps, 5 B addressing,
+        // CRC16, radio powered down, initial width 32 B, 5 B addressing,
+        // selectable 1/2 Mbps via explicit RF_SETUP value,
         // auto ACK on pipe0 only; chosen channel 76 (2476 MHz).
         const uint8_t pairs[][2] = {
             { CONFIG, 0x0C }, { EN_AA, 0x01 }, { EN_RXADDR, 0x01 },
             { SETUP_AW, 0x03 }, { SETUP_RETR, 0x3F }, { RF_CH, 76 },
-            { RF_SETUP, 0x06 }, { RX_PW_P0, 32 }, { DYNPD, 0 },
+            { RF_SETUP, rfSetup }, { RX_PW_P0, 32 }, { DYNPD, 0 },
             { FEATURE, 0 }
         };
         const uint8_t pairCount = static_cast<uint8_t>(sizeof(pairs) / sizeof(pairs[0]));

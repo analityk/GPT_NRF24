@@ -11,15 +11,23 @@
   SID, kredyty, retransmisje i replay bez zmian; 24 testy hostowe PASS.
 - [x] GitHub Actions `testy` run #91: host i AVR-GCC **PASS**;
   statycznie 974 B SRAM (`96 B .data + 878 B .bss`), kod 17740 B.
+- [x] **Przygotowano sondę czasu cyklu PP** w `testy`: Timer1 mierzy
+  SPI zapisu, GUARD, CE, okres do odczytu statusu, SPI odczytu ACK,
+  koszt złożenia pakietu, protokół i zajętość tła. Uśrednianie wyłącznie
+  stabilnych, pełnych wymian bez retry; raport `A us` w konsoli A.
+  Testowe radio 2 Mb/s jest wybrane jawnie i symetrycznie, bez zmiany
+  domyślnej konfiguracji sterownika. Procedura: `pp-cycle-timing-test.md`.
+  **25/25 host PASS; pomiar na dwóch płytkach nadal przed nami.**
 - [ ] **F7 i ręczne F12 na obu RF-Nano.** Sprawdzić w RealTerm:
   start B→A i A→B, reset samego B, reset samego A, reset obu i
   odtworzenie po osłabieniu RF. Porównać `cps`, `arc/max`, `ret/bad`,
   `link`, `sid`, `up` z punktem `main` (~14,7 kB/s przy dobrym RF).
   Zachować zrzuty A+B; brak ujemnych zmian w odtwarzaniu sesji jest
   ważniejszy od samej poprawy szybkości.
-- [ ] **Osobno zmierzyć koszt nowego cyklu** (czas od zapisu TX FIFO do
-  zakończenia, udział GUARD/CE/ON_AIR, opóźnienie po `TX_DS/MAX_RT`),
-  zanim zaczniemy zmieniać odstępy lub częstotliwość odpytywania SPI.
+- [ ] **Wgrać i odczytać fizyczny pomiar czasu:** co najmniej pięć
+  raportów `A us` przy dobrym RF oraz odpowiadające im `A cps/B cps`.
+  Ustalić, czy dominuje `cpu`, `grd` czy `rf` (z narzutem pollingu).
+  Osobno przetestować wpływ sondy na CPS poprzez jej wyłączenie.
   Hostowe testy ani AVR build nie mierzą rzeczywistych µs.
 - [ ] **Dopiero po pomiarze** ocenić transakcyjne przygotowanie
   kolejnej ramki podczas bieżącego RF: bez cofania przyjętych danych,

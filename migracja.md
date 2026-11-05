@@ -1,4 +1,24 @@
-**NAJNOWSZY PUNKT KONTYNUACJI: 2026-11-05 — nieblokujący PHY na `testy`, oczekuje na odbiór sprzętowy.**
+**NAJNOWSZY PUNKT KONTYNUACJI: 2026-11-05 — sonda Timer1 na `testy`, oczekuje na pomiar dwóch ATmeg.**
+Właściciel potwierdził na RF-Nano nieblokujący PP: około 13,3 kB/s
+przy 1 Mb/s i po ręcznej zmianie około 16,1 kB/s przy 2 Mb/s,
+`ret=bad=0`, reset B powraca prawidłowo. To obserwacje **sprzed
+instrumentacji**. Na wyraźne polecenie opracowano pomiar na A
+przez opcjonalne, wielokrotnego użytku `NrfAckPayloadPhy::Timing`
+oraz przenośne `PpCycleTimingWindow`: `spi/grd/ce/rf/ack` dla PHY,
+`cyc/cpu` dla całej wymiany i `mk/pr/bg` dla składania pakietu,
+protokołu oraz tła. Sonda używa Timer1 0,5µs, uśrednia 32–1024
+pełnych DATA↔ACK 32B bez retry w zdrowej sesji i dopisuje tylko na
+UART A odrębne linie `A us ...` obok istniejącego CPS. `rf` mierzy
+czas do **wykrycia** statusu SPI, nie czystą fizyczną transmisję;
+`bg` nakłada się na ten odcinek. Dla `testy` ustawiono jawnie
+`NRF24_RF_SETUP_2_MBPS` na A i B (domyślne `Nrf24` nadal 1 Mb/s).
+Testy hostowe **25/25 PASS**. Szczegółowe znaczenie pól i procedura
+F7, ręczne F12, RealTerm, reset B/A, torebki i test bez sondy:
+`pp-cycle-timing-test.md`. **Nie ma jeszcze wyników mikrosekundowych
+ani fizycznego testu tego commita**. `main` i wszystkie wcześniejsze
+gałęzie pozostawione bez zmian; żadnego nowego brancha.
+
+**Poprzedni punkt kontynuacji: 2026-11-05 — nieblokujący PHY na `testy`, oczekuje na odbiór sprzętowy.**
 Po zgodzie właściciela na dalsze prace, w `testy` wdrożono pierwszy
 etap kooperacyjnego pipeline PP: `NrfAckPayloadPhy::startTransfer()`
 i `pollTransfer()` zastępują blokujące `transfer()` na A. Stany:

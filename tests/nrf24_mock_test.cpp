@@ -95,7 +95,8 @@ int main() {
     assert(hw.regs[0x00]==0x0C && hw.regs[0x01]==1 &&
            hw.regs[0x02]==1 && hw.regs[0x03]==3);
     assert(hw.regs[0x04]==0x3F && hw.regs[0x05]==76 &&
-           hw.regs[0x06]==6 && hw.regs[0x11]==32);
+           hw.regs[Radio::RF_SETUP]==NRF24_RF_SETUP_1_MBPS &&
+           hw.regs[0x11]==32);
     assert(hw.regs[0x1C]==0 && hw.regs[0x1D]==0);
     assert(hw.flushCount==2);
     assert(hw.rxAddress[0]==0xD2 && hw.rxAddress[4]==0xA1);
@@ -144,6 +145,15 @@ int main() {
     assert(wrong.probeAndConfigure().result==Radio::Result::VERIFY_ERROR);
     assert(stuck.regs[0x05]==2); // original RF_CH preserved
     assert(!stuck.selected && sCsn.high);
+
+    // The same reusable driver must configure either bitrate without
+    // rewriting the board's other radio parameters.
+    SpiMock fast;
+    PinMock fastCe(fast,false),fastCsn(fast,true);
+    Radio faster(fast,fastCe,fastCsn);
+    assert(faster.probeAndConfigure(NRF24_RF_SETUP_2_MBPS).result==
+           Radio::Result::OK);
+    assert(fast.regs[Radio::RF_SETUP]==NRF24_RF_SETUP_2_MBPS);
 
     // Some compatible devices require ACTIVATE 0x73 to unlock FEATURE.
     SpiMock locked;
