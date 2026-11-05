@@ -626,3 +626,9 @@ Przyszłe wpisy powinny zawierać datę, zakres faktycznie wykonanej zmiany, com
   `sh tests/run_host_tests.sh`: **25/25 PASS**. Procedura i zakres
   interpretacji: `pp-cycle-timing-test.md`. **Odczyty mikrosekundowe
   z fizycznych ATmeg są nadal nieznane; nie ogłoszono poprawy CPS.**
+- GitHub Actions dla `testy`, commit `6f1bcab`, run **#93**:
+  `host-protocol` i `avr-firmware` **PASS**. AVR-GCC:
+  `.text=20430 B`, `.data=96 B`, `.bss=939 B`, razem
+  **1035/2048 B statycznego SRAM**; +61 B SRAM i +2690 B kodu
+  względem poprzedniego nieinstrumentowanego eksperymentu.
+  Wynik kompilacji nie zastępuje próby fizycznej i pomiaru narzutu sondy.

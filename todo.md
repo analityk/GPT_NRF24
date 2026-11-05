@@ -17,7 +17,9 @@
   stabilnych, pełnych wymian bez retry; raport `A us` w konsoli A.
   Testowe radio 2 Mb/s jest wybrane jawnie i symetrycznie, bez zmiany
   domyślnej konfiguracji sterownika. Procedura: `pp-cycle-timing-test.md`.
-  **25/25 host PASS; pomiar na dwóch płytkach nadal przed nami.**
+  **25/25 host PASS; AVR PASS** (GitHub Actions `testy` run #93;
+  `.text=20430`, `.data=96`, `.bss=939`, SRAM=1035/2048 B).
+  Pomiar na dwóch płytkach nadal przed nami.
 - [ ] **F7 i ręczne F12 na obu RF-Nano.** Sprawdzić w RealTerm:
   start B→A i A→B, reset samego B, reset samego A, reset obu i
   odtworzenie po osłabieniu RF. Porównać `cps`, `arc/max`, `ret/bad`,

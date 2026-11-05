@@ -14,7 +14,9 @@ czas do **wykrycia** statusu SPI, nie czystą fizyczną transmisję;
 `NRF24_RF_SETUP_2_MBPS` na A i B (domyślne `Nrf24` nadal 1 Mb/s).
 Testy hostowe **25/25 PASS**. Szczegółowe znaczenie pól i procedura
 F7, ręczne F12, RealTerm, reset B/A, torebki i test bez sondy:
-`pp-cycle-timing-test.md`. **Nie ma jeszcze wyników mikrosekundowych
+`pp-cycle-timing-test.md`. GitHub Actions run #93 dla `testy`
+potwierdził host i AVR-GCC **PASS** (`.text=20430`, `.data=96`,
+`.bss=939`, SRAM=1035/2048 B). **Nie ma jeszcze wyników mikrosekundowych
 ani fizycznego testu tego commita**. `main` i wszystkie wcześniejsze
 gałęzie pozostawione bez zmian; żadnego nowego brancha.
 
