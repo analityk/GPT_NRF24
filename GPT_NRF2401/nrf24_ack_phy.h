@@ -44,8 +44,14 @@ public:
     };
     struct Timing {
         uint16_t loadTicks,guardTicks,ceTicks,waitTicks,readTicks;
+        // ON_AIR status polling is part of waitTicks; these counts and
+        // durations must never be added to the total exchange period.
+        uint16_t pollCount,pollSpiTicks;
+        // Disjoint portions of readTicks, from the terminal IRQ onward.
+        uint16_t observeTicks,fifoTicks,payloadTicks,irqTicks;
         Timing():loadTicks(0),guardTicks(0),ceTicks(0),
-                 waitTicks(0),readTicks(0){}
+                 waitTicks(0),readTicks(0),pollCount(0),pollSpiTicks(0),
+                 observeTicks(0),fifoTicks(0),payloadTicks(0),irqTicks(0){}
     };
 
     NrfAckPayloadPhy(Radio& radio,Delay& delay,Clock& clock)
@@ -133,7 +139,15 @@ public:
         }
         replyWidth=0;
         uint8_t flags=0;
+        const uint32_t statusStart=MeasureTiming?clock_.now():0;
         if(!radio_.status(flags))return finishError(result);
+        if(MeasureTiming) {
+            ++timing_.pollCount;
+            const uint32_t elapsed=clock_.now()-statusStart;
+            const uint32_t cumulative=static_cast<uint32_t>(
+                timing_.pollSpiTicks)+elapsed;
+            timing_.pollSpiTicks=measuredSpan(cumulative);
+        }
         if((flags&(NRF24_PHY_IRQ_TX_DONE_MASK|
                    NRF24_PHY_IRQ_MAX_RT_MASK))==0) {
             const uint32_t now=clock_.now();
@@ -147,9 +161,11 @@ public:
             return finish();
         }
         if(MeasureTiming)markTerminal(clock_.now());
+        uint32_t stageStarted=phaseStarted_;
         uint8_t observe=0;
         if(!radio_.readRegister(Radio::OBSERVE_TX,observe))
             return finishError(result);
+        if(MeasureTiming)markReadStage(stageStarted,timing_.observeTicks);
         result.retries=static_cast<uint8_t>(observe&NRF24_PHY_OBSERVE_RETRY_MASK);
         if(flags&NRF24_PHY_IRQ_MAX_RT_MASK) {
             if(!radio_.flushTx() ||
@@ -161,10 +177,12 @@ public:
         uint8_t fifo=0;
         if(!radio_.readRegister(Radio::FIFO_STATUS,fifo))
             return finishError(result);
+        if(MeasureTiming)markReadStage(stageStarted,timing_.fifoTicks);
         if(fifo&NRF24_PHY_RX_EMPTY_MASK) {
             result.code=TxCode::ACK_EMPTY;
         } else {
             const bool good=radio_.readDynamicPayload(reply,replyWidth);
+            if(MeasureTiming)markReadStage(stageStarted,timing_.payloadTicks);
             if(!good) {
                 result.code=(replyWidth==0 ||
                              replyWidth>NRF24_PHY_MAX_FRAME_BYTES)?
@@ -174,7 +192,9 @@ public:
                             TxCode::ACK_WITH_DATA:TxCode::BAD_REPLY_SIZE;
             }
         }
-        if(!radio_.clearIrq(NRF24_PHY_IRQ_CLEAR_MASK))
+        const bool irqCleared=radio_.clearIrq(NRF24_PHY_IRQ_CLEAR_MASK);
+        if(MeasureTiming)markReadStage(stageStarted,timing_.irqTicks);
+        if(!irqCleared)
             result.code=TxCode::IO_ERROR;
         return finish();
     }
@@ -243,6 +263,11 @@ private:
     void markTerminal(uint32_t now) {
         timing_.waitTicks=measuredSpan(now-phaseStarted_);
         phaseStarted_=now;
+    }
+    void markReadStage(uint32_t& started,uint16_t& elapsedTicks) {
+        const uint32_t now=clock_.now();
+        elapsedTicks=measuredSpan(now-started);
+        started=now;
     }
     TxStep finish() {
         const uint32_t now=clock_.now();

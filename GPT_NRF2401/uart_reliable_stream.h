@@ -3,6 +3,12 @@
 #include <stdint.h>
 #include "paired_link.h"
 
+// Optional phase callbacks; the ordinary transport API compiles them away.
+struct UartMakeNoopTrace {
+    void sourceReady()const{}
+    void frameEncoded()const{}
+};
+
 // Full-rate bidirectional UART stream over opaque 24-byte RF BODY.
 // DATA_SEQ and cumulative APP_ACK occupy MAC TX_SEQ/RX_LAST.
 // All 24 BODY octets are user bytes, without transport preamble.
@@ -73,6 +79,16 @@ public:
     // but MUST NOT drain host input or replay stale DATA during RF silence.
     bool make(PairedLink& link,uint8_t* dst,uint8_t& width,
               bool permitData=true) {
+        UartMakeNoopTrace trace;
+        return makeTraced(link,dst,width,permitData,trace);
+    }
+
+    // Optional portable observer for profiling source/cache work separately
+    // from final MAC serialization. It neither reads a clock itself nor
+    // changes stream state, so mock clocks can test both boundaries.
+    template<class Trace>
+    bool makeTraced(PairedLink& link,uint8_t* dst,uint8_t& width,
+                    bool permitData,Trace& trace) {
         if(session_==0||link.sessionId()!=session_)return false;
         uint8_t body[PairedFrame::MAX_BODY];
         uint8_t seq=nextSeq_;
@@ -117,9 +133,12 @@ public:
                     body[i]=slots_[slotIndex(seq)][i];
             }
         }
-        return link.makeStream(seq,static_cast<uint8_t>(recvNext_-1U),
-                               credit(),body,count,dst,width,gapPending_)
-               ==PairedFrame::Error::OK;
+        trace.sourceReady();
+        const PairedFrame::Error encoded=link.makeStream(
+            seq,static_cast<uint8_t>(recvNext_-1U),
+            credit(),body,count,dst,width,gapPending_);
+        trace.frameEncoded();
+        return encoded==PairedFrame::Error::OK;
     }
 
     // Return whether a nonempty user segment was received. This is NOT

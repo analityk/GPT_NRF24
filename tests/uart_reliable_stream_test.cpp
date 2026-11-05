@@ -4,6 +4,15 @@
 #include <cstdint>
 #include <cstring>
 
+#define UART_TRACE_TEST_SESSION_ID 0xCAFEU
+
+struct MakeTraceRecorder {
+    enum Stage : uint8_t { START, SOURCE_READY, FRAME_READY };
+    Stage stage=START;
+    void sourceReady(){assert(stage==START);stage=SOURCE_READY;}
+    void frameEncoded(){assert(stage==SOURCE_READY);stage=FRAME_READY;}
+};
+
 struct Port {
     ByteRing<128> in,out;
     bool read(uint8_t& b) {return in.pop(b);}
@@ -186,4 +195,13 @@ int main() {
     }
     assert(p.stream.acknowledgedBytes()==300);
     assert(q.stream.acceptedBytes()==300);
+
+    // The optional recorder sees both boundaries on DATA/IDLE without
+    // changing the standard API or introducing clock/AVR dependencies.
+    Node tracedNode(true);
+    tracedNode.session(UART_TRACE_TEST_SESSION_ID);
+    MakeTraceRecorder trace;
+    assert(tracedNode.stream.makeTraced(tracedNode.link,
+           tracedNode.raw,tracedNode.width,true,trace));
+    assert(trace.stage==MakeTraceRecorder::FRAME_READY);
 }

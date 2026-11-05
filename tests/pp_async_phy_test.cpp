@@ -17,6 +17,8 @@
 #define PP_ASYNC_TEST_SPI_PAYLOAD_TICKS 64UL
 #define PP_ASYNC_TEST_SPI_IRQ_TICKS 4UL
 #define PP_ASYNC_TEST_RF_WAIT_TICKS 1000UL
+#define PP_ASYNC_TEST_SINGLE_STATUS_POLL 1U
+#define PP_ASYNC_TEST_DOUBLE_STATUS_POLL 2U
 
 struct TestClock {
     uint32_t ticks=0;
@@ -187,4 +189,24 @@ int main() {
                               PP_ASYNC_TEST_SPI_REGISTER_TICKS+
                               PP_ASYNC_TEST_SPI_PAYLOAD_TICKS+
                               PP_ASYNC_TEST_SPI_IRQ_TICKS);
+    assert(elapsed.pollCount==PP_ASYNC_TEST_SINGLE_STATUS_POLL);
+    assert(elapsed.pollSpiTicks==PP_ASYNC_TEST_SPI_STATUS_TICKS);
+    assert(elapsed.observeTicks==PP_ASYNC_TEST_SPI_REGISTER_TICKS);
+    assert(elapsed.fifoTicks==PP_ASYNC_TEST_SPI_REGISTER_TICKS);
+    assert(elapsed.payloadTicks==PP_ASYNC_TEST_SPI_PAYLOAD_TICKS);
+    assert(elapsed.irqTicks==PP_ASYNC_TEST_SPI_IRQ_TICKS);
+
+    // Multiple status reads accumulate inside RF wait rather than being
+    // double-counted as part of the ACK extraction interval.
+    measuredRadio.irq=0;
+    assert(measuredPhy.startTransfer(out,NRF24_PHY_MIN_FRAME_BYTES));
+    measuredClock.advance(NRF24_PHY_PTX_GUARD_TICKS);
+    pulse(measuredPhy,measuredRadio,measuredClock,reply,width,result);
+    assert(measuredPhy.pollTransfer(reply,width,result)==Phy::TxStep::PENDING);
+    measuredRadio.irq=NRF24_PHY_IRQ_TX_DONE_MASK;
+    measuredClock.advance(PP_ASYNC_TEST_RF_WAIT_TICKS);
+    assert(measuredPhy.pollTransfer(reply,width,result)==Phy::TxStep::COMPLETE);
+    assert(measuredPhy.lastTiming().pollCount==PP_ASYNC_TEST_DOUBLE_STATUS_POLL);
+    assert(measuredPhy.lastTiming().pollSpiTicks==
+           PP_ASYNC_TEST_SPI_STATUS_TICKS*PP_ASYNC_TEST_DOUBLE_STATUS_POLL);
 }

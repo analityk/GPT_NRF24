@@ -668,3 +668,35 @@ Przyszłe wpisy powinny zawierać datę, zakres faktycznie wykonanej zmiany, com
   danych po komendzie i zwolnienie CSN. Lokalnie **25/25 host PASS**;
   pomiar sprzętowy nowej wersji i ustalenie rzeczywistego zysku
   z `spi/ack/cyc` pozostają do wykonania. `main` nietknięty.
+
+## 2026-11-05 — blokowe SPI potwierdzone fizycznie; sonda szczegółowa
+
+- Właściciel wgrał na oba RF-Nano `testy` z blokowym SPI
+  (zrzut `obraz(20261105-014357).png`). Po uzgodnieniu wspólnego
+  `sid=6380`, `up=1`, `ret=bad=err=arc=max=0` w stanie ustalonym
+  otrzymał **16 824 B/s** w obu kierunkach, około 701 wymian/s.
+  `cyc≈1427 µs`, `spi≈123 µs`, `ack≈227 µs`, `grd≈16 µs`,
+  `ce≈28 µs`, `rf≈600 µs`, `cpu≈430 µs`, `mk≈208 µs`,
+  `pr≈133 µs`, `bg≈175 µs`. W poprzedniej sondzie przed blokowym
+  SPI było `cyc≈1567`, `spi≈180`, `ack≈299` i ~15 336 B/s:
+  zatem odzyskano **140 µs/cykl**, w tym **129 µs** w SPI, co daje
+  około **9,7%** większe CPS. Są to obserwacje fizyczne, nie model.
+  Zrzut nie testuje jeszcze odrębnie resetu A/B ani długiej utraty RF.
+- GitHub Actions run #96 na `testy` ostatecznie zakończył
+  `host-protocol` oraz `avr-firmware` wynikiem **PASS**;
+  `.text=20200`, `.data=96`, `.bss=939`, statyczny SRAM **1035/2048 B**.
+- Na wyraźną prośbę właściciela, aby ustalić pozostałe wąskie gardła,
+  dodano dalszą opcjonalną instrumentację na `testy` bez zmiany PP:
+  `NrfAckPayloadPhy::Timing` zlicza odczyty `STATUS` i ich łączny
+  czas oraz rozkłada ACK na `OBSERVE_TX`, `FIFO_STATUS`, DPL i IRQ.
+  Przenośny `UartReliableStream::makeTraced` udostępnia dwa punkty
+  pomiarowe bez zegara i zależności AVR: koniec przygotowania
+  źródła/cache oraz koniec kodowania ramki. `PpCycleTimingWindow`
+  przechowuje te czasy i wylicza resztę `cpu` poza `mk/pr`.
+- Nowy raport `A det n=... polls=... ps=... ob=... fi=... dpl=...`
+  `irq=... ro=... src=... enc=... mo=... rest=...` jest drugim
+  nieblokującym wierszem tej samej próbki `A us`; UART wypisuje go
+  dopiero po zwolnieniu bufora. `ps` i tło `bg` **nakładają się** na
+  `rf` i nie mogą być sumowane z `cyc`. Każdy nowy odczyt Timer1 ma
+  pewien koszt; konieczny jest nowy pomiar sprzętowy. Host **25/25 PASS**,
+  AVR i płytki dla tej nowszej sondy pozostają jeszcze do sprawdzenia.

@@ -14,14 +14,26 @@
 #define PP_TIMING_MIN_SAMPLES 32U
 
 class PpCycleTimingWindow {
+    // Old callers may supply only the five high-level PHY phases.
+    struct EmptyBreakdown {
+        uint16_t pollCount,pollSpiTicks,observeTicks,fifoTicks,
+                 payloadTicks,irqTicks;
+        EmptyBreakdown():pollCount(0),pollSpiTicks(0),observeTicks(0),
+                         fifoTicks(0),payloadTicks(0),irqTicks(0){}
+    };
 public:
     struct Average {
         uint16_t samples;
         uint16_t cycleUs,loadUs,guardUs,ceUs,waitUs,readUs;
         uint16_t cpuUs,prepareUs,protocolUs,backgroundUs;
+        uint16_t polls,pollSpiUs,observeUs,fifoUs,payloadUs,irqUs;
+        uint16_t sourceUs,encodeUs,readOtherUs,prepareOtherUs,cpuOtherUs;
         Average():samples(0),cycleUs(0),loadUs(0),guardUs(0),
                   ceUs(0),waitUs(0),readUs(0),cpuUs(0),
-                  prepareUs(0),protocolUs(0),backgroundUs(0){}
+                  prepareUs(0),protocolUs(0),backgroundUs(0),
+                  polls(0),pollSpiUs(0),observeUs(0),fifoUs(0),
+                  payloadUs(0),irqUs(0),sourceUs(0),encodeUs(0),
+                  readOtherUs(0),prepareOtherUs(0),cpuOtherUs(0){}
     };
 
     PpCycleTimingWindow():lastDone_(0),samples_(0),previous_(false) {
@@ -40,6 +52,25 @@ public:
     void observe(uint32_t completed,const Phases& t,uint16_t prepareTicks,
                  uint16_t protocolTicks,uint16_t backgroundTicks,
                  bool eligible) {
+        const EmptyBreakdown empty;
+        observeDetailed(completed,t,empty,prepareTicks,protocolTicks,
+                        backgroundTicks,0,0,eligible);
+    }
+
+    template<class Phases>
+    void observe(uint32_t completed,const Phases& t,uint16_t prepareTicks,
+                 uint16_t protocolTicks,uint16_t backgroundTicks,
+                 uint16_t sourceTicks,uint16_t encodeTicks,bool eligible) {
+        observeDetailed(completed,t,t,prepareTicks,protocolTicks,
+                        backgroundTicks,sourceTicks,encodeTicks,eligible);
+    }
+
+    template<class Phases,class Detail>
+    void observeDetailed(uint32_t completed,const Phases& t,
+                         const Detail& detail,uint16_t prepareTicks,
+                         uint16_t protocolTicks,uint16_t backgroundTicks,
+                         uint16_t sourceTicks,uint16_t encodeTicks,
+                         bool eligible) {
         if(!eligible) {previous_=false;resetSums();return;}
         if(previous_ && samples_<PP_TIMING_MAX_SAMPLES) {
             const uint32_t period=completed-lastDone_;
@@ -56,6 +87,14 @@ public:
                 sums_[PREPARE]+=prepareTicks;
                 sums_[PROTOCOL]+=protocolTicks;
                 sums_[BACKGROUND]+=backgroundTicks;
+                sums_[POLL_COUNT]+=detail.pollCount;
+                sums_[POLL_SPI]+=detail.pollSpiTicks;
+                sums_[OBSERVE]+=detail.observeTicks;
+                sums_[FIFO]+=detail.fifoTicks;
+                sums_[PAYLOAD]+=detail.payloadTicks;
+                sums_[IRQ]+=detail.irqTicks;
+                sums_[SOURCE]+=sourceTicks;
+                sums_[ENCODE]+=encodeTicks;
                 ++samples_;
             }
         }
@@ -78,6 +117,19 @@ public:
         out.prepareUs=mean(PREPARE);
         out.protocolUs=mean(PROTOCOL);
         out.backgroundUs=mean(BACKGROUND);
+        out.polls=meanCount(POLL_COUNT);
+        out.pollSpiUs=mean(POLL_SPI);
+        out.observeUs=mean(OBSERVE);
+        out.fifoUs=mean(FIFO);
+        out.payloadUs=mean(PAYLOAD);
+        out.irqUs=mean(IRQ);
+        out.sourceUs=mean(SOURCE);
+        out.encodeUs=mean(ENCODE);
+        out.readOtherUs=remainder(out.readUs,out.observeUs,out.fifoUs,
+                                  out.payloadUs,out.irqUs);
+        out.prepareOtherUs=remainder(out.prepareUs,out.sourceUs,
+                                     out.encodeUs);
+        out.cpuOtherUs=remainder(out.cpuUs,out.prepareUs,out.protocolUs);
         return true;
     }
     void clearWindow(){resetSums();}
@@ -90,12 +142,22 @@ public:
 private:
     enum Field : uint8_t {
         CYCLE,LOAD,GUARD,CE,WAIT,READ,CPU,PREPARE,PROTOCOL,BACKGROUND,
+        POLL_COUNT,POLL_SPI,OBSERVE,FIFO,PAYLOAD,IRQ,SOURCE,ENCODE,
         FIELD_COUNT
     };
     uint16_t mean(Field field) const {
         const uint32_t denominator=
             static_cast<uint32_t>(samples_)*PP_TIMING_TICKS_PER_US;
         return static_cast<uint16_t>(sums_[field]/denominator);
+    }
+    uint16_t meanCount(Field field)const {
+        return static_cast<uint16_t>(sums_[field]/samples_);
+    }
+    static uint16_t remainder(uint16_t total,uint16_t a,uint16_t b,
+                              uint16_t c=0,uint16_t d=0) {
+        const uint32_t subtotal=static_cast<uint32_t>(a)+b+c+d;
+        return subtotal<=total?
+            static_cast<uint16_t>(total-subtotal):0;
     }
     void resetSums() {
         samples_=0;
@@ -105,6 +167,33 @@ private:
     uint32_t lastDone_;
     uint16_t samples_;
     bool previous_;
+};
+
+// Reusable optional timer adapter for UartReliableStream::makeTraced().
+// Disabled probes compile to empty callbacks and do not access the clock.
+template<class Clock,bool Enabled>
+class PpFrameMakeTrace {
+public:
+    PpFrameMakeTrace(Clock& clock,uint32_t started)
+        :clock_(clock),started_(started),sourceTicks_(0),encodeTicks_(0){}
+    void sourceReady() {
+        if(Enabled) {
+            const uint32_t now=clock_.now();
+            sourceTicks_=PpCycleTimingWindow::clampTicks(now-started_);
+            started_=now;
+        }
+    }
+    void frameEncoded() {
+        if(Enabled)
+            encodeTicks_=PpCycleTimingWindow::clampTicks(
+                clock_.now()-started_);
+    }
+    uint16_t sourceTicks()const{return sourceTicks_;}
+    uint16_t encodeTicks()const{return encodeTicks_;}
+private:
+    Clock& clock_;
+    uint32_t started_;
+    uint16_t sourceTicks_,encodeTicks_;
 };
 
 #endif

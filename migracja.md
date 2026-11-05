@@ -1,4 +1,20 @@
-**NAJNOWSZY PUNKT KONTYNUACJI: 2026-11-05 — pomiar Timer1 potwierdzony, blokowe SPI na `testy` do weryfikacji AVR i RF-Nano.**
+**NAJNOWSZY PUNKT KONTYNUACJI: 2026-11-05 — blokowe SPI potwierdzone sprzętowo, szczegółowa sonda na `testy` do sprawdzenia rano.**
+Właściciel uruchomił dwa RF-Nano z blokowym SPI na 2 Mb/s i
+potwierdził ~16 824 B/s, `cyc≈1427`, `spi≈123`, `ack≈227` µs,
+`sid=6380`, `ret=bad=0`. Poprzednio było ~15 336 B/s, `cyc≈1567`,
+`spi≈180`, `ack≈299` µs: rzeczywisty zysk to ~140 µs/cykl.
+GitHub Actions #96 potwierdził AVR i host PASS (`.text=20200`,
+`.data=96`, `.bss=939`, SRAM=1035 B). Na prośbę właściciela
+rozszerzono opcjonalne, przenośne sondy: PHY mierzy polling STATUS
+i rozkład odczytu ACK, `UartReliableStream::makeTraced` mierzy
+pracę źródła/cache i kodowanie. UART A wypisuje obok `A us` drugi
+wiersz tej samej próbki `A det` z `polls/ps/ob/fi/dpl/irq/ro/src/enc/mo/rest`.
+Znaczenie i ograniczenia: `pp-cycle-timing-test.md`. `ps` należy do
+`rf`, a nowa sonda może sama spowolnić cykl. Host 25/25 PASS;
+**nowa szczegółowa sonda nie ma jeszcze potwierdzenia AVR ani pomiaru
+na płytkach**. `main` i wszystkie gałęzie bez zmian.
+
+**Poprzedni punkt kontynuacji: 2026-11-05 — pomiar Timer1, blokowe SPI do weryfikacji.**
 Właściciel wgrał sondę na dwie RF-Nano: przy 2 Mb/s i SID=22818,
 `ret=bad=0` oraz około 15,3 kB/s wyniki Timer1 to
 `cyc≈1567`, `spi≈180`, `grd≈16`, `ce≈28`, `rf≈610`,

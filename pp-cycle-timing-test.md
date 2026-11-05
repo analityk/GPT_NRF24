@@ -33,6 +33,7 @@ Przykładowy **format, nie wynik pomiaru**:
 
 ```text
 A us n=512 cyc=1490 spi=42 grd=110 ce=16 rf=520 ack=72 cpu=730 mk=30 pr=45 bg=90
+A det n=512 polls=45 ps=90 ob=6 fi=6 dpl=45 irq=5 ro=10 src=18 enc=8 mo=4 rest=655
 ```
 
 Wszystkie czasy oprócz `n` są w **mikrosekundach**:
@@ -57,12 +58,37 @@ w czasie obsługi tła, a polling wykryje go dopiero po jej zakończeniu.
 To pozwala znaleźć koszt czekania i obsługi bez przypisywania czasu
 samej modulacji całej fazie `rf`.
 
+Druga linia `A det` pochodzi **z tego samego zestawu ramek** co
+poprzedzająca ją `A us`, ale jest wypisywana odrobinę później,
+gdy UART zwolni miejsce. `polls` jest liczbą odpytań statusu na
+wymianę; wszystkie pozostałe pola podane są w µs:
+
+| Pole | Znaczenie |
+| --- | --- |
+| `ps` | Łączny czas transakcji SPI odczytujących `STATUS` podczas ON_AIR — **zawiera się w `rf`** |
+| `ob` | Odczyt `OBSERVE_TX` po terminalnym IRQ |
+| `fi` | Odczyt `FIFO_STATUS` |
+| `dpl` | Pobranie sprzętowej długości DPL i całego ACK Payload |
+| `irq` | Kasowanie IRQ oraz kod między odczytem payloadu a kasowaniem |
+| `ro` | Reszta `ack` po odjęciu `ob+fi+dpl+irq` (pomocnicze instrukcje/odczyty zegara) |
+| `src` | Praca źródła i okna transmisyjnego wewnątrz `stream.make` przed zakodowaniem |
+| `enc` | `link.makeStream` — kodowanie nagłówka i kopiowanie BODY |
+| `mo` | Reszta `mk` po odjęciu `src+enc` |
+| `rest` | Reszta `cpu` po odjęciu `mk+pr`; nie musi oznaczać bezczynności |
+
+`ps` i `bg` są dwoma rozłącznymi rodzajami pracy procesora w czasie
+`rf`, ale **nakładają się na transmisję w eterze**. Nie dodawać ich
+do `cyc` ani nie utożsamiać `rf-ps-bg` z czystym czasem radiowym.
+Nowa sonda wywołuje `Timer1Clock::now()` częściej niż stara i sama
+może wydłużyć cykl. Porównanie z wcześniejszym testem wymaga zatem
+uwzględnienia jej narzutu.
+
 ## Próba na urządzeniach
 
 1. Zbuduj F7 w Microchip Studio, ręcznie F12 wgraj ten sam HEX na A i B.
    Otwórz RealTerm A i B: 115200, 8N1. Uruchom najpierw B, potem A.
 2. Po uzgodnieniu wspólnego `sid`, `up=1`, przy `ret=0`, `bad=0`,
-   zanotuj z A co najmniej **pięć kolejnych** wierszy `A us` i
+   zanotuj z A co najmniej **pięć kolejnych par** `A us` + `A det` i
    odpowiadające `A cps` oraz `B cps`. Prześlij zrzuty A+B.
 3. Resetuj tylko B, następnie osobno tylko A. Po ponownym uzgodnieniu
    SID sprawdź, czy raporty `A us` wróciły i czy `cps` jest stabilne.

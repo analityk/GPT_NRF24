@@ -85,6 +85,8 @@ static uint8_t ackStaged[32],ackSize=0;
 static bool ackWaiting=false;
 static PpStressWindow performance;
 static PpCycleTimingWindow cycleTiming;
+static PpCycleTimingWindow::Average pendingTimingDetail;
+static bool timingDetailPending=false;
 static uint32_t hardwareRetries=0,maxRetries=0,lastReport=0;
 static uint32_t lastTimingReport=0;
 static uint16_t ackFifoFull=0;
@@ -154,6 +156,29 @@ static void reportPerformance() {
 // CPU time is the exclusive remainder; bg overlaps rf (not additive).
 // ACK time includes SPI reading the payload and clearing the IRQ.
 static void reportCycleTiming() {
+    // The UART ring cannot fit both lines at once. Queue the second line
+    // only when transmission of the first has freed enough space; the
+    // saved sample still refers to the SAME set of RF exchanges.
+    if(timingDetailPending) {
+        if(uart.freeSpace()<PP_TIMING_REPORT_MIN_FREE_BYTES)return;
+        const PpCycleTimingWindow::Average& t=pendingTimingDetail;
+        PpStressLine detail;
+        detail.word("A det n=");detail.decimal(t.samples);
+        detail.word(" polls=");detail.decimal(t.polls);
+        detail.word(" ps=");detail.decimal(t.pollSpiUs);
+        detail.word(" ob=");detail.decimal(t.observeUs);
+        detail.word(" fi=");detail.decimal(t.fifoUs);
+        detail.word(" dpl=");detail.decimal(t.payloadUs);
+        detail.word(" irq=");detail.decimal(t.irqUs);
+        detail.word(" ro=");detail.decimal(t.readOtherUs);
+        detail.word(" src=");detail.decimal(t.sourceUs);
+        detail.word(" enc=");detail.decimal(t.encodeUs);
+        detail.word(" mo=");detail.decimal(t.prepareOtherUs);
+        detail.word(" rest=");detail.decimal(t.cpuOtherUs);
+        detail.word("\r\n");
+        if(detail.emit(uart))timingDetailPending=false;
+        return;
+    }
     const uint32_t now=ticks.now();
     if(static_cast<uint32_t>(now-lastTimingReport)<
        PP_TIMING_REPORT_INTERVAL_TICKS)return;
@@ -174,6 +199,8 @@ static void reportCycleTiming() {
     line.word(" bg=");line.decimal(t.backgroundUs);
     line.word("\r\n");
     if(line.emit(uart)) {
+        pendingTimingDetail=t;
+        timingDetailPending=true;
         cycleTiming.clearWindow();
         lastTimingReport=now;
     }
@@ -198,13 +225,19 @@ static bool restartIdentity() {
     lastPeerProgress=ticks.now();
     return true;
 }
-static bool makePacket(uint8_t* dst,uint8_t& width) {
+template<class Trace>
+static bool makePacketTraced(uint8_t* dst,uint8_t& width,Trace& trace) {
     if(!session.active())return session.prepare(dst,width);
     if(linkState.sessionId()!=session.sid()){
         linkState.configure(isLeader,session.sid());
         stream.beginSession(session.sid());
     }
-    return stream.make(linkState,dst,width,recovery.canSendData());
+    return stream.makeTraced(linkState,dst,width,
+                             recovery.canSendData(),trace);
+}
+static bool makePacket(uint8_t* dst,uint8_t& width) {
+    UartMakeNoopTrace trace;
+    return makePacketTraced(dst,width,trace);
 }
 
 // Handshake must be decoded BEFORE the strict active-session filter.
@@ -273,6 +306,7 @@ static void runA() {
     bool servicedInFlight=false;
     uint8_t inFlightWidth=0;
     uint16_t prepareTicks=0,backgroundTicks=0,previousProtocolTicks=0;
+    uint16_t sourceTicks=0,encodeTicks=0;
     // P1: immediate SPI FIFO/IRQ service and CE transitions.
     // P2: other bounded work executes while the nRF is on air.
     for(;;) {
@@ -320,7 +354,8 @@ static void runA() {
                 // Protocol processing after completion n belongs to n+1.
                 cycleTiming.observe(phy.lastCompletedAt(),phy.lastTiming(),
                                     prepareTicks,previousProtocolTicks,
-                                    backgroundTicks,cleanFullExchange);
+                                    backgroundTicks,sourceTicks,encodeTicks,
+                                    cleanFullExchange);
                 previousProtocolTicks=protocolTicks;
             }
             if(!servicedInFlight)serviceAInFlight();
@@ -355,10 +390,14 @@ static void runA() {
         uint8_t width=0;
         const uint32_t prepareStart=PP_PTX_TIMING_PROBE_ENABLED?
             ticks.now():0;
-        if(!makePacket(packet,width))fatal();
+        PpFrameMakeTrace<Timer1Clock,PP_PTX_TIMING_PROBE_ENABLED> makeTrace(
+            ticks,prepareStart);
+        if(!makePacketTraced(packet,width,makeTrace))fatal();
         if(PP_PTX_TIMING_PROBE_ENABLED)
             prepareTicks=PpCycleTimingWindow::clampTicks(
                 static_cast<uint32_t>(ticks.now()-prepareStart));
+        sourceTicks=makeTrace.sourceTicks();
+        encodeTicks=makeTrace.encodeTicks();
         inFlightWidth=width;
         if(!phy.startTransfer(packet,width)) {
             ++radioErrors;

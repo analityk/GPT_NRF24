@@ -41,11 +41,24 @@
   bajtu; limit czasu pozostał osobny dla każdego bajtu. Przenośny
   `Nrf24` automatycznie używa nowej metody albo starego API adaptera.
   Testy z mockiem obu ścieżek i awarii CSN, **25/25 host PASS**.
-- [ ] **Fizycznie zweryfikować blokowe SPI:** ten sam HEX na A i B,
-  `sid/up/ret/bad` i powrót po resecie B/A. Zebrać `A us` z dobrego
-  zasięgu oraz `A cps/B cps`, porównać z bazą:
-  `spi=180`, `ack=299`, `cyc=1567` µs, około 15,3 kB/s.
-  Samo przyspieszenie SPI nie może pogorszyć niezawodności transmisji.
+- [ ] **Dokończyć fizyczną weryfikację blokowego SPI:**
+  prędkość i brak błędów w ustalonym łączu potwierdzone poniżej,
+  ale nadal sprawdzić samodzielny reset B i A oraz odtworzenie
+  `sid/up/ret/bad` pod obciążeniem i w osłabionym RF.
+  Przyspieszenie SPI nie może pogorszyć odzyskiwania sesji.
+- [x] **Blokowe SPI: pozytywny pomiar dwóch RF-Nano:**
+  `spi≈123`, `ack≈227`, `cyc≈1427` µs, ~16 824 B/s, `ret=bad=0`.
+  Około 140 µs/cykl szybciej niż sonda przed optymalizacją.
+  AVR CI run #96 PASS; `.text=20200`, `.data=96`, `.bss=939`.
+- [x] **Przygotowano drugi poziom sondy:** `A det` rozbija obsługę ACK
+  (`OBSERVE_TX`, FIFO, DPL, IRQ), liczy liczbę i czas pollingów STATUS
+  oraz dzieli `mk` na źródło/cache i kodowanie. Rozdziela rozłączne
+  okresy od tych, które nakładają się na pracę radia. Host 25/25 PASS.
+- [ ] **Rano zmierzyć nową sondę na dwóch RF-Nano** bez dodatkowych
+  zmian protokołu: 5–10 par `A us` i `A det` z dobrego RF, razem z
+  `A cps` i `B cps`. Sprawdzić `sid`, `up`, `ret`, `bad`, `arc` i
+  powrót po resecie B/A. Wynik `cyc` może być nieco większy z powodu
+  dodatkowych odczytów Timer1; to koszt diagnostyki, nie regresja PHY.
 - [ ] **F7 i ręczne F12 na obu RF-Nano.** Sprawdzić w RealTerm:
   start B→A i A→B, reset samego B, reset samego A, reset obu i
   odtworzenie po osłabieniu RF. Porównać `cps`, `arc/max`, `ret/bad`,
