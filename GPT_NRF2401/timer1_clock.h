@@ -9,6 +9,8 @@ class Timer1Clock {
 public:
     static void begin();
     uint32_t now() const;
+    // Fast modulo-65536 interval sampling; valid for spans under 32.768 ms.
+    uint16_t counter16() const;
     static void onOverflow();
 private:
     static volatile uint16_t upper_;

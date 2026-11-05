@@ -1,6 +1,7 @@
 #ifndef GPT_NRF24_UART_RELIABLE_STREAM_H
 #define GPT_NRF24_UART_RELIABLE_STREAM_H
 #include <stdint.h>
+#define UART_RELIABLE_MAX_NO_ACK_TURNS UINT8_MAX
 #include "paired_link.h"
 
 // Optional phase callbacks; the ordinary transport API compiles them away.
@@ -86,60 +87,65 @@ public:
     // Optional portable observer for profiling source/cache work separately
     // from final MAC serialization. It neither reads a clock itself nor
     // changes stream state, so mock clocks can test both boundaries.
-    template<class Trace>
-    bool makeTraced(PairedLink& link,uint8_t* dst,uint8_t& width,
-                    bool permitData,Trace& trace) {
-        if(session_==0||link.sessionId()!=session_)return false;
-        uint8_t body[PairedFrame::MAX_BODY];
-        uint8_t seq=nextSeq_;
-        uint8_t count=0;
-        const uint8_t peerCredit=link.peerCredit();
+	template<class Trace>
+	bool makeTraced(PairedLink& link,uint8_t* dst,uint8_t& width,
+		bool permitData,Trace& trace){
+		if(session_==0 || link.sessionId()!=session_){
+			return false;
+		}
+		uint8_t body[PairedFrame::MAX_BODY];
+		uint8_t seq=nextSeq_;
+		uint8_t count=0;
+		const uint8_t peerCredit=link.peerCredit();
 
-        // Peer credit measures *currently free receiver storage*.  A
-        // replay needs that storage as much as a first transmission does.
-        // While credit is zero, keep the cache and send only IDLE/ACK:
-        // retrying a blocked segment cannot make the sink accept it and
-        // may cause an endless out-of-order/retransmit feedback loop.
-        const bool maySend=permitData && peerCredit!=0;
-        if(maySend && outstanding_!=0 && noAckTurns_<255)++noAckTurns_;
-        if(maySend && outstanding_!=0 && replayCount_==0 &&
-           noAckTurns_>=REPLAY_AFTER) {
-            replaySeq_=baseSeq_;
-            replayCount_=outstanding_;
-            noAckTurns_=0;
-            draining_=true;
-        }
+		const bool maySend=permitData && peerCredit!=0;
+		if(maySend && outstanding_!=0 &&
+			noAckTurns_<UART_RELIABLE_MAX_NO_ACK_TURNS){
+			++noAckTurns_;
+		}
+		if(maySend && outstanding_!=0 && replayCount_==0 &&
+			noAckTurns_>=REPLAY_AFTER){
+			replaySeq_=baseSeq_;
+			replayCount_=outstanding_;
+			noAckTurns_=0;
+			draining_=true;
+		}
 
-        if(maySend && replayCount_!=0) {
-            seq=replaySeq_;
-            count=slotLength_[slotIndex(seq)];
-            for(uint8_t i=0;i<count;++i)
-                body[i]=slots_[slotIndex(seq)][i];
-            ++replaySeq_;
-            --replayCount_;
-            ++retransmits_;
-        } else if(maySend && !draining_ && outstanding_<WINDOW &&
-                  outstanding_<peerCredit &&
-                  port_.available()!=0) {
-            seq=nextSeq_;
-            uint8_t value=0;
-            while(count<MAX_USER_BYTES && port_.read(value))
-                slots_[slotIndex(seq)][count++]=value;
-            if(count) {
-                slotLength_[slotIndex(seq)]=count;
-                ++nextSeq_;
-                ++outstanding_;
-                for(uint8_t i=0;i<count;++i)
-                    body[i]=slots_[slotIndex(seq)][i];
-            }
-        }
-        trace.sourceReady();
-        const PairedFrame::Error encoded=link.makeStream(
-            seq,static_cast<uint8_t>(recvNext_-1U),
-            credit(),body,count,dst,width,gapPending_);
-        trace.frameEncoded();
-        return encoded==PairedFrame::Error::OK;
-    }
+		if(maySend && replayCount_!=0){
+			seq=replaySeq_;
+			const uint8_t slot=slotIndex(seq);
+			count=slotLength_[slot];
+			for(uint8_t i=0;i<count;++i){
+				body[i]=slots_[slot][i];
+			}
+			++replaySeq_;
+			--replayCount_;
+			++retransmits_;
+		} else if(maySend && !draining_ && outstanding_<WINDOW &&
+			outstanding_<peerCredit && port_.available()!=0){
+			seq=nextSeq_;
+			const uint8_t slot=slotIndex(seq);
+			uint8_t value=0;
+			while(count<MAX_USER_BYTES && port_.read(value)){
+				// Cache and build the outgoing BODY in one pass.
+				// Never commit an uncached byte to the wire.
+				slots_[slot][count]=value;
+				body[count]=value;
+				++count;
+			}
+			if(count!=0){
+				slotLength_[slot]=count;
+				++nextSeq_;
+				++outstanding_;
+			}
+		}
+		trace.sourceReady();
+		const PairedFrame::Error encoded=link.makeStream(
+			seq,static_cast<uint8_t>(recvNext_-1U),
+			credit(),body,count,dst,width,gapPending_);
+		trace.frameEncoded();
+		return encoded==PairedFrame::Error::OK;
+	}
 
     // Return whether a nonempty user segment was received. This is NOT
     // proof of success: a full sink may refuse it and leave ACK unchanged.

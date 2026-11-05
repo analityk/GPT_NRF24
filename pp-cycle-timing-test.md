@@ -111,3 +111,32 @@ Przed tą optymalizacją użytkownik zmierzył na dwóch RF-Nano stabilne
 
 Testy hostowe i kompilacja AVR weryfikują kod, ale wynik z dwóch
 fizycznych urządzeń rozstrzygnie o realnym zysku lub regresji.
+
+## Izolowany pomiar przygotowania źródła (kolejna próba, 2026-11-05)
+
+Na gałęzi `testy` bieżącą próbą jest **jednoogniskowy** pomiar
+`A hot n=... src=... lo=... hi=...`. Stała
+`PP_PTX_TIMING_PROBE_ENABLED=false` wyłącza sondę faz PHY,
+a `PP_SOURCE_PROBE_ENABLED=true` uruchamia jedną parę odczytów
+16-bitowego `TCNT1` wokół części source/cache w
+`UartReliableStream::makeTraced()` (przez przenośny adapter).
+Czas `src` uwzględnia niewielką obsługę wstępną wywołania,
+a nie samo `ByteRing::pop`. `lo` i `hi` są minimum/maksimum
+z próbek z tego samego okna. Różnica dwóch wartości 16-bitowych
+jest poprawna również przy pojedynczym przepełnieniu; zakres
+jednego odcinka musi być krótszy niż 32,768 ms.
+
+Raportowanie i sumowanie do 32-bitowego akumulatora są poza
+odmierzanym odcinkiem. 32-bitowy `Timer1Clock::now()` nadal
+pozostaje w harmonogramie i timeoutach, gdzie długi zakres jest wymagany.
+Sama nowa sonda nie wykonuje `now()` na wejściu i wyjściu źródła.
+Próba dotyczy tej samej pełnej ramki 32 B, zdrowej sesji i 2 Mb/s.
+
+W tej wersji `UartReliableStream` równocześnie zapisuje nowy bajt
+w cache retransmisji i w lokalnym BODY, unikając drugiej kopii 24 B.
+Nie zmienia TX_SEQ, RX_LAST, SID, kredytów, okna ani ACK.
+Najważniejszy wynik sprzętowy do zebrania: stabilne `A cps/B cps`,
+`A hot src/lo/hi`, stan po osobnym resecie A i B oraz `ret/bad`.
+Porównanie z wcześniejszym `A det src≈161µs` ma inny narzut
+pomiaru: obserwujemy zmianę całości firmware, nie idealnie
+odizolowany przyrost pojedynczej instrukcji.

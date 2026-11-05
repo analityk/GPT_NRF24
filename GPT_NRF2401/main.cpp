@@ -35,6 +35,7 @@
 #include "pp_echo_ramp_port.h"
 #include "pp_stress_telemetry.h"
 #include "pp_cycle_timing.h"
+#include "pp_short_probe.h"
 #include "boot_epoch.h"
 #include "nrf24_ack_phy.h"
 #include "pp_reply_mailbox.h"
@@ -50,7 +51,10 @@
 #define PP_PTX_HANDSHAKE_TIMEOUT_TICKS 2000000UL
 #define PP_PTX_BACKGROUND_MAX_GENERATED_BYTES PairedFrame::MAX_BODY
 #define PP_TEST_RF_SETUP_VALUE NRF24_RF_SETUP_2_MBPS
-#define PP_PTX_TIMING_PROBE_ENABLED true
+#define PP_PTX_TIMING_PROBE_ENABLED false
+#define PP_SOURCE_PROBE_ENABLED true
+#define PP_SOURCE_PROBE_REPORT_INTERVAL_TICKS 2000000UL
+#define PP_SOURCE_PROBE_REPORT_MIN_FREE_BYTES 80U
 #define PP_TIMING_REPORT_INTERVAL_TICKS 2000000UL
 #define PP_TIMING_REPORT_PHASE_OFFSET_TICKS 1000000UL
 #define PP_TIMING_REPORT_MIN_FREE_BYTES 120U
@@ -89,6 +93,8 @@ static uint8_t ackStaged[32],ackSize=0;
 static bool ackWaiting=false;
 static PpStressWindow performance;
 static PpCycleTimingWindow cycleTiming;
+static PpShortProbeWindow sourceProbe;
+static uint32_t lastSourceProbeReport=0;
 static PpCycleTimingWindow::Average pendingTimingDetail;
 static bool timingDetailPending=false;
 static uint32_t hardwareRetries=0,maxRetries=0,lastReport=0;
@@ -246,6 +252,35 @@ static void reportCycleTiming(){
 	}
 }
 
+// One isolated timing site: the source/cache portion of stream.makeTraced.
+static void reportSourceProbe(uint32_t now){
+	if(static_cast<uint32_t>(now-lastSourceProbeReport)<
+		PP_SOURCE_PROBE_REPORT_INTERVAL_TICKS){
+		return;
+	}
+	if(uart.freeSpace()<PP_SOURCE_PROBE_REPORT_MIN_FREE_BYTES){
+		return;
+	}
+	PpShortProbeWindow::Snapshot sample;
+	if(!sourceProbe.sample(sample)){
+		return;
+	}
+	PpStressLine line;
+	line.word("A hot n=");
+	line.decimal(sample.count);
+	line.word(" src=");
+	line.decimal(sample.meanUs);
+	line.word(" lo=");
+	line.decimal(sample.minUs);
+	line.word(" hi=");
+	line.decimal(sample.maxUs);
+	line.word("\r\n");
+	if(line.emit(uart)){
+		sourceProbe.clear();
+		lastSourceProbeReport=now;
+	}
+}
+
 static void fatal() {
     // This temporary firmware owns the diagnostic UART, not a binary
     // payload stream. Make a halted test distinguishable from RF silence.
@@ -337,7 +372,12 @@ static void serviceAInFlight() {
                            PP_PTX_BACKGROUND_MAX_GENERATED_BYTES);
     reportPerformance();
     reportRecoveryTransition();
-    if(PP_PTX_TIMING_PROBE_ENABLED)reportCycleTiming();
+    if(PP_PTX_TIMING_PROBE_ENABLED){
+		reportCycleTiming();
+	}
+	if(PP_SOURCE_PROBE_ENABLED){
+		reportSourceProbe(now);
+	}
 }
 
 // The PHY completed the hardware exchange. The MAC completion can be
@@ -483,11 +523,22 @@ static void runA(){
 		uint8_t width=0;
 		const uint32_t prepareStart=
 			PP_PTX_TIMING_PROBE_ENABLED?ticks.now():0;
+#if PP_SOURCE_PROBE_ENABLED
+		PpShortSourceTrace<Timer1Clock> makeTrace(ticks);
+#else
 		PpFrameMakeTrace<Timer1Clock,PP_PTX_TIMING_PROBE_ENABLED> makeTrace(
 			ticks,prepareStart);
+#endif
 		if(!makePacketTraced(packet,width,makeTrace)){
 			fatal();
 		}
+#if PP_SOURCE_PROBE_ENABLED
+		if(session.active() && width==PairedFrame::MAX_FRAME &&
+			recovery.state()==PpRecoveryControl::State::HEALTHY &&
+			makeTrace.sampled()){
+			sourceProbe.observe(makeTrace.sourceTicks());
+		}
+#endif
 		if(PP_PTX_TIMING_PROBE_ENABLED){
 			prepareTicks=PpCycleTimingWindow::clampTicks(
 				static_cast<uint32_t>(ticks.now()-prepareStart));

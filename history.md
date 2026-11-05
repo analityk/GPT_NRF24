@@ -770,3 +770,20 @@ Przyszłe wpisy powinny zawierać datę, zakres faktycznie wykonanej zmiany, com
   razem **1130/2048 B statycznego SRAM**, +6 B względem
   poprzedniego AVR CI. To cross-kompilacja, nie wynik sprzętowy.
   Produkcyjny `main` i istniejące gałęzie pozostają nietknięte.
+
+## 2026-11-05 — izolowanie kosztu przygotowania danych na `testy`
+
+Właściciel potwierdził na dwóch RF-Nano około 18,7–18,9 kB/s,
+`cyc≈1255µs`, `spi≈86µs`, `ack≈197µs`, `src≈161µs`,
+`enc≈51µs`. Wyświetlony po resecie wspólny SID i zerowe `ret/bad`
+nie wykazują trwałej awarii połączenia; brak jednak binarnego
+porównania dostarczonych danych z plikiem źródłowym.
+
+Zgodnie z sugestią właściciela przygotowano próbę jednoogniskową:
+`PP_PTX_TIMING_PROBE_ENABLED=false`, `PP_SOURCE_PROBE_ENABLED=true`.
+Nowe `A hot` mierzy tylko source/cache w `makeTraced` przez dwa
+16-bitowe odczyty Timer1; sumowanie i raport są wykonywane później.
+Usunięto drugą kopię 24-bajtowego segmentu w
+`UartReliableStream::makeTraced`, zachowując cache do retransmisji.
+Jest to zmiana programowa wymagająca jeszcze testu na fizycznych
+urządzeniach. Granica wydajności ATmega328P nie została wykazana.

@@ -363,3 +363,21 @@ Drugi profil to **BURST20**: nadrzędna ramka20ms, 5ms kwant, podziały A5/B15, 
 Nie buforować 32×32B na ATmega: stream DATA do UART i rolling CRC32/bitmask, bez gwarancji retry po utracie RAM. 5/15 przy UART115200 wymaga min~173B na wejściu w czasie 15ms bez slotu — więcej niż127B ring. Wstępne testy zacząć od10/10 i realnego pomiaru FIFO/deadline/PHY. F7/F12 ręcznie, brak Post-Build.
 
 Codec `GPT_NRF2401/burst20_report.h` i `tests/burst20_report_test.cpp` dodano: 24B REPORT, CRC32/ISO-HDLC obliczany podczas nadawania (bez bufora całego bloku), bitmapa do32 odebranych pakietów i walidacja struktury. **Hostowe testy PASS**. W `main.cpp` nic nie przełączono: wyłącznie PP, A1 nieaktywne do czasu implementacji kompletnego BURST PHY.
+
+## 2026-11-05 — krótki pomiar jednej fazy i źródło 24 B (`testy`)
+
+Ostatni odczyt RealTerm po optymalizacji SPI/potoku: około
+18,7–18,9 kB/s przy 2 Mb/s, `cyc≈1255µs`, `spi≈86µs`,
+`ack≈197µs`, `src≈161µs`, `prf≈136µs`; samodzielne
+resety według właściciela działają. Bez pełnego binarnego porównania
+strumienia nie wyciągać wniosku o absolutnej bezstratności.
+
+W kolejnej rewizji `testy` wyłączono szeroką sondę PHY i wprowadzono
+izolowane `A hot n/src/lo/hi` przez 16-bitowe `TCNT1`, tak żeby
+nie obciążać wszystkich faz. Długie deadline nadal używają
+`Timer1Clock::now()`. W `UartReliableStream` odczyt nowego bajtu
+od razu zapisuje go do bufora retransmisyjnego i do BODY — bez
+powtórnego kopiowania. Zachowana semantyka protokołu i cache.
+Po F7/ręcznym F12 zmierzyć nowe `A cps`, `B cps` i `A hot` oraz
+osobne resety A/B. Porównaj ze sprzętowym punktem ~18,8kB/s,
+ale uwzględnij mniejszy narzut diagnostyki.

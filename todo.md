@@ -1,5 +1,20 @@
 # TODO — aktywny transport dwukierunkowy UART / ACK Payload
 
+## Jednoogniskowa sonda i źródło danych — 2026-11-05, `testy`
+
+- [x] Zidentyfikowano powtarzalny punkt z pomiarów na płytkach:
+  18,7–18,9 kB/s, `cyc≈1255µs`, `spi≈86µs`, `ack≈197µs`,
+  `src≈161µs`, `enc≈51µs`; bez trwałych `ret/bad`.
+- [x] Wyłączono wielofazową sondę czasu w aktywnej konfiguracji;
+  dodano izolowany pomiar `A hot` (2 odczyty 16-bitowego TCNT1)
+  i bezpieczne uśrednianie poza gorącą sekcją.
+- [x] Usunięto redundantną kopię BODY w źródle `UartReliableStream`:
+  jeden przebieg zapisuje bajt w cache retransmisji i w ramce;
+  zachowano sloty i semantykę Go-back-N.
+- [ ] **Test dwóch urządzeń:** F7/F12 obu, A/B `cps` i `A hot`,
+  samodzielne resety A i B, raporty `ret/bad`, osłabienie RF;
+  dopiero po próbie rozważyć dalsze optymalizacje.
+
 ## Szybka ścieżka SPI i odroczony ACK — 2026-11-05, `testy`
 
 - [x] Ustalono granicę sprzętową: z `W_TX_PAYLOAD` nie odczytuje się

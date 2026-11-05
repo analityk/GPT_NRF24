@@ -14,6 +14,10 @@ void Timer1Clock::begin() {
     TCCR1B=_BV(CS11); // prescale 8 => 2MHz at 16MHz
 }
 void Timer1Clock::onOverflow() { ++upper_; }
+uint16_t Timer1Clock::counter16() const {
+	return TCNT1;
+}
+
 uint32_t Timer1Clock::now() const {
     uint16_t hi=0,lo=0;
     ATOMIC_BLOCK(ATOMIC_RESTORESTATE) {
