@@ -11,8 +11,10 @@
 - [x] Utrwalono styl C++ w `AGENTS.md` i `.editorconfig`:
   rzeczywisty TAB o szerokości 4, funkcje i `if` zawsze blokowe,
   pusta linia po funkcji, parametry liczbowe wyłącznie nazwane.
-- [ ] Zweryfikować nową wersję przez AVR-GCC/F7 i ręczne F12 obu
-  płytek, po czym porównać `A us`/`A det`, `cps`, `ret/bad`, reset B/A
+- [x] Cross-build AVR na `testy`: GitHub Actions run #41995708054,
+  host i AVR **PASS**, `.text=23712`, `.data=96`, `.bss=1028`.
+- [ ] Zweryfikować nową wersję przez F7 i ręczne F12 obu płytek,
+  po czym porównać `A us`/`A det`, `cps`, `ret/bad`, reset B/A
   z poprzednią wersją `testy` (`9cf4da6`). Bez testu fizycznego
   **nie przypisywać GPIO żadnego zysku czasowego ani poprawy CPS**.
 

@@ -718,8 +718,12 @@ Przyszłe wpisy powinny zawierać datę, zakres faktycznie wykonanej zmiany, com
   wyjść przy kompilacji i zachowuje starsze adaptery Pin; na płycie
   CE/CSN są zainicjalizowane bezpiecznymi poziomami przed startupem.
 - Dodano test przenośnej klasy GPIO i konfiguracji pinów przez radio.
-  Wynik lokalnych testów: **26/26 PASS**. Oczekuje na cross-build AVR
-  i F7/F12; nie deklarowano przyspieszenia na rzeczywistym sprzęcie.
+  Wynik lokalnych testów: **26/26 PASS**. GitHub Actions run
+  #41995708054: host oraz cross-build AVR **PASS** (`.text=23712`,
+  `.data=96`, `.bss=1028`, statycznie 1124 B SRAM), o 36 B mniej
+  kodu i bez zmiany statycznego SRAM względem poprzedniego CI.
+  Oczekuje na F7/F12 obu płytek; nie deklarowano przyspieszenia
+  na rzeczywistym sprzęcie.
 - `AGENTS.md` i `.editorconfig`: wymagany fizyczny TAB szerokości 4,
   bloki nawet dla jednej instrukcji/funkcji, pusta linia po funkcjach,
   jawne makra zamiast liczb konfiguracyjnych. W `main` nazwano użyte

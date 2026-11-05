@@ -10,8 +10,10 @@ programisty. `release()/i2c_set()/i2c_clr()` jawnie przełączają tryb,
 `read()` tylko odczytuje PIN; zbędne `readOpenDrain/readPullUp` usunięto.
 `Nrf24::begin()` wykorzystuje nową konfigurację, zachowując zgodność
 ze starszymi atrapami Pin. `main` inicjalizuje CE LOW i CSN HIGH
-przed startem radia. Testy hostowe **26/26 PASS**; AVR i test dwóch
-RF-Nano tej zmiany **jeszcze niepotwierdzone**. W `AGENTS.md` oraz
+przed startem radia. Testy hostowe **26/26 PASS**, GitHub Actions
+run #41995708054: host i AVR **PASS** (`.text=23712`, `.data=96`,
+`.bss=1028`). Test dwóch RF-Nano tej zmiany **jeszcze niepotwierdzony**.
+W `AGENTS.md` oraz
 `.editorconfig` zapisano obowiązkowy TAB 4 kolumny, blokowe funkcje
 i instrukcje sterujące oraz zakaz magicznych liczb. Przed kolejną
 optymalizacją SPI porównać sprzętowy `cps`, `ps` i `spi` do `9cf4da6`.
