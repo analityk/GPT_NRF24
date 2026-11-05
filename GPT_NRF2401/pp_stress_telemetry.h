@@ -117,6 +117,10 @@ public:
         }while(value);
         while(used)character(digits[--used]);
     }
+    uint8_t length() const{
+		return size_;
+	}
+
     template<class Serial>
     bool emit(Serial& serial)const {
         return valid_ && serial.writeAll(

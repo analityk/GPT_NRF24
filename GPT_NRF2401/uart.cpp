@@ -10,7 +10,11 @@ UART* UART::active_ = 0;
 
 UART::UART()
     : rx_buffer_full_(0), rx_framing_(0), rx_overrun_(0),
-      rx_parity_(0), tx_buffer_full_(0) {}
+      rx_parity_(0), tx_buffer_full_(0)
+#if PP_UART_DIAG_ENABLED
+	  ,rx_bytes_(0),tx_bytes_(0)
+#endif
+{}
 
 void UART::begin() {
     // Exclusive USART0 owner; call before sei(). Reinitialization drops queued bytes.
@@ -19,6 +23,10 @@ void UART::begin() {
     rx_.reset();
     tx_.reset();
     rx_buffer_full_ = rx_framing_ = rx_overrun_ = rx_parity_ = tx_buffer_full_ = 0;
+#if PP_UART_DIAG_ENABLED
+	rx_bytes_=0;
+	tx_bytes_=0;
+#endif
     UCSR0A = _BV(U2X0);
     UBRR0H = 0;
     UBRR0L = 16;
@@ -85,6 +93,10 @@ UART::Counters UART::counters() const {
         result.rx_overrun = rx_overrun_;
         result.rx_parity = rx_parity_;
         result.tx_buffer_full = tx_buffer_full_;
+#if PP_UART_DIAG_ENABLED
+		result.rx_bytes=rx_bytes_;
+		result.tx_bytes=tx_bytes_;
+#endif
     }
     return result;
 }
@@ -100,7 +112,15 @@ void UART::receiveInterrupt() {
     if (status & _BV(FE0)) { ++uart->rx_framing_; error = true; }
     if (status & _BV(DOR0)) { ++uart->rx_overrun_; error = true; }
     if (status & _BV(UPE0)) { ++uart->rx_parity_; error = true; }
-    if (!error && !uart->rx_.push(value)) ++uart->rx_buffer_full_;
+    if(!error){
+		if(!uart->rx_.push(value)){
+			++uart->rx_buffer_full_;
+		} else {
+#if PP_UART_DIAG_ENABLED
+			++uart->rx_bytes_;
+#endif
+		}
+	}
 }
 
 void UART::transmitInterrupt() {
@@ -110,7 +130,12 @@ void UART::transmitInterrupt() {
         return;
     }
     uint8_t value;
-    if (uart->tx_.pop(value)) UDR0 = value;
+    if(uart->tx_.pop(value)){
+		UDR0=value;
+#if PP_UART_DIAG_ENABLED
+		++uart->tx_bytes_;
+#endif
+	}
     else UCSR0B &= static_cast<uint8_t>(~_BV(UDRIE0));
 }
 

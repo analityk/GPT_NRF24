@@ -26,6 +26,7 @@
 #include "pp_stress_telemetry.h"
 #include "pp_cycle_timing.h"
 #include "pp_short_probe.h"
+#include "pp_uart_quiet_diagnostic.h"
 #include "boot_epoch.h"
 #include "nrf24_ack_phy.h"
 #include "pp_reply_mailbox.h"
@@ -102,6 +103,149 @@ static bool timingDetailPending=false;
 static uint32_t hardwareRetries=0,maxRetries=0,lastReport=0;
 static uint32_t lastTimingReport=0;
 static uint16_t ackFifoFull=0;
+
+#if PP_UART_DIAG_ENABLED
+static PpUartQuietDiagnostic uartQuietDiagnostic;
+static PpUartDiagReport queuedDiagnostic;
+static uint32_t uartDiagnosticPollAt=0;
+static uint16_t diagnosticTxBytes=0;
+static PpShortProbeWindow rfCycleProbe;
+static uint16_t previousRfStart=0;
+static bool previousRfStartValid=false;
+static bool previousRfFullReply=false;
+
+enum class UartDiagnosticPhase : uint8_t {
+	OBSERVE,UART_COUNTS,PROTOCOL_COUNTS,RF_CYCLE
+};
+static UartDiagnosticPhase uartDiagnosticPhase=UartDiagnosticPhase::OBSERVE;
+
+// One timing region: PTX start-to-start, with a complete 32 B DATA
+// and 32 B ACK Payload in the preceding successful radio exchange.
+static void markRfCycle(uint16_t started,bool successful){
+	if(!successful){
+		previousRfStartValid=false;
+		previousRfFullReply=false;
+		return;
+	}
+	if(previousRfStartValid && previousRfFullReply){
+		rfCycleProbe.observe(static_cast<uint16_t>(
+			started-previousRfStart));
+	}
+	previousRfStart=started;
+	previousRfStartValid=true;
+	previousRfFullReply=false;
+}
+
+static PpUartDiagSnapshot uartDiagnosticSnapshot(){
+	const UART::Counters counters=uart.counters();
+	PpUartDiagSnapshot snapshot;
+	snapshot.uartRx=counters.rx_bytes;
+	// Subtract ASCII diagnostics from the physical UART TX count.
+	snapshot.uartTx=static_cast<uint16_t>(
+		counters.tx_bytes-diagnosticTxBytes);
+	snapshot.rxFull=counters.rx_buffer_full;
+	snapshot.rxOverrun=counters.rx_overrun;
+	snapshot.rxFraming=counters.rx_framing;
+	snapshot.acknowledged=stream.acknowledgedBytes();
+	snapshot.accepted=stream.acceptedBytes();
+	snapshot.retries=stream.retransmits();
+	snapshot.blocked=stream.blocked();
+	snapshot.bad=stream.badFrames();
+	snapshot.sid=session.sid();
+	snapshot.outstanding=stream.outstanding();
+	snapshot.credit=linkState.peerCredit();
+	snapshot.freeInput=stream.inputFreeSpace();
+	return snapshot;
+}
+
+// Only the post-burst quiet interval allows a diagnostic ASCII report.
+// UART input and RF output never carry any additional in-band commands.
+static void serviceUartDiagnostic(){
+	if(uartDiagnosticPhase==UartDiagnosticPhase::OBSERVE){
+		const uint32_t now=ticks.now();
+		if(static_cast<uint32_t>(now-uartDiagnosticPollAt)<
+			PP_UART_DIAG_POLL_TICKS){
+			return;
+		}
+		uartDiagnosticPollAt=now;
+		if(!uartQuietDiagnostic.observe(now,uartDiagnosticSnapshot(),
+			queuedDiagnostic)){
+			return;
+		}
+		uartDiagnosticPhase=UartDiagnosticPhase::UART_COUNTS;
+	}
+	if(uart.freeSpace()<PP_UART_DIAG_LINE_FREE_BYTES){
+		return;
+	}
+	PpStressLine line;
+	if(uartDiagnosticPhase==UartDiagnosticPhase::UART_COUNTS){
+		line.word(isLeader?"A uart in=":"B uart in=");
+		line.decimal(queuedDiagnostic.uartRx);
+		line.word(" out=");
+		line.decimal(queuedDiagnostic.uartTx);
+		line.word(" full=");
+		line.decimal(queuedDiagnostic.rxFull);
+		line.word(" dor=");
+		line.decimal(queuedDiagnostic.rxOverrun);
+		line.word(" fe=");
+		line.decimal(queuedDiagnostic.rxFraming);
+		line.word(" free=");
+		line.decimal(queuedDiagnostic.freeInput);
+		line.word("\r\n");
+	} else if(uartDiagnosticPhase==UartDiagnosticPhase::PROTOCOL_COUNTS){
+		line.word(isLeader?"A pp ack=":"B pp ack=");
+		line.decimal(queuedDiagnostic.acknowledged);
+		line.word(" rx=");
+		line.decimal(queuedDiagnostic.accepted);
+		line.word(" ret=");
+		line.decimal(queuedDiagnostic.retries);
+		line.word(" blk=");
+		line.decimal(queuedDiagnostic.blocked);
+		line.word(" bad=");
+		line.decimal(queuedDiagnostic.bad);
+		line.word(" win=");
+		line.decimal(queuedDiagnostic.outstanding);
+		line.word(" cr=");
+		line.decimal(queuedDiagnostic.credit);
+		line.word(" sid=");
+		line.decimal(queuedDiagnostic.sid);
+		line.word("\r\n");
+	} else {
+		PpShortProbeWindow::Snapshot cycle;
+		if(rfCycleProbe.sample(cycle)){
+			line.word("A rf n=");
+			line.decimal(cycle.count);
+			line.word(" cyc=");
+			line.decimal(cycle.meanUs);
+			line.word(" lo=");
+			line.decimal(cycle.minUs);
+			line.word(" hi=");
+			line.decimal(cycle.maxUs);
+			line.word("\r\n");
+		} else {
+			line.word("A rf n=0 (no full DATA+ACK sample)\r\n");
+		}
+	}
+	if(!line.emit(uart)){
+		return;
+	}
+	diagnosticTxBytes=static_cast<uint16_t>(
+		diagnosticTxBytes+line.length());
+	if(uartDiagnosticPhase==UartDiagnosticPhase::UART_COUNTS){
+		uartDiagnosticPhase=UartDiagnosticPhase::PROTOCOL_COUNTS;
+	} else if(uartDiagnosticPhase==UartDiagnosticPhase::PROTOCOL_COUNTS &&
+		isLeader){
+		uartDiagnosticPhase=UartDiagnosticPhase::RF_CYCLE;
+	} else {
+		uartDiagnosticPhase=UartDiagnosticPhase::OBSERVE;
+		rfCycleProbe.clear();
+	}
+}
+#else
+static void serviceUartDiagnostic(){
+}
+#endif
+
 
 #if PP_TEST_TRAFFIC_MODE == PP_TRAFFIC_MODE_SYNTHETIC_RADIO
 static void reportRecoveryTransition() {
@@ -393,6 +537,7 @@ static void serviceAInFlight() {
 	if(PP_SOURCE_PROBE_ENABLED){
 		reportSourceProbe(now);
 	}
+	serviceUartDiagnostic();
 }
 
 // The PHY completed the hardware exchange. The MAC completion can be
@@ -469,6 +614,15 @@ static void runA(){
 			}
 			// A control/foreign/invalid reply can trigger a session reset
 			// and must be processed before any later payload is queued.
+#if PP_UART_DIAG_ENABLED
+			previousRfFullReply=wasActive && session.active() &&
+				oldSid==session.sid() &&
+				recovery.state()==PpRecoveryControl::State::HEALTHY &&
+				tx.code==AckPhy::TxCode::ACK_WITH_DATA &&
+				tx.retries==0 &&
+				inFlightWidth==PairedFrame::MAX_FRAME &&
+				incomingWidth==PairedFrame::MAX_FRAME;
+#endif
 			const bool defer=tx.code==AckPhy::TxCode::ACK_WITH_DATA &&
 				PpReplyMailbox<AckPhy::TxResult>::canDefer(
 					session.active(),session.sid(),incoming,incomingWidth);
@@ -561,7 +715,13 @@ static void runA(){
 		sourceTicks=makeTrace.sourceTicks();
 		encodeTicks=makeTrace.encodeTicks();
 		inFlightWidth=width;
+#if PP_UART_DIAG_ENABLED
+		const uint16_t rfCycleStart=ticks.counter16();
+#endif
 		if(!phy.startTransfer(packet,width)){
+#if PP_UART_DIAG_ENABLED
+			markRfCycle(rfCycleStart,false);
+#endif
 			++radioErrors;
 			if(PP_PTX_TIMING_PROBE_ENABLED){
 				cycleTiming.clearWindow();
@@ -572,6 +732,11 @@ static void runA(){
 			// The deferred ACK is still in incoming and must be consumed
 			// before reusing the buffer on the next successful transfer.
 		}
+#if PP_UART_DIAG_ENABLED
+		else {
+			markRfCycle(rfCycleStart,true);
+		}
+#endif
 	}
 }
 
@@ -629,6 +794,7 @@ static void runB() {
         if(replaceAck && !queueB())++radioErrors;
         reportPerformance();
         reportRecoveryTransition();
+		serviceUartDiagnostic();
     }
 }
 

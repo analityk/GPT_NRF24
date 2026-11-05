@@ -4,6 +4,7 @@
 #include <stdint.h>
 #include "byte_ring.h"
 #include "retained_byte_ring.h"
+#include "pp_test_traffic_mode.h"
 
 // USART0 hardware driver for ATmega328P, 16 MHz, 115200 8N1.
 // Exactly one UART instance may own USART0 at a time.
@@ -16,6 +17,10 @@ public:
         uint16_t rx_overrun;
         uint16_t rx_parity;
         uint16_t tx_buffer_full;
+#if PP_UART_DIAG_ENABLED
+		uint16_t rx_bytes;
+		uint16_t tx_bytes;
+#endif
     };
 
     UART();
@@ -51,5 +56,9 @@ private:
     volatile uint16_t rx_overrun_;
     volatile uint16_t rx_parity_;
     volatile uint16_t tx_buffer_full_;
+#if PP_UART_DIAG_ENABLED
+	volatile uint16_t rx_bytes_;
+	volatile uint16_t tx_bytes_;
+#endif
 };
 #endif
