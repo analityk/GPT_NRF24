@@ -91,3 +91,12 @@ przepełnień odczytywanego przez debugger, bez zakłócania UART.
 Jeżeli brakuje odbioru, najpierw potwierdzić zasilanie, A0,
 tryb Capture i czy oba porty są już otwarte. Brak tekstu
 `A cps` lub `B cps` w tym firmware jest **zamierzony**.
+
+## Weryfikacja automatyczna firmware i narzędzi
+
+GitHub Actions [#42075780034](https://github.com/analityk/GPT_NRF24/actions/runs/42075780034):
+32 testy C++ na hoście PASS, oba tryby firmware AVR PASS,
+porównywarka plików poprawnie wykrywa celowo wprowadzony nadmiarowy
+bajt. UART BRIDGE: 12712 B Flash, 961 B statycznego SRAM; SYNTHETIC
+RADIO: 19214 B Flash, 1139 B SRAM. Kompilacja i mock nie zastępują
+pomiaru dwóch prawdziwych RF-Nano.

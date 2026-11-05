@@ -409,3 +409,12 @@ równoczesne `Send File` dwóch różnych plików, porównanie
 `capture_at_a.bin`; potem osobny reset A i B. Nie mieszać
 danych diagnostycznych do przechwytywanego strumienia.
 Nie deklarować pełnej bezstratności po samych testach hostowych.
+
+Potwierdzenie CI:
+[Actions #42075780034](https://github.com/analityk/GPT_NRF24/actions/runs/42075780034),
+32/32 testy host PASS, dwa tryby AVR PASS, porównywarka byte-for-byte
+weryfikowana na zgodnych i uszkodzonych plikach. Bridge:
+`.text=12712`, `.data=96`, `.bss=865` (SRAM 961 B).
+Synthetic: `.text=19214`, `.data=96`, `.bss=1043` (SRAM 1139 B).
+Nie mylić kompilacji i symulacji hostowej z wynikiem testu
+fizycznego dwukierunkowego UART.

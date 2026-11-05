@@ -24,6 +24,11 @@
   Bez RTS/CTS nie deklarować gwarancji przy dowolnym przeciążeniu.
 
 
+- [x] CI [#42075780034](https://github.com/analityk/GPT_NRF24/actions/runs/42075780034):
+  32 testy hostowe PASS, generator/porównanie dwóch plików i wykrycie
+  celowo wprowadzonego uszkodzenia PASS; AVR UART BRIDGE i SYNTHETIC
+  RADIO PASS; SRAM odpowiednio **961 B** i **1139 B**.
+
 ## Jednoogniskowa sonda i źródło danych — 2026-11-05, `testy`
 
 - [x] Zidentyfikowano powtarzalny punkt z pomiarów na płytkach:

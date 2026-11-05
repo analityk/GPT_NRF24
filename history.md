@@ -805,3 +805,11 @@ do tworzenia/weryfikacji binarnych plików po Capture.
 porównane na sprzęcie**; liczby z generatora nie są dowodem
 bezstratnego UART.
 
+
+**Weryfikacja kompilacji i testów:** GitHub Actions
+[#42075780034](https://github.com/analityk/GPT_NRF24/actions/runs/42075780034)
+PASS: 32/32 testy hostowe, generator/porównywarka z próbą uszkodzenia
+strumienia PASS, obydwa profile AVR PASS (UART BRIDGE:
+`.text=12712`, `.data=96`, `.bss=865`, statyczny SRAM=961 B;
+SYNTHETIC RADIO: `.text=19214`, `.data=96`, `.bss=1043`, SRAM=1139 B).
+Nie jest to jeszcze wynik sprzętowy z równoczesnymi transmisjami UART.
