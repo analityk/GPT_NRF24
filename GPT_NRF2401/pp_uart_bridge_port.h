@@ -2,6 +2,7 @@
 #define GPT_NRF24_PP_UART_BRIDGE_PORT_H
 
 #include <stdint.h>
+#include "retained_byte_ring.h"
 
 // Binary-transparent data source/sink for UartReliableStream.
 // The UART ISR owns its RX producer and TX consumer; the protocol uses
