@@ -1,5 +1,34 @@
 # TODO — aktywny transport dwukierunkowy UART / ACK Payload
 
+## Szybka ścieżka SPI i odroczony ACK — 2026-11-05, `testy`
+
+- [x] Ustalono granicę sprzętową: z `W_TX_PAYLOAD` nie odczytuje się
+  jednocześnie RX FIFO. Komenda `R_RX_PAYLOAD` wymaga osobnej transakcji;
+  odczyt w czasie zapisu to STATUS/odpowiedź tej komendy, nie poprzedni
+  payload. Pozostawiono SPI polling i fizyczną kolejkę ACK Payload.
+- [x] `SpiBlockTransfer<Bus>` ma specjalizowane poza pętlą kierunki
+  TX/RX, 8-bitowy limit 255 odpytań na bajt i inlinowane rejestry AVR.
+  Obsługa awarii pozostaje ograniczona; hostowy test obejmuje pełne
+  bloki, zerowe bufory, brak master oraz timeout komendy/danych.
+- [x] Na A dodano jednopozycyjną skrzynkę metadanych otrzymanej ramki:
+  po pełnym TX można uruchomić **następną** wymianę, a poprzedni
+  prawidłowy ACK DATA/IDLE tego samego SID przetwarzać podczas jej
+  `ON_AIR`, zanim SPI mogłoby nadpisać bufor RX. CONTROL, zły SID i
+  błędna ramka są rozliczane natychmiast przed nowym TX. Bez kolejnych
+  buforów 4×32 B i bez zmiany transportowego WINDOW4.
+- [x] Rozszerzono pomiar o `A det prf=`: część protokołu równoległa do
+  `rf`; `rest` odlicza tylko protokół spoza `ON_AIR`. Testy obejmują
+  zachowanie skrzynki, strumień dwukierunkowy z stratami, timeout SPI
+  oraz niewliczanie równoległego czasu do wyłącznego CPU.
+- [ ] **Sprawdzić cross-build AVR (Flash i SRAM) oraz pełny test sprzętowy**:
+  F7/ręcznie F12 na A i B, RealTerm `cps`, `A us/det`, `sid/up/ret/bad`,
+  samodzielny reset A i B, osłabienie RF. Punkt odniesienia przed tą
+  optymalizacją: 16 704 B/s przy `cyc≈1437`, `spi≈116`, `ack≈230`,
+  `ps≈206` µs, `ret=bad=0`. Nie ogłaszać zysku bez porównania.
+- [ ] Jeśli opóźniona informacja ACK pogorszy Go-back-N/rekey,
+  przeanalizować logi i poprawić sterowanie w istniejącym `testy`;
+  zachować zaliczony `main` oraz wszystkie gałęzie.
+
 ## Optymalizacja GPIO/CSN — 2026-11-05, `testy`
 
 - [x] Rozdzielono konfigurację wyjścia (`GPIO::outputHigh/Low`) od
@@ -13,10 +42,12 @@
   pusta linia po funkcji, parametry liczbowe wyłącznie nazwane.
 - [x] Cross-build AVR na `testy`: GitHub Actions run #41995708054,
   host i AVR **PASS**, `.text=23712`, `.data=96`, `.bss=1028`.
-- [ ] Zweryfikować nową wersję przez F7 i ręczne F12 obu płytek,
-  po czym porównać `A us`/`A det`, `cps`, `ret/bad`, reset B/A
-  z poprzednią wersją `testy` (`9cf4da6`). Bez testu fizycznego
-  **nie przypisywać GPIO żadnego zysku czasowego ani poprawy CPS**.
+- [x] Właściciel zmierzył na dwóch RF-Nano, SID 44831, około
+  **16 704 B/s**, `cyc≈1437`, `spi≈116`, `ack≈230`, `ps≈206` µs,
+  `ret=bad=0`; wcześniej przy szczegółowej sondzie było 15 888 B/s,
+  `cyc≈1505`, `spi≈123`, `ack≈262`, `ps≈251` µs. Jest to pozytywny
+  pomiar całego firmware po zmianie GPIO, a nie izolowany benchmark GPIO.
+  Próby resetu i tłumienia dla tej konkretnej wersji nadal otwarte.
 
 ## Pierwsza zaakceptowana wersja PP i dalsze eksperymenty — 2026-11-05
 

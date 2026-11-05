@@ -33,7 +33,7 @@ Przykładowy **format, nie wynik pomiaru**:
 
 ```text
 A us n=512 cyc=1490 spi=42 grd=110 ce=16 rf=520 ack=72 cpu=730 mk=30 pr=45 bg=90
-A det n=512 polls=45 ps=90 ob=6 fi=6 dpl=45 irq=5 ro=10 src=18 enc=8 mo=4 rest=655
+A det n=512 polls=45 ps=90 ob=6 fi=6 dpl=45 irq=5 ro=10 src=18 enc=8 mo=4 prf=40 rest=675
 ```
 
 Wszystkie czasy oprócz `n` są w **mikrosekundach**:
@@ -49,7 +49,7 @@ Wszystkie czasy oprócz `n` są w **mikrosekundach**:
 | `ack` | Odczyt `OBSERVE_TX`/FIFO/ACK Payload i skasowanie IRQ przez SPI |
 | `cpu` | Reszta okresu: `cyc - spi - grd - ce - rf - ack`; czas poza wymienionymi etapami, a nie całkowity czas wykonywania instrukcji CPU |
 | `mk` | Zmierzony koszt złożenia ramki (`makePacket`) bieżącej wymiany; podzbiór `cpu` |
-| `pr` | Obsługa ACK i protokołu **poprzedniej** wymiany, wykonana po jej zakończeniu; podzbiór `cpu` |
+| `pr` | Obsługa ACK i protokołu poprzedniej wymiany. W wariancie z odroczonym ACK część tej pracy odbywa się podczas `rf`; nie jest już w całości podzbiorem `cpu` |
 | `bg` | Praca generatora/recovery/diagnostyki podczas ON_AIR; **nakłada się na `rf`**, nie dodawać do sumy |
 
 Zależność interpretacyjna: `cyc ≈ spi + grd + ce + rf + ack + cpu`.
@@ -74,11 +74,15 @@ wymianę; wszystkie pozostałe pola podane są w µs:
 | `src` | Praca źródła i okna transmisyjnego wewnątrz `stream.make` przed zakodowaniem |
 | `enc` | `link.makeStream` — kodowanie nagłówka i kopiowanie BODY |
 | `mo` | Reszta `mk` po odjęciu `src+enc` |
-| `rest` | Reszta `cpu` po odjęciu `mk+pr`; nie musi oznaczać bezczynności |
+| `prf` | Część `pr` wykonana, kiedy **następna ramka jest już ON_AIR**. Podzbiór `pr` i `rf`, nie dodawać do okresu wymiany |
+| `rest` | Reszta `cpu` po odjęciu `mk+(pr-prf)`; nie musi oznaczać bezczynności |
 
 `ps` i `bg` są dwoma rozłącznymi rodzajami pracy procesora w czasie
 `rf`, ale **nakładają się na transmisję w eterze**. Nie dodawać ich
 do `cyc` ani nie utożsamiać `rf-ps-bg` z czystym czasem radiowym.
+W wersji z odroczoną odpowiedzią również `prf` nakłada się na `rf`;
+`prf` i `bg` obejmują różne czynności wykonywane kolejno. Pole `prf`
+jest nowe, starsze raporty go nie zawierały.
 Nowa sonda wywołuje `Timer1Clock::now()` częściej niż stara i sama
 może wydłużyć cykl. Porównanie z wcześniejszym testem wymaga zatem
 uwzględnienia jej narzutu.
@@ -92,13 +96,18 @@ uwzględnienia jej narzutu.
    odpowiadające `A cps` oraz `B cps`. Prześlij zrzuty A+B.
 3. Resetuj tylko B, następnie osobno tylko A. Po ponownym uzgodnieniu
    SID sprawdź, czy raporty `A us` wróciły i czy `cps` jest stabilne.
+   Nowy potok nie może pozostawić utrzymującego się `ret/bad`,
+   zablokowanego okna ani błędnego SID po pojedynczym resecie.
 4. Powtórz pod osłabieniem RF metalizowanymi torebkami, ale
    **nie uśredniaj** wierszy z retry/resetem razem z dobrym łączem.
 5. Dla porównania zakomentowanie sondy zastąp przełączeniem
    `PP_PTX_TIMING_PROBE_ENABLED` na `false`, pozostawiając 2 Mb/s.
    Zmierz różnicę CPS: sonda sama wykonuje dodatkowe odczyty Timer1.
 
-Bez wyników z realnych płytek **nie określamy jeszcze**, czy dominuje
-czas CPU, rzeczywisty czas odpowiedzi RF, czy opóźnienie pollingu.
-Testy hostowe i kompilacja AVR potwierdzają logikę i możliwość wgrania,
-nie zastępują tego pomiaru.
+Przed tą optymalizacją użytkownik zmierzył na dwóch RF-Nano stabilne
+**16 704 B/s** i `cyc≈1437`, `spi≈116`, `rf≈598`, `ack≈230`,
+`pr≈134` µs (SID 44831, `ret=bad=0`). Jest to punkt porównawczy,
+**nie wynik nowej wersji**.
+
+Testy hostowe i kompilacja AVR weryfikują kod, ale wynik z dwóch
+fizycznych urządzeń rozstrzygnie o realnym zysku lub regresji.

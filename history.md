@@ -728,3 +728,41 @@ Przyszłe wpisy powinny zawierać datę, zakres faktycznie wykonanej zmiany, com
   bloki nawet dla jednej instrukcji/funkcji, pusta linia po funkcjach,
   jawne makra zamiast liczb konfiguracyjnych. W `main` nazwano użyte
   parametry startu/RETR bez ingerowania w odłożone `pairs[][2]`.
+
+## 2026-11-05 — pomiar po GPIO, przygotowanie szybkiego SPI i opóźnionego ACK
+
+- Właściciel uruchomił dwie RF-Nano na `testy` po rozdzieleniu
+  konfiguracji i sterowania GPIO: zrzut RealTerm `sid=44831`, `up=1`,
+  stabilne **16 704 B/s** po obu stronach i `ret=bad=arc=0`.
+  A: `cyc≈1437`, `spi≈116`, `grd≈18`, `ce≈28`, `rf≈598`,
+  `ack≈230`, `cpu≈444`, `mk≈215`, `pr≈134`, `bg≈182` µs,
+  `polls≈10`, `ps≈206` µs. Poprzedni zrzut z sondą szczegółową
+  i starym GPIO: **15 888 B/s**, `cyc≈1505`, `spi≈123`,
+  `ack≈262`, `ps≈251`; nie mylić tej różnicy z izolowanym
+  wynikiem samego GPIO. Nie pokazano jeszcze resetów dla tego wsadu.
+- Na polecenie właściciela przeanalizowano `SpiMaster::transferBlock`:
+  wewnątrz pętli miał licznik timeoutu 16-bitowy i dwa sprawdzane na
+  każdy bajt wskaźniki. Dodano przenośny i hostowo testowalny
+  `SpiBlockTransfer<Bus>` z wyborem czterech kierunków raz na blok,
+  8-bitowym limitem każdego bajtu, inlinowanym dostępem do SPDR/SPSR.
+  Niezmienione są tryb SPI 0, 8 MHz, kolejność STATUS i payload,
+  semantyka `transfer()` oraz zerowanie SPIF odczytem SPSR→SPDR.
+- Ze względu na osobne komendy nRF `W_TX_PAYLOAD` i `R_RX_PAYLOAD`
+  nie jest możliwe jednoczesne pobranie starszej ramki z RX FIFO
+  podczas zapisu nowego TX tylko dlatego, że SPI jest full-duplex.
+  Na poziomie planowania wymian zrealizowano jednak pomysł właściciela:
+  jednopozycyjna, alokowana statycznie/stosowo skrzynka metadanych
+  `PpReplyMailbox` odkłada przetworzenie ACK DATA/IDLE tej samej
+  sesji do momentu, gdy kolejna ramka jest `ON_AIR`. Sprzętowe
+  odczytanie poprzedniego ACK następuje jeszcze przed nowym TX;
+  bufor `incoming[32]` musi być opróżniony logicznie przed następnym
+  odczytem SPI. CONTROL, zły SID i błędne ramki nie są odraczane.
+  Transport WINDOW4, hardware ACK Payload i stan B bez zmian.
+- Sonda `A det` ma nowe pole `prf=` (podzbiór `pr` w czasie `rf`),
+  a `rest` odejmuje wyłącznie nierównoległą część protokołu.
+  Testy hostowe **30/30 PASS**, w tym symulacja 2048 bajtów
+  w każdą stronę z utratą DATA/ACK, zachowanie skrzynki RX,
+  SPI timeout i księgowanie nakładania czasu. **Nowa optymalizacja
+  nie ma jeszcze pomiaru AVR ani wyniku sprzętowego** — wynik
+  rozstrzygnie F7, ręczne F12 obu płytek i testy resetu A/B.
+  Produkcyjny `main` i istniejące gałęzie pozostają nietknięte.

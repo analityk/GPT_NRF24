@@ -1,4 +1,33 @@
-**NAJNOWSZY PUNKT KONTYNUACJI: 2026-11-05 — GPIO/CSN na `testy` zoptymalizowane, pomiar sprzętowy oczekuje.**
+**NAJNOWSZY PUNKT KONTYNUACJI: 2026-11-05 — szybkie SPI i odroczony ACK na `testy`, nowy wsad czeka na AVR i test dwóch RF-Nano.**
+Właściciel dostarczył po optymalizacji GPIO wynik dwóch RF-Nano:
+`sid=44831`, `up=1`, `ret=bad=0`, **16 704 B/s**, `cyc≈1437`,
+`spi≈116`, `ack≈230`, `ps≈206`, `pr≈134` µs. To aktualny
+**sprzętowo zmierzony punkt odniesienia**, nie wynik nowego eksperymentu.
+Na wyraźne polecenie zoptymalizowano `SpiMaster::transferBlock` przez
+przenośny szablon `SpiBlockTransfer<Bus>`: wybranie TX/RX poza pętlą,
+8-bitowy limit czasu na każdy bajt, inlinowany dostęp do SPI AVR;
+nie przywrócono przerwania SPI. `W_TX_PAYLOAD` i `R_RX_PAYLOAD` są
+odrębnymi komendami układu nRF24 — nie można otrzymać danych z RX FIFO
+podczas zapisu nowej ramki jednym transferem SPI. Można jednak
+nakładać **przetwarzanie poprzedniego ACK na następną transmisję RF**.
+Przenośny `PpReplyMailbox` przechowuje tylko metadane poprzedniej
+odpowiedzi (bez następnego bufora 32B), a kod A uruchamia kolejny
+TX przed rozliczeniem aktywnego DATA/IDLE ze zgodnym SID. Przetwarzanie
+odbywa się, gdy radio jest `ON_AIR`, **zawsze przed** kolejnym
+`pollTransfer`, który mógłby nadpisać `incoming`. CONTROL, stary SID
+i malformed reply są przetwarzane od razu przed kolejnym TX.
+Sonda `A det` ma nowe `prf=` (część `pr` równoległa do `rf`), a
+`rest` nie odejmuje już jej od wyłącznego CPU. Nowe testy hostowe
+obejmują SPI, skrzynkę, 2048B w obie strony przy stratach i timing;
+lokalnie **30/30 PASS**. AVR jeszcze niesprawdzony; po publikacji
+potrzebny CI AVR, potem F7/ręczne F12 obu płytek, 5–10 par `A us`
+i `A det`, `A cps/B cps`, reset osobno B i A, osłabienie workami ESD.
+Zmiana zwiększa opóźnienie informacji APP_ACK/kredytu o jedną wymianę,
+dlatego **odzyskiwanie i Go-back-N są kryterium odbioru**.
+`main` i pozostałe branche pozostają nietknięte. Szczegóły
+w `pp-cycle-timing-test.md`, `todo.md` i `history.md`.
+
+**Poprzedni punkt kontynuacji: 2026-11-05 — GPIO/CSN na `testy` zoptymalizowane; wynik sprzętowy potwierdzony później.**
 Po przejrzeniu plików `.lss` i `.map` z Microchip Studio
 zidentyfikowano wielokrotny `GPIO::valid()` i zapis DDR przy każdym
 CSN HIGH/LOW. Na żądanie właściciela `GPIO` ma teraz osobne
@@ -12,7 +41,7 @@ programisty. `release()/i2c_set()/i2c_clr()` jawnie przełączają tryb,
 ze starszymi atrapami Pin. `main` inicjalizuje CE LOW i CSN HIGH
 przed startem radia. Testy hostowe **26/26 PASS**, GitHub Actions
 run #41995708054: host i AVR **PASS** (`.text=23712`, `.data=96`,
-`.bss=1028`). Test dwóch RF-Nano tej zmiany **jeszcze niepotwierdzony**.
+`.bss=1028`). Późniejszy wynik dwóch RF-Nano podano wyżej.
 W `AGENTS.md` oraz
 `.editorconfig` zapisano obowiązkowy TAB 4 kolumny, blokowe funkcje
 i instrukcje sterujące oraz zakaz magicznych liczb. Przed kolejną

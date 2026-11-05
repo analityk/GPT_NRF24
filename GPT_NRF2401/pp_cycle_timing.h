@@ -25,15 +25,16 @@ public:
     struct Average {
         uint16_t samples;
         uint16_t cycleUs,loadUs,guardUs,ceUs,waitUs,readUs;
-        uint16_t cpuUs,prepareUs,protocolUs,backgroundUs;
+        uint16_t cpuUs,prepareUs,protocolUs,protocolOverlapUs,backgroundUs;
         uint16_t polls,pollSpiUs,observeUs,fifoUs,payloadUs,irqUs;
         uint16_t sourceUs,encodeUs,readOtherUs,prepareOtherUs,cpuOtherUs;
-        Average():samples(0),cycleUs(0),loadUs(0),guardUs(0),
-                  ceUs(0),waitUs(0),readUs(0),cpuUs(0),
-                  prepareUs(0),protocolUs(0),backgroundUs(0),
-                  polls(0),pollSpiUs(0),observeUs(0),fifoUs(0),
-                  payloadUs(0),irqUs(0),sourceUs(0),encodeUs(0),
-                  readOtherUs(0),prepareOtherUs(0),cpuOtherUs(0){}
+		Average():samples(0),cycleUs(0),loadUs(0),guardUs(0),
+			ceUs(0),waitUs(0),readUs(0),cpuUs(0),prepareUs(0),
+			protocolUs(0),protocolOverlapUs(0),backgroundUs(0),
+			polls(0),pollSpiUs(0),observeUs(0),fifoUs(0),
+			payloadUs(0),irqUs(0),sourceUs(0),encodeUs(0),
+			readOtherUs(0),prepareOtherUs(0),cpuOtherUs(0){
+		}
     };
 
     PpCycleTimingWindow():lastDone_(0),samples_(0),previous_(false) {
@@ -50,88 +51,108 @@ public:
     // so that rekey time cannot be mislabeled as normal RF timing.
     template<class Phases>
     void observe(uint32_t completed,const Phases& t,uint16_t prepareTicks,
-                 uint16_t protocolTicks,uint16_t backgroundTicks,
-                 bool eligible) {
-        const EmptyBreakdown empty;
-        observeDetailed(completed,t,empty,prepareTicks,protocolTicks,
-                        backgroundTicks,0,0,eligible);
-    }
+        uint16_t protocolTicks,uint16_t backgroundTicks,bool eligible){
+		const EmptyBreakdown empty;
+		observeDetailed(completed,t,empty,prepareTicks,protocolTicks,
+			backgroundTicks,0,0,0,eligible);
+	}
 
     template<class Phases>
     void observe(uint32_t completed,const Phases& t,uint16_t prepareTicks,
-                 uint16_t protocolTicks,uint16_t backgroundTicks,
-                 uint16_t sourceTicks,uint16_t encodeTicks,bool eligible) {
-        observeDetailed(completed,t,t,prepareTicks,protocolTicks,
-                        backgroundTicks,sourceTicks,encodeTicks,eligible);
-    }
+        uint16_t protocolTicks,uint16_t backgroundTicks,
+        uint16_t sourceTicks,uint16_t encodeTicks,bool eligible){
+		observeDetailed(completed,t,t,prepareTicks,protocolTicks,
+			backgroundTicks,sourceTicks,encodeTicks,0,eligible);
+	}
+
+    // Protocol handling of the previous ACK can run while the current
+    // RF frame is on air. These ticks are a subset of protocolTicks AND
+    // the RF wait, so they are not part of exclusive CPU idle time.
+    template<class Phases>
+    void observe(uint32_t completed,const Phases& t,uint16_t prepareTicks,
+        uint16_t protocolTicks,uint16_t backgroundTicks,
+        uint16_t sourceTicks,uint16_t encodeTicks,
+        uint16_t protocolOverlapTicks,bool eligible){
+		observeDetailed(completed,t,t,prepareTicks,protocolTicks,
+			backgroundTicks,sourceTicks,encodeTicks,
+			protocolOverlapTicks,eligible);
+	}
 
     template<class Phases,class Detail>
     void observeDetailed(uint32_t completed,const Phases& t,
-                         const Detail& detail,uint16_t prepareTicks,
-                         uint16_t protocolTicks,uint16_t backgroundTicks,
-                         uint16_t sourceTicks,uint16_t encodeTicks,
-                         bool eligible) {
-        if(!eligible) {previous_=false;resetSums();return;}
-        if(previous_ && samples_<PP_TIMING_MAX_SAMPLES) {
-            const uint32_t period=completed-lastDone_;
-            if(period<=PP_TIMING_MAX_CYCLE_TICKS) {
-                const uint32_t exclusive=static_cast<uint32_t>(t.loadTicks)+
-                    t.guardTicks+t.ceTicks+t.waitTicks+t.readTicks;
-                sums_[CYCLE]+=period;
-                sums_[LOAD]+=t.loadTicks;
-                sums_[GUARD]+=t.guardTicks;
-                sums_[CE]+=t.ceTicks;
-                sums_[WAIT]+=t.waitTicks;
-                sums_[READ]+=t.readTicks;
-                sums_[CPU]+=period>=exclusive?period-exclusive:0;
-                sums_[PREPARE]+=prepareTicks;
-                sums_[PROTOCOL]+=protocolTicks;
-                sums_[BACKGROUND]+=backgroundTicks;
-                sums_[POLL_COUNT]+=detail.pollCount;
-                sums_[POLL_SPI]+=detail.pollSpiTicks;
-                sums_[OBSERVE]+=detail.observeTicks;
-                sums_[FIFO]+=detail.fifoTicks;
-                sums_[PAYLOAD]+=detail.payloadTicks;
-                sums_[IRQ]+=detail.irqTicks;
-                sums_[SOURCE]+=sourceTicks;
-                sums_[ENCODE]+=encodeTicks;
-                ++samples_;
-            }
-        }
-        lastDone_=completed;
-        previous_=true;
-    }
+        const Detail& detail,uint16_t prepareTicks,uint16_t protocolTicks,
+        uint16_t backgroundTicks,uint16_t sourceTicks,uint16_t encodeTicks,
+        uint16_t protocolOverlapTicks,bool eligible){
+		if(!eligible){
+			previous_=false;
+			resetSums();
+			return;
+		}
+		if(previous_ && samples_<PP_TIMING_MAX_SAMPLES){
+			const uint32_t period=completed-lastDone_;
+			if(period<=PP_TIMING_MAX_CYCLE_TICKS){
+				const uint32_t exclusive=static_cast<uint32_t>(t.loadTicks)+
+					t.guardTicks+t.ceTicks+t.waitTicks+t.readTicks;
+				sums_[CYCLE]+=period;
+				sums_[LOAD]+=t.loadTicks;
+				sums_[GUARD]+=t.guardTicks;
+				sums_[CE]+=t.ceTicks;
+				sums_[WAIT]+=t.waitTicks;
+				sums_[READ]+=t.readTicks;
+				sums_[CPU]+=period>=exclusive?period-exclusive:0;
+				sums_[PREPARE]+=prepareTicks;
+				sums_[PROTOCOL]+=protocolTicks;
+				sums_[PROTOCOL_OVERLAP]+=protocolOverlapTicks;
+				sums_[BACKGROUND]+=backgroundTicks;
+				sums_[POLL_COUNT]+=detail.pollCount;
+				sums_[POLL_SPI]+=detail.pollSpiTicks;
+				sums_[OBSERVE]+=detail.observeTicks;
+				sums_[FIFO]+=detail.fifoTicks;
+				sums_[PAYLOAD]+=detail.payloadTicks;
+				sums_[IRQ]+=detail.irqTicks;
+				sums_[SOURCE]+=sourceTicks;
+				sums_[ENCODE]+=encodeTicks;
+				++samples_;
+			}
+		}
+		lastDone_=completed;
+		previous_=true;
+	}
 
     // Read without consuming. A full UART TX ring may reject the line;
     // retrying later must preserve the measurements instead of losing them.
-    bool sample(Average& out) const {
-        if(samples_<PP_TIMING_MIN_SAMPLES)return false;
-        out.samples=samples_;
-        out.cycleUs=mean(CYCLE);
-        out.loadUs=mean(LOAD);
-        out.guardUs=mean(GUARD);
-        out.ceUs=mean(CE);
-        out.waitUs=mean(WAIT);
-        out.readUs=mean(READ);
-        out.cpuUs=mean(CPU);
-        out.prepareUs=mean(PREPARE);
-        out.protocolUs=mean(PROTOCOL);
-        out.backgroundUs=mean(BACKGROUND);
-        out.polls=meanCount(POLL_COUNT);
-        out.pollSpiUs=mean(POLL_SPI);
-        out.observeUs=mean(OBSERVE);
-        out.fifoUs=mean(FIFO);
-        out.payloadUs=mean(PAYLOAD);
-        out.irqUs=mean(IRQ);
-        out.sourceUs=mean(SOURCE);
-        out.encodeUs=mean(ENCODE);
-        out.readOtherUs=remainder(out.readUs,out.observeUs,out.fifoUs,
-                                  out.payloadUs,out.irqUs);
-        out.prepareOtherUs=remainder(out.prepareUs,out.sourceUs,
-                                     out.encodeUs);
-        out.cpuOtherUs=remainder(out.cpuUs,out.prepareUs,out.protocolUs);
-        return true;
-    }
+    bool sample(Average& out) const{
+		if(samples_<PP_TIMING_MIN_SAMPLES){
+			return false;
+		}
+		out.samples=samples_;
+		out.cycleUs=mean(CYCLE);
+		out.loadUs=mean(LOAD);
+		out.guardUs=mean(GUARD);
+		out.ceUs=mean(CE);
+		out.waitUs=mean(WAIT);
+		out.readUs=mean(READ);
+		out.cpuUs=mean(CPU);
+		out.prepareUs=mean(PREPARE);
+		out.protocolUs=mean(PROTOCOL);
+		out.protocolOverlapUs=mean(PROTOCOL_OVERLAP);
+		out.backgroundUs=mean(BACKGROUND);
+		out.polls=meanCount(POLL_COUNT);
+		out.pollSpiUs=mean(POLL_SPI);
+		out.observeUs=mean(OBSERVE);
+		out.fifoUs=mean(FIFO);
+		out.payloadUs=mean(PAYLOAD);
+		out.irqUs=mean(IRQ);
+		out.sourceUs=mean(SOURCE);
+		out.encodeUs=mean(ENCODE);
+		out.readOtherUs=remainder(out.readUs,out.observeUs,out.fifoUs,
+			out.payloadUs,out.irqUs);
+		out.prepareOtherUs=remainder(out.prepareUs,out.sourceUs,
+			out.encodeUs);
+		out.cpuOtherUs=remainder(out.cpuUs,out.prepareUs,
+			static_cast<uint16_t>(out.protocolUs-out.protocolOverlapUs));
+		return true;
+	}
     void clearWindow(){resetSums();}
     bool take(Average& out) {
         const bool valid=sample(out);
@@ -141,7 +162,8 @@ public:
 
 private:
     enum Field : uint8_t {
-        CYCLE,LOAD,GUARD,CE,WAIT,READ,CPU,PREPARE,PROTOCOL,BACKGROUND,
+        CYCLE,LOAD,GUARD,CE,WAIT,READ,CPU,PREPARE,PROTOCOL,
+        PROTOCOL_OVERLAP,BACKGROUND,
         POLL_COUNT,POLL_SPI,OBSERVE,FIFO,PAYLOAD,IRQ,SOURCE,ENCODE,
         FIELD_COUNT
     };

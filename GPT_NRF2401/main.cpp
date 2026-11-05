@@ -37,6 +37,7 @@
 #include "pp_cycle_timing.h"
 #include "boot_epoch.h"
 #include "nrf24_ack_phy.h"
+#include "pp_reply_mailbox.h"
 #include "pp_recovery_control.h"
 #include "host_flow_status.h"
 
@@ -156,7 +157,8 @@ static void reportPerformance() {
 }
 
 // Separate, short diagnostic line: per-exchange averages in microseconds.
-// CPU time is the exclusive remainder; bg overlaps rf (not additive).
+// CPU time is the exclusive remainder; bg and the deferred part of pr
+// overlap rf (they must not be added to the total exchange period).
 // ACK time includes SPI reading the payload and clearing the IRQ.
 static void reportCycleTiming() {
     // The UART ring cannot fit both lines at once. Queue the second line
@@ -177,6 +179,7 @@ static void reportCycleTiming() {
         detail.word(" src=");detail.decimal(t.sourceUs);
         detail.word(" enc=");detail.decimal(t.encodeUs);
         detail.word(" mo=");detail.decimal(t.prepareOtherUs);
+        detail.word(" prf=");detail.decimal(t.protocolOverlapUs);
         detail.word(" rest=");detail.decimal(t.cpuOtherUs);
         detail.word("\r\n");
         if(detail.emit(uart))timingDetailPending=false;
@@ -303,111 +306,173 @@ static void serviceAInFlight() {
     if(PP_PTX_TIMING_PROBE_ENABLED)reportCycleTiming();
 }
 
-static void runA() {
-    if(!phy.beginPtx())fatal();
-    delay.ms(PP_PTX_PEER_STARTUP_MS); // one-time peer power-on
-    bool servicedInFlight=false;
-    uint8_t inFlightWidth=0;
-    uint16_t prepareTicks=0,backgroundTicks=0,previousProtocolTicks=0;
-    uint16_t sourceTicks=0,encodeTicks=0;
-    // P1: immediate SPI FIFO/IRQ service and CE transitions.
-    // P2: other bounded work executes while the nRF is on air.
-    for(;;) {
-        if(phy.txBusy()) {
-            uint8_t incomingWidth=0;
-            AckPhy::TxResult tx;
-            const AckPhy::TxStep step=
-                phy.pollTransfer(incoming,incomingWidth,tx);
-            if(step==AckPhy::TxStep::PENDING) {
-                if(phy.txOnAir() && !servicedInFlight) {
-                    const uint32_t workStart=PP_PTX_TIMING_PROBE_ENABLED?
-                        ticks.now():0;
-                    serviceAInFlight();
-                    if(PP_PTX_TIMING_PROBE_ENABLED)
-                        backgroundTicks=PpCycleTimingWindow::clampTicks(
-                            static_cast<uint32_t>(ticks.now()-workStart));
-                    servicedInFlight=true;
-                }
-                continue;
-            }
-            if(step!=AckPhy::TxStep::COMPLETE)fatal();
-            const uint32_t protocolStart=PP_PTX_TIMING_PROBE_ENABLED?
-                ticks.now():0;
-            const bool wasActive=session.active();
-            const uint16_t oldSid=session.sid();
-            linkState.notePtxRetries(tx.retries);
-            hardwareRetries+=tx.retries;
-            if(tx.code==AckPhy::TxCode::MAX_RT)++maxRetries;
-            if(tx.code==AckPhy::TxCode::ACK_WITH_DATA)
-                processFrame(incomingWidth);
-            else if(tx.code==AckPhy::TxCode::BAD_REPLY_SIZE ||
-                    tx.code==AckPhy::TxCode::IO_ERROR ||
-                    tx.code==AckPhy::TxCode::TIMEOUT)
-                ++radioErrors;
-            if(PP_PTX_TIMING_PROBE_ENABLED) {
-                const uint16_t protocolTicks=PpCycleTimingWindow::clampTicks(
-                    static_cast<uint32_t>(ticks.now()-protocolStart));
-                const bool cleanFullExchange=wasActive && session.active() &&
-                    oldSid==session.sid() &&
-                    recovery.state()==PpRecoveryControl::State::HEALTHY &&
-                    tx.code==AckPhy::TxCode::ACK_WITH_DATA && tx.retries==0 &&
-                    inFlightWidth==PairedFrame::MAX_FRAME &&
-                    incomingWidth==PairedFrame::MAX_FRAME;
-                // Cycle n runs from completion n-1 to completion n.
-                // Protocol processing after completion n belongs to n+1.
-                cycleTiming.observe(phy.lastCompletedAt(),phy.lastTiming(),
-                                    prepareTicks,previousProtocolTicks,
-                                    backgroundTicks,sourceTicks,encodeTicks,
-                                    cleanFullExchange);
-                previousProtocolTicks=protocolTicks;
-            }
-            if(!servicedInFlight)serviceAInFlight();
-            servicedInFlight=false;
-            backgroundTicks=0;
-            // Negotiation timeout is different from ACTIVE radio silence.
-            // Silence NEVER invalidates a living peer's session state.
-            if(!session.active() &&
-               session.phase()!=PairedSession::Phase::DISCOVER &&
-               static_cast<uint32_t>(ticks.now()-lastPeerProgress)>
-                   PP_PTX_HANDSHAKE_TIMEOUT_TICKS) {
-                if(!restartIdentity() || !phy.resetPtxFifos())fatal();
-            }
-            continue;
-        }
-        const uint32_t now=ticks.now();
-        recovery.poll(now);
-        if(session.active() && recovery.warmExpired(now)) {
-            recovery.abandonWarm(now,stream.hasPending());
-            if(!restartIdentity() || !phy.resetPtxFifos())fatal();
-        }
-        // While offline, preserve the cache and probe at a bounded rate.
-        if(session.active() &&
-           recovery.state()==PpRecoveryControl::State::OFFLINE &&
-           static_cast<uint32_t>(now-lastProbe)<
-               PP_OFFLINE_PROBE_INTERVAL_TICKS) {
-            serviceAInFlight();
-            delay.us(PP_OFFLINE_IDLE_US);
-            continue;
-        }
-        lastProbe=now;
-        uint8_t width=0;
-        const uint32_t prepareStart=PP_PTX_TIMING_PROBE_ENABLED?
-            ticks.now():0;
-        PpFrameMakeTrace<Timer1Clock,PP_PTX_TIMING_PROBE_ENABLED> makeTrace(
-            ticks,prepareStart);
-        if(!makePacketTraced(packet,width,makeTrace))fatal();
-        if(PP_PTX_TIMING_PROBE_ENABLED)
-            prepareTicks=PpCycleTimingWindow::clampTicks(
-                static_cast<uint32_t>(ticks.now()-prepareStart));
-        sourceTicks=makeTrace.sourceTicks();
-        encodeTicks=makeTrace.encodeTicks();
-        inFlightWidth=width;
-        if(!phy.startTransfer(packet,width)) {
-            ++radioErrors;
-            if(PP_PTX_TIMING_PROBE_ENABLED)cycleTiming.clearWindow();
-            if(!phy.resetPtxFifos())fatal();
-        }
-    }
+// The PHY completed the hardware exchange. The MAC completion can be
+// delayed one turn, but hardware retry accounting cannot be skipped.
+static void processAReply(const AckPhy::TxResult& tx,uint8_t width){
+	if(tx.code==AckPhy::TxCode::ACK_WITH_DATA){
+		processFrame(width);
+	} else if(tx.code==AckPhy::TxCode::BAD_REPLY_SIZE ||
+		tx.code==AckPhy::TxCode::IO_ERROR ||
+		tx.code==AckPhy::TxCode::TIMEOUT){
+		++radioErrors;
+	}
+}
+
+static void runA(){
+	if(!phy.beginPtx()){
+		fatal();
+	}
+	delay.ms(PP_PTX_PEER_STARTUP_MS);
+	PpReplyMailbox<AckPhy::TxResult> deferredReply;
+	bool servicedInFlight=false;
+	uint8_t inFlightWidth=0;
+	uint16_t prepareTicks=0;
+	uint16_t backgroundTicks=0;
+	uint16_t previousProtocolTicks=0;
+	uint16_t protocolOverlapTicks=0;
+	uint16_t sourceTicks=0;
+	uint16_t encodeTicks=0;
+	for(;;){
+		if(phy.txBusy()){
+			// The previous SPI RX buffer must be consumed BEFORE another
+			// pollTransfer could overwrite it with the current ACK payload.
+			// Starting the new RF turn first moves this work under ON_AIR.
+			if(phy.txOnAir() && !servicedInFlight){
+				if(deferredReply.pending()){
+					AckPhy::TxResult previous;
+					uint8_t previousWidth=0;
+					if(!deferredReply.take(previous,previousWidth)){
+						fatal();
+					}
+					const uint32_t protocolStart=
+						PP_PTX_TIMING_PROBE_ENABLED?ticks.now():0;
+					processAReply(previous,previousWidth);
+					if(PP_PTX_TIMING_PROBE_ENABLED){
+						protocolOverlapTicks=PpCycleTimingWindow::clampTicks(
+							static_cast<uint32_t>(ticks.now()-protocolStart));
+					}
+				}
+				const uint32_t workStart=
+					PP_PTX_TIMING_PROBE_ENABLED?ticks.now():0;
+				serviceAInFlight();
+				if(PP_PTX_TIMING_PROBE_ENABLED){
+					backgroundTicks=PpCycleTimingWindow::clampTicks(
+						static_cast<uint32_t>(ticks.now()-workStart));
+				}
+				servicedInFlight=true;
+			}
+			uint8_t incomingWidth=0;
+			AckPhy::TxResult tx;
+			const AckPhy::TxStep step=
+				phy.pollTransfer(incoming,incomingWidth,tx);
+			if(step==AckPhy::TxStep::PENDING){
+				continue;
+			}
+			if(step!=AckPhy::TxStep::COMPLETE || deferredReply.pending()){
+				fatal();
+			}
+			const bool wasActive=session.active();
+			const uint16_t oldSid=session.sid();
+			linkState.notePtxRetries(tx.retries);
+			hardwareRetries+=tx.retries;
+			if(tx.code==AckPhy::TxCode::MAX_RT){
+				++maxRetries;
+			}
+			// A control/foreign/invalid reply can trigger a session reset
+			// and must be processed before any later payload is queued.
+			const bool defer=tx.code==AckPhy::TxCode::ACK_WITH_DATA &&
+				PpReplyMailbox<AckPhy::TxResult>::canDefer(
+					session.active(),session.sid(),incoming,incomingWidth);
+			uint16_t immediateProtocolTicks=0;
+			if(defer){
+				if(!deferredReply.store(tx,incomingWidth)){
+					fatal();
+				}
+			} else {
+				const uint32_t protocolStart=
+					PP_PTX_TIMING_PROBE_ENABLED?ticks.now():0;
+				processAReply(tx,incomingWidth);
+				if(PP_PTX_TIMING_PROBE_ENABLED){
+					immediateProtocolTicks=PpCycleTimingWindow::clampTicks(
+						static_cast<uint32_t>(ticks.now()-protocolStart));
+				}
+			}
+			if(PP_PTX_TIMING_PROBE_ENABLED){
+				const bool cleanFullExchange=wasActive && session.active() &&
+					oldSid==session.sid() &&
+					recovery.state()==PpRecoveryControl::State::HEALTHY &&
+					tx.code==AckPhy::TxCode::ACK_WITH_DATA && tx.retries==0 &&
+					inFlightWidth==PairedFrame::MAX_FRAME &&
+					incomingWidth==PairedFrame::MAX_FRAME;
+				const uint16_t protocolTicks=PpCycleTimingWindow::clampTicks(
+					static_cast<uint32_t>(previousProtocolTicks)+
+					protocolOverlapTicks);
+				cycleTiming.observe(phy.lastCompletedAt(),phy.lastTiming(),
+					prepareTicks,protocolTicks,backgroundTicks,
+					sourceTicks,encodeTicks,protocolOverlapTicks,
+					cleanFullExchange);
+				previousProtocolTicks=immediateProtocolTicks;
+			}
+			protocolOverlapTicks=0;
+			if(!servicedInFlight){
+				serviceAInFlight();
+			}
+			servicedInFlight=false;
+			backgroundTicks=0;
+			if(!session.active() &&
+				session.phase()!=PairedSession::Phase::DISCOVER &&
+				static_cast<uint32_t>(ticks.now()-lastPeerProgress)>
+				PP_PTX_HANDSHAKE_TIMEOUT_TICKS){
+				if(!restartIdentity() || !phy.resetPtxFifos()){
+					fatal();
+				}
+			}
+			continue;
+		}
+		const uint32_t now=ticks.now();
+		recovery.poll(now);
+		if(session.active() && recovery.warmExpired(now)){
+			recovery.abandonWarm(now,stream.hasPending());
+			if(!restartIdentity() || !phy.resetPtxFifos()){
+				fatal();
+			}
+		}
+		if(session.active() &&
+			recovery.state()==PpRecoveryControl::State::OFFLINE &&
+			static_cast<uint32_t>(now-lastProbe)<
+			PP_OFFLINE_PROBE_INTERVAL_TICKS){
+			serviceAInFlight();
+			delay.us(PP_OFFLINE_IDLE_US);
+			continue;
+		}
+		lastProbe=now;
+		uint8_t width=0;
+		const uint32_t prepareStart=
+			PP_PTX_TIMING_PROBE_ENABLED?ticks.now():0;
+		PpFrameMakeTrace<Timer1Clock,PP_PTX_TIMING_PROBE_ENABLED> makeTrace(
+			ticks,prepareStart);
+		if(!makePacketTraced(packet,width,makeTrace)){
+			fatal();
+		}
+		if(PP_PTX_TIMING_PROBE_ENABLED){
+			prepareTicks=PpCycleTimingWindow::clampTicks(
+				static_cast<uint32_t>(ticks.now()-prepareStart));
+		}
+		sourceTicks=makeTrace.sourceTicks();
+		encodeTicks=makeTrace.encodeTicks();
+		inFlightWidth=width;
+		if(!phy.startTransfer(packet,width)){
+			++radioErrors;
+			if(PP_PTX_TIMING_PROBE_ENABLED){
+				cycleTiming.clearWindow();
+			}
+			if(!phy.resetPtxFifos()){
+				fatal();
+			}
+			// The deferred ACK is still in incoming and must be consumed
+			// before reusing the buffer on the next successful transfer.
+		}
+	}
 }
 
 static bool queueB() {
