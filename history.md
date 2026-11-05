@@ -789,3 +789,19 @@ Jest to zmiana programowa wymagająca jeszcze testu na fizycznych
 urządzeniach. Granica wydajności ATmega328P nie została wykazana.
 
 **Weryfikacja CI tej zmiany:** GitHub Actions [#42058415426](https://github.com/analityk/GPT_NRF24/actions/runs/42058415426) PASS, 31 testów hostowych PASS oraz AVR-GCC PASS: `.text=19214`, `.data=96`, `.bss=1043`, statyczny SRAM **1139/2048 B**. Wydajność i odzyskiwanie połączenia na nowej wersji pozostają do testu sprzętowego.
+
+## 2026-11-05 — firmware testowy z binarnym UART w obu kierunkach
+
+Po fizycznym potwierdzeniu około 21,6–21,7 kB/s na strumieniu
+syntetycznym (`sid=34833`, `up=1`, bez błędów aplikacyjnych)
+właściciel polecił przejść do równoczesnego rzeczywistego transferu
+A↔B przez RealTerm. Na `testy` wprowadzono jedynie przełączalny
+adapter danych `PpUartBridgePort`; bazowy MAC, PHY i protokół
+odzyskiwania pozostają niezmienione. USART0 w trybie mostu nie
+przenosi tekstowych raportów, generatora ani komend `s/w`.
+Przygotowano test hostowy obu kierunków ze stratami i narzędzie
+do tworzenia/weryfikacji binarnych plików po Capture.
+**Dane rzeczywistych dwóch kierunków muszą jeszcze zostać
+porównane na sprzęcie**; liczby z generatora nie są dowodem
+bezstratnego UART.
+

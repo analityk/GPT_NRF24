@@ -1,5 +1,29 @@
 # TODO — aktywny transport dwukierunkowy UART / ACK Payload
 
+## Test rzeczywistego pełnego dupleksu UART — 2026-11-05, `testy`
+
+- [x] Przełączono domyślne źródło/sink testowy na przezroczysty
+  `PpUartBridgePort` bez dodatkowych buforów i bez drukowania
+  raportów do binarnego UART. A i B korzystają z identycznego
+  adaptera; PP, ACK Payload, SID, WINDOW4, retransmisje i radio
+  2 Mb/s pozostają bez zmian.
+- [x] Zachowano tryb syntetycznego benchmarku jako parametr kompilacji
+  `PP_TEST_TRAFFIC_MODE`; nie stworzono kolejnego brancha.
+- [x] Przygotowano test hostowy: niezależne źródła danych na A i B,
+  bajty `00`, `FF`, `s`, `w`, straty radiowe, opóźniony ACK,
+  porównanie strumieni i atomowe `writeAll`.
+- [x] Przygotowano generator i weryfikator plików:
+  `tools/duplex_uart_vectors.py` oraz procedurę
+  `pp-uart-full-duplex-test.md`.
+- [ ] **Dwa rzeczywiste RF-Nano**: F7/F12, osobny COM dla A/B,
+  oba Capture w trybie raw, równoczesny `Send File`,
+  `Delays=0,0`, porównanie plików A→B i B→A.
+- [ ] Po pełnym pozytywnym porównaniu: reset A/B, tłumienie RF,
+  duże pliki i obciążenie z wejściem ~11520 B/s na stronę;
+  monitorować RX full/DOR0 przez debugger lub osobne łącze.
+  Bez RTS/CTS nie deklarować gwarancji przy dowolnym przeciążeniu.
+
+
 ## Jednoogniskowa sonda i źródło danych — 2026-11-05, `testy`
 
 - [x] Zidentyfikowano powtarzalny punkt z pomiarów na płytkach:

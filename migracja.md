@@ -386,3 +386,26 @@ CI kodu `0ec12ca`: 31/31 testów hostowych i AVR PASS
 ([Actions #42058415426](https://github.com/analityk/GPT_NRF24/actions/runs/42058415426)),
 `.text=19214`, `.data=96`, `.bss=1043`, statycznie **1139/2048 B SRAM**.
 Nowych wartości `A hot` ani `cps` nie zmierzono jeszcze sprzętowo.
+
+## 2026-11-05 — punkt kontynuacji: test dwukierunkowy UART A↔B
+
+Na `testy` domyślnym trybem kompilacji jest `PP_TRAFFIC_MODE_UART_BRIDGE`
+z `GPT_NRF2401/pp_test_traffic_mode.h`. Ten sam firmware obsługuje A
+(A0=GND) i B (A0=3,3 V), ale `PpUartBridgePort` czyta dane bezpośrednio
+z rzeczywistego USART RX i zapisuje atomowo do USART TX, korzystając
+z dotychczasowego `UartReliableStream`, WINDOW4, SID i ACK Payload.
+Nie zmieniono radia 2 Mb/s, SPI ani protokołu.
+**USART jest całkowicie binarny: brak `A cps`, `B cps`,
+komend `s/w`, komunikatów `FATAL` i dopisywanych CR/LF.**
+Dawny tryb generatora jest dostępny przez
+`PP_TEST_TRAFFIC_MODE=PP_TRAFFIC_MODE_SYNTHETIC_RADIO`.
+Instrukcja RealTerm i exact-byte compare:
+`pp-uart-full-duplex-test.md`; narzędzie:
+`tools/duplex_uart_vectors.py`.
+
+Wymagane testy: F7/F12 obu RF-Nano, start Capture raw na obu portach,
+równoczesne `Send File` dwóch różnych plików, porównanie
+`a_to_b.bin` z `capture_at_b.bin` i `b_to_a.bin` z
+`capture_at_a.bin`; potem osobny reset A i B. Nie mieszać
+danych diagnostycznych do przechwytywanego strumienia.
+Nie deklarować pełnej bezstratności po samych testach hostowych.

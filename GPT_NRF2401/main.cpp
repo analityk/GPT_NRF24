@@ -1,21 +1,9 @@
 /*
- * TEMPORARY PP radio-saturation and error-recovery diagnostic.
- *
- * The very same AVR firmware runs on both boards. A0 low: A/PTX uses
- * UART 's'/'w' to adjust a generated 00..FF pattern (100us steps, from
- * maximum offered rate). A0 high: B/PRX queues each received RF body for
- * retransmission by hardware ACK Payload. BOTH UARTs print 1Hz counters;
- * no payload byte goes to UART, so UART baud does not limit radio throughput.
- * The negotiated radio SID and the hardware DATA/ACK Payload path remain.
- *
- * MAC TX_SEQ/RX_LAST carry user DATA_SEQ and cumulative acceptance ACK.
- * Every full DATA packet carries 24 raw UART bytes, with no BODY preamble.
- * Four in-flight segments per direction; no stop-and-wait or idle polling.
- *
- * The radio source queue is bounded and never overwrites pending bytes.
- * This experiment retains the existing session, MAC, window and PHY.
- * A silent peer is SUSPECT/OFFLINE, not automatically rebooted: only a
- * different peer handshake identity invalidates its volatile session.
+ * Paired PP: same firmware for A/PTX and B/PRX (A0 role strap).
+ * Compile-time traffic mode selects either a binary-transparent,
+ * bidirectional USART0 bridge or the synthetic RF saturation benchmark.
+ * MAC/session/window/recovery and ACK Payload are shared by both modes.
+ * In UART bridge mode USART0 NEVER carries firmware diagnostics.
  */
 #include "board_clock.h"
 #include <stdint.h>
@@ -33,6 +21,8 @@
 #include "paired_session.h"
 #include "uart_reliable_stream.h"
 #include "pp_echo_ramp_port.h"
+#include "pp_uart_bridge_port.h"
+#include "pp_test_traffic_mode.h"
 #include "pp_stress_telemetry.h"
 #include "pp_cycle_timing.h"
 #include "pp_short_probe.h"
@@ -52,7 +42,11 @@
 #define PP_PTX_BACKGROUND_MAX_GENERATED_BYTES PairedFrame::MAX_BODY
 #define PP_TEST_RF_SETUP_VALUE NRF24_RF_SETUP_2_MBPS
 #define PP_PTX_TIMING_PROBE_ENABLED false
+#if PP_TEST_TRAFFIC_MODE == PP_TRAFFIC_MODE_UART_BRIDGE
+#define PP_SOURCE_PROBE_ENABLED false
+#else
 #define PP_SOURCE_PROBE_ENABLED true
+#endif
 #define PP_SOURCE_PROBE_REPORT_INTERVAL_TICKS 2000000UL
 #define PP_SOURCE_PROBE_REPORT_MIN_FREE_BYTES 80U
 #define PP_TIMING_REPORT_INTERVAL_TICKS 2000000UL
@@ -63,7 +57,12 @@ typedef Nrf24<SpiMaster,GPIO> Radio;
 typedef NrfAckPayloadPhy<Radio,AvrDelay,Timer1Clock,
                         PP_PTX_TIMING_PROBE_ENABLED> AckPhy;
 static UART uart;
-static PpEchoRampPort<UART> diagnosticPort(uart);
+#if PP_TEST_TRAFFIC_MODE == PP_TRAFFIC_MODE_UART_BRIDGE
+typedef PpUartBridgePort<UART> ActivePort;
+#else
+typedef PpEchoRampPort<UART> ActivePort;
+#endif
+static ActivePort diagnosticPort(uart);
 static SpiMaster spi;
 static GPIO ce(&PORTB,PB2),csn(&PORTB,PB1);
 static Radio radio(spi,ce,csn);
@@ -72,7 +71,7 @@ static Timer1Clock ticks;
 static AckPhy phy(radio,delay,ticks);
 static PairedLink linkState(true,0);
 static PairedSession session(true,PairedSession::Identity());
-static UartReliableStream<PpEchoRampPort<UART> > stream(diagnosticPort);
+static UartReliableStream<ActivePort> stream(diagnosticPort);
 static bool isLeader=false;
 static uint32_t lastPeerProgress=0;
 // Bench stress mode explicitly retries uncertain bytes after a cold peer
@@ -101,6 +100,7 @@ static uint32_t hardwareRetries=0,maxRetries=0,lastReport=0;
 static uint32_t lastTimingReport=0;
 static uint16_t ackFifoFull=0;
 
+#if PP_TEST_TRAFFIC_MODE == PP_TRAFFIC_MODE_SYNTHETIC_RADIO
 static void reportRecoveryTransition() {
     const PpRecoveryControl::State state=recovery.state();
     const bool uncertain=recovery.uncertainty();
@@ -161,6 +161,14 @@ static void reportPerformance() {
     if(performance.take(now,snapshot,sample))
         (void)printPpStressLine(uart,isLeader,sample);
 }
+
+#else
+static void reportRecoveryTransition(){
+}
+
+static void reportPerformance(){
+}
+#endif
 
 // Separate, short diagnostic line: per-exchange averages in microseconds.
 // CPU time is the exclusive remainder; bg and the deferred part of pr
@@ -284,8 +292,10 @@ static void reportSourceProbe(uint32_t now){
 static void fatal() {
     // This temporary firmware owns the diagnostic UART, not a binary
     // payload stream. Make a halted test distinguishable from RF silence.
+#if PP_TEST_TRAFFIC_MODE == PP_TRAFFIC_MODE_SYNTHETIC_RADIO
     const uint8_t marker[]={'F','A','T','A','L','\r','\n'};
     (void)uart.writeAll(marker,sizeof(marker));
+#endif
     for(;;)delay.ms(100);
 }
 static bool restartIdentity() {
@@ -368,8 +378,10 @@ static void processFrame(uint8_t width) {
 static void serviceAInFlight() {
     const uint32_t now=ticks.now();
     recovery.poll(now);
+#if PP_TEST_TRAFFIC_MODE == PP_TRAFFIC_MODE_SYNTHETIC_RADIO
     diagnosticPort.service(now,recovery.canProduce(),
                            PP_PTX_BACKGROUND_MAX_GENERATED_BYTES);
+#endif
     reportPerformance();
     reportRecoveryTransition();
     if(PP_PTX_TIMING_PROBE_ENABLED){
@@ -637,8 +649,10 @@ int main(){
 		fatal();
 	}
 	isLeader=(Adc0::classForM1(adc)==0);
+#if PP_TEST_TRAFFIC_MODE == PP_TRAFFIC_MODE_SYNTHETIC_RADIO
 	diagnosticPort.configure(isLeader,ticks.now(),
 		PpEchoRampPort<UART>::Mode::RADIO_STRESS);
+#endif
 	uint32_t epoch=0;
 	if(!BootEpoch::advance(epoch)){
 		fatal();
@@ -653,7 +667,9 @@ int main(){
 		PP_TEST_RECOVERY_REPORT_INITIAL_OFFSET_TICKS;
 	lastReport=lastPeerProgress;
 	lastTimingReport=lastReport-PP_TIMING_REPORT_PHASE_OFFSET_TICKS;
+#if PP_TEST_TRAFFIC_MODE == PP_TRAFFIC_MODE_SYNTHETIC_RADIO
 	performance.start(lastReport,performanceSnapshot());
+#endif
 	if(isLeader){
 		runA();
 	} else {

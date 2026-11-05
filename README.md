@@ -1,3 +1,10 @@
+> **Aktualna gałąź `testy` (2026-11-05):** domyślnie uruchamia test
+> binarnego mostu UART A↔B bez tekstowych raportów na COM.
+> Instrukcja jednoczesnego wysyłania i weryfikacji dwóch plików:
+> [pp-uart-full-duplex-test.md](pp-uart-full-duplex-test.md).
+> Poprzednie eksperymenty z generatorami `A cps`/`B cps` są dostępne
+> przez wybór trybu kompilacji. `main` nie został zmieniony.
+>
 > **AKTUALNA GAŁĄŹ TESTOWA:** `experiment/pp-recovery-v2` dodaje
 > symetryczne ciepłe/zimne odzyskiwanie PP, lokalne bajty statusu
 > TX/RX i 5-sekundowy limit ciepłego wznowienia. **Instrukcja nowej
