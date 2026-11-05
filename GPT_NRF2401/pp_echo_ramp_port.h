@@ -51,7 +51,11 @@ public:
     // On A, only 's' and 'w' from UART are commands, never stream payload.
     // A zero interval means "as fast as the bounded radio source queue can
     // drain"; an overfull source never skips a number or overwrites data.
-    void service(uint32_t nowTicks,bool producerPermitted=true) {
+    // maxProduced allows a cooperative radio scheduler to cap one slice of
+    // producer work; the default preserves the ordinary full-refill API.
+    // No bytes are skipped: later calls resume at the same nextByte_.
+    void service(uint32_t nowTicks,bool producerPermitted=true,
+                 uint8_t maxProduced=HIGH_WATER) {
         if(!leader_)return;
         uint8_t command=0;
         while(serial_.read(command)) {
@@ -73,19 +77,23 @@ public:
             return;
         }
         if(periodUs_==0) {
-            while(pending_.available()<HIGH_WATER)produce();
+            while(pending_.available()<HIGH_WATER && maxProduced!=0) {
+                produce();
+                --maxProduced;
+            }
             ++pressure_; // offered rate is beyond the bounded queue limit
             return;
         }
         // Catch up after a long radio turn, but never exceed the high-water
         // mark. Reset the due time on pressure to avoid a deferred burst.
-        while(reached(nowTicks,nextDue_)) {
+        while(maxProduced!=0 && reached(nowTicks,nextDue_)) {
             if(pending_.available()>=HIGH_WATER) {
                 ++pressure_;
                 nextDue_=nowTicks+periodTicks();
                 break;
             }
             produce();
+            --maxProduced;
             nextDue_+=periodTicks();
         }
     }

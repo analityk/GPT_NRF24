@@ -1,4 +1,26 @@
-**NAJNOWSZY PUNKT KONTYNUACJI: 2026-11-05 — pierwszy zaakceptowany punkt PP.**
+**NAJNOWSZY PUNKT KONTYNUACJI: 2026-11-05 — nieblokujący PHY na `testy`, oczekuje na odbiór sprzętowy.**
+Po zgodzie właściciela na dalsze prace, w `testy` wdrożono pierwszy
+etap kooperacyjnego pipeline PP: `NrfAckPayloadPhy::startTransfer()`
+i `pollTransfer()` zastępują blokujące `transfer()` na A. Stany:
+`IDLE`, `GUARD`, `CE_PULSE`, `ON_AIR`; Timer1 kontroluje 130µs po
+poprzednim zakończeniu, impuls CE≥15µs i timeout 8ms, pojedynczy krok
+`pollTransfer` nie wykonuje oczekiwania w pętli. P1 przetwarza stan
+nRF i pobiera ACK, P2 raz podczas `ON_AIR` aktualizuje recovery,
+ograniczony do 24B generator i diagnostykę. Na B pozostała już
+nieblokująca kolejka ACK i priorytet odbioru FIFO. Zachowane zostały
+window4, SID, Go-back-N, kredyty, drain/replay, 8+24B, 1 Mb/s,
+bez nowego RAM cache i bez przerwań SPI. **Nie przygotowujemy następnej
+ramki spekulacyjnie przed odebraniem poprzedniego ACK**, bo obecne
+`stream.make` zużywa dane i modyfikuje okno — wymagałoby osobnego
+transakcyjnego API i prób przy rekey.
+`sh tests/run_host_tests.sh`: **24/24 PASS**, w tym nowe testy etapów
+CE/status/timeout/timer wrap oraz porcjowania producenta. Kompilatora
+AVR-GCC nie ma lokalnie. Następny krok: F7, ręczne F12 obu, pomiar
+`cps/arc/max/ret/bad/sid/up` w dobrym zasięgu, po resecie A/B/obu,
+pod ekranowaniem i porównanie z zaakceptowanym `main`. **Nie scalać
+eksperymentu do `main` bez wyraźnej akceptacji właściciela po wynikach.**
+
+**Poprzedni punkt kontynuacji: 2026-11-05 — pierwszy zaakceptowany punkt PP.**
 Właściciel zaakceptował `experiment/pp-window-drain` jako pierwszą
 technicznie działającą wersję PP do przeniesienia do `main`.
 Wersja kodu firmware (przed późniejszymi zmianami tylko dokumentacji):

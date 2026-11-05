@@ -17,6 +17,32 @@ struct MockConsole {
     void command(char c){assert(rx.push(static_cast<uint8_t>(c)));}
 };
 
+#define PP_ECHO_SLICE_BYTES PairedFrame::MAX_BODY
+#define PP_ECHO_TEST_FIRST_SLICE_TICKS 1UL
+
+static void budgetedProducerKeepsSequence() {
+    MockConsole serial;
+    PpEchoRampPort<MockConsole> a(serial);
+    a.configure(true,0,PpEchoRampPort<MockConsole>::Mode::RADIO_STRESS);
+    a.service(PP_ECHO_TEST_FIRST_SLICE_TICKS,true,PP_ECHO_SLICE_BYTES);
+    assert(a.available()==PP_ECHO_SLICE_BYTES);
+    uint8_t value=0;
+    for(uint8_t i=0;i<PP_ECHO_SLICE_BYTES;++i) {
+        assert(a.read(value) && value==i);
+    }
+    a.service(PP_ECHO_TEST_FIRST_SLICE_TICKS+1U,
+              true,PP_ECHO_SLICE_BYTES);
+    assert(a.available()==PP_ECHO_SLICE_BYTES);
+    for(uint8_t i=0;i<PP_ECHO_SLICE_BYTES;++i) {
+        assert(a.read(value) &&
+               value==static_cast<uint8_t>(PP_ECHO_SLICE_BYTES+i));
+    }
+    const uint32_t produced=a.generated();
+    a.service(PP_ECHO_TEST_FIRST_SLICE_TICKS+2U,false,PP_ECHO_SLICE_BYTES);
+    a.service(PP_ECHO_TEST_FIRST_SLICE_TICKS+3U,true,0);
+    assert(a.generated()==produced && a.available()==0);
+}
+
 static void timerAndBounds() {
     MockConsole serial;
     PpEchoRampPort<MockConsole> a(serial);
@@ -237,6 +263,7 @@ static void lossyRadioOnlyStress() {
 }
 
 int main() {
+    budgetedProducerKeepsSequence();
     timerAndBounds();
     mirrorAndAtomicSink();
     radioOnlyStressPort();

@@ -557,3 +557,36 @@ Przyszłe wpisy powinny zawierać datę, zakres faktycznie wykonanej zmiany, com
   zaakceptowanego `main` jako jedyne miejsce dalszych eksperymentów.
   Prace nad maszyną stanów PHY wolno zacząć dopiero po zakończeniu
   operacji repozytorium i następnym poleceniu właściciela.
+
+## 2026-11-05 — etap 1 nieblokującego PP, wyłącznie `testy`
+
+- Po osobnym poleceniu właściciela rozpoczęto eksperyment na `testy`,
+  bez zmian w zaakceptowanym `main` i bez tworzenia/usuwania branchy.
+- W `NrfAckPayloadPhy` zastąpiono synchroniczne `transfer()` jawną
+  maszyną `IDLE → GUARD → CE_PULSE → ON_AIR → IDLE`. `startTransfer()`
+  wypełnia FIFO, a `pollTransfer()` wykonuje tylko pojedynczy krok:
+  czas do CE i impuls CE są odmierzane Timer1, a wynik `TX_DS/MAX_RT`
+  odczytywany jest poprzez SPI bez aktywnego czekania wewnątrz PHY.
+  Prawidłowy ACK Payload jest pobierany przed udostępnieniem nowego TX.
+- Pętla A ma pierwszeństwo dla obsługi PHY; w trakcie `ON_AIR` wykonuje
+  jedną porcję producenta i diagnostyki. Pracę generatora ograniczono
+  do maksymalnie 24 nowych bajtów na jeden przebieg, z zachowaniem
+  ciągłości danych i dotychczasowego pełnego napełniania przy wywołaniu
+  z domyślnym budżetem. B zachowuje priorytet odbioru i przygotowania
+  kolejnego ACK Payload. Nie zastosowano przerwań SPI.
+- **Celowo nie budujemy kolejnej ramki przed obsłużeniem poprzedniego
+  ACK:** `UartReliableStream::make` zatwierdza zużycie bajtów i stan
+  Go-back-N, więc spekulacyjne odrzucenie takiej ramki po zmianie SID,
+  kredytu lub NACK mogłoby naruszyć dostarczalność. Istniejące 4×24 B
+  cache retransmisji pozostaje jedynym oknem; nie dodano 4×32 B kopii.
+- Nowy `pp_async_phy_test` bada zmianę stanu, 15µs CE, 130µs guard,
+  brak blokady SPI, odebranie ACK, przepełnienie licznika Timer1,
+  MAX_RT, timeout i błąd statusu. `pp_echo_ramp_test` bada porcjowanie
+  producenta; zachowano resztę testów sesji, warm/cold recovery i replay.
+  `sh tests/run_host_tests.sh`: **24/24 PASS**. Lokalnie brak AVR-GCC;
+  nie wykonano jeszcze F7/F12 ani testów na rzeczywistych RF-Nano.
+  Workflow CI obsługuje teraz również push do `testy` (host i AVR-GCC).
+- **Brak potwierdzonego zysku w kB/s i brak sprzętowego odbioru tej
+  wersji.** Konieczny pomiar na obu urządzeniach i porównanie z
+  zatwierdzonym `main`, zwłaszcza po samotnym resecie A, B oraz przy
+  celowym pogorszeniu zasięgu. Bez tej próby nie wolno scalać do `main`.

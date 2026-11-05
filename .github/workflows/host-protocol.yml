@@ -1,7 +1,7 @@
 name: Paired ACK Payload core — C++11 and ATmega328P
 on:
   push:
-    branches: [main, 'experiment/**']
+    branches: [main, testy, 'experiment/**']
   pull_request:
   workflow_dispatch:
 jobs:

@@ -5,11 +5,25 @@
 - [x] Wersja `pp-window-drain`: 23/23 testy hostowe PASS i pozytywne
   próby dwóch RF-Nano po uruchomieniu B→A, resecie B i resecie A.
   Właściciel zaakceptował ją jako bazę `main`.
-- [ ] **Po następnym poleceniu właściciela, tylko na gałęzi `testy`:**
-  wydzielić nieblokującą obsługę PHY i przygotowywanie następnej ramki
-  równolegle z trwającą transmisją. Zachować obecne Go-back-N WINDOW4,
-  sesje, kredyty, replay i niezawodność; zmierzyć czas obsługi bez
-  nienazwanych liczb i bez zwiększania zużycia SRAM bez uzasadnienia.
+- [x] **Właściciel wydał polecenie rozpoczęcia prac na `testy`:**
+  wydzielono nieblokujący automat PHY z kolejką FIFO i rozdzielono
+  obsługę IRQ/statusu od pracy generatora podczas `ON_AIR`. Okno4,
+  SID, kredyty, retransmisje i replay bez zmian; 24 testy hostowe PASS.
+- [ ] **F7 i ręczne F12 na obu RF-Nano.** Sprawdzić w RealTerm:
+  start B→A i A→B, reset samego B, reset samego A, reset obu i
+  odtworzenie po osłabieniu RF. Porównać `cps`, `arc/max`, `ret/bad`,
+  `link`, `sid`, `up` z punktem `main` (~14,7 kB/s przy dobrym RF).
+  Zachować zrzuty A+B; brak ujemnych zmian w odtwarzaniu sesji jest
+  ważniejszy od samej poprawy szybkości.
+- [ ] **Osobno zmierzyć koszt nowego cyklu** (czas od zapisu TX FIFO do
+  zakończenia, udział GUARD/CE/ON_AIR, opóźnienie po `TX_DS/MAX_RT`),
+  zanim zaczniemy zmieniać odstępy lub częstotliwość odpytywania SPI.
+  Lokalnie brak AVR-GCC; hostowe testy nie mierzą rzeczywistych µs.
+- [ ] **Dopiero po pomiarze** ocenić transakcyjne przygotowanie
+  kolejnej ramki podczas bieżącego RF: bez cofania przyjętych danych,
+  bez utraty cache przy rekey/NACK/kredycie=0 i bez spekulacyjnego
+  wysyłania do odbiorcy po resecie. Nie tworzyć 4×32 B dodatkowych
+  buforów bez policzenia SRAM i mierzalnego zysku.
 - [ ] Potwierdzić na sprzęcie każdą przyszłą optymalizację przed
   rozważeniem kolejnego przeniesienia jej do `main`.
 

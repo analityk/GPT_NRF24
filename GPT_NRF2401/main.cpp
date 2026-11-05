@@ -39,6 +39,12 @@
 #include "pp_recovery_control.h"
 #include "host_flow_status.h"
 
+#define PP_PTX_PEER_STARTUP_MS 150U
+#define PP_OFFLINE_PROBE_INTERVAL_TICKS 40000UL
+#define PP_OFFLINE_IDLE_US 100U
+#define PP_PTX_HANDSHAKE_TIMEOUT_TICKS 2000000UL
+#define PP_PTX_BACKGROUND_MAX_GENERATED_BYTES PairedFrame::MAX_BODY
+
 typedef Nrf24<SpiMaster,GPIO> Radio;
 typedef NrfAckPayloadPhy<Radio,AvrDelay,Timer1Clock> AckPhy;
 static UART uart;
@@ -209,53 +215,82 @@ static void processFrame(uint8_t width) {
     (void)stream.accept(view);
 }
 
+// Priority 2: bounded application/diagnostic work while the nRF itself
+// performs the physical DATA/ACK exchange. Protocol state is not modified
+// by an unprocessed ACK: the previous reply is always consumed before the
+// next stream.make(), protecting credit, sequence and rekey ordering.
+static void serviceAInFlight() {
+    const uint32_t now=ticks.now();
+    recovery.poll(now);
+    diagnosticPort.service(now,recovery.canProduce(),
+                           PP_PTX_BACKGROUND_MAX_GENERATED_BYTES);
+    reportPerformance();
+    reportRecoveryTransition();
+}
+
 static void runA() {
     if(!phy.beginPtx())fatal();
-    delay.ms(150); // one-time peer power-on, never per packet
-    // Continuous DATA/ACK Payload ping-pong, even when neither UART has
-    // bytes. The PHY alone enforces the 130us ESB turnaround guard.
+    delay.ms(PP_PTX_PEER_STARTUP_MS); // one-time peer power-on
+    bool servicedInFlight=false;
+    // P1: immediate SPI FIFO/IRQ service and CE transitions.
+    // P2: other bounded work executes while the nRF is on air.
     for(;;) {
+        if(phy.txBusy()) {
+            uint8_t incomingWidth=0;
+            AckPhy::TxResult tx;
+            const AckPhy::TxStep step=
+                phy.pollTransfer(incoming,incomingWidth,tx);
+            if(step==AckPhy::TxStep::PENDING) {
+                if(phy.txOnAir() && !servicedInFlight) {
+                    serviceAInFlight();
+                    servicedInFlight=true;
+                }
+                continue;
+            }
+            if(step!=AckPhy::TxStep::COMPLETE)fatal();
+            linkState.notePtxRetries(tx.retries);
+            hardwareRetries+=tx.retries;
+            if(tx.code==AckPhy::TxCode::MAX_RT)++maxRetries;
+            if(tx.code==AckPhy::TxCode::ACK_WITH_DATA)
+                processFrame(incomingWidth);
+            else if(tx.code==AckPhy::TxCode::BAD_REPLY_SIZE ||
+                    tx.code==AckPhy::TxCode::IO_ERROR ||
+                    tx.code==AckPhy::TxCode::TIMEOUT)
+                ++radioErrors;
+            if(!servicedInFlight)serviceAInFlight();
+            servicedInFlight=false;
+            // Negotiation timeout is different from ACTIVE radio silence.
+            // Silence NEVER invalidates a living peer's session state.
+            if(!session.active() &&
+               session.phase()!=PairedSession::Phase::DISCOVER &&
+               static_cast<uint32_t>(ticks.now()-lastPeerProgress)>
+                   PP_PTX_HANDSHAKE_TIMEOUT_TICKS) {
+                if(!restartIdentity() || !phy.resetPtxFifos())fatal();
+            }
+            continue;
+        }
         const uint32_t now=ticks.now();
         recovery.poll(now);
         if(session.active() && recovery.warmExpired(now)) {
             recovery.abandonWarm(now,stream.hasPending());
             if(!restartIdentity() || !phy.resetPtxFifos())fatal();
         }
-        diagnosticPort.service(now,recovery.canProduce());
-        // Once declared OFFLINE, only periodic IDLE/HELLO probes are sent.
-        // No RAM is discarded, and we do not hammer MAX_RT indefinitely.
+        // While offline, preserve the cache and probe at a bounded rate.
         if(session.active() &&
            recovery.state()==PpRecoveryControl::State::OFFLINE &&
-           static_cast<uint32_t>(now-lastProbe)<40000UL) {
-            reportPerformance();
-            reportRecoveryTransition();
-            delay.us(100);
+           static_cast<uint32_t>(now-lastProbe)<
+               PP_OFFLINE_PROBE_INTERVAL_TICKS) {
+            serviceAInFlight();
+            delay.us(PP_OFFLINE_IDLE_US);
             continue;
         }
         lastProbe=now;
         uint8_t width=0;
         if(!makePacket(packet,width))fatal();
-        uint8_t incomingWidth=0;
-        const AckPhy::TxResult tx=phy.transfer(packet,width,incoming,incomingWidth);
-        linkState.notePtxRetries(tx.retries);
-        hardwareRetries+=tx.retries;
-        if(tx.code==AckPhy::TxCode::MAX_RT)++maxRetries;
-        if(tx.code==AckPhy::TxCode::ACK_WITH_DATA)
-            processFrame(incomingWidth);
-        else if(tx.code==AckPhy::TxCode::BAD_REPLY_SIZE ||
-                tx.code==AckPhy::TxCode::IO_ERROR ||
-                tx.code==AckPhy::TxCode::TIMEOUT)
+        if(!phy.startTransfer(packet,width)) {
             ++radioErrors;
-
-        // Negotiation timeout is different from ACTIVE radio silence.
-        // Silence NEVER invalidates an established peer's session state.
-        if(!session.active() &&
-           session.phase()!=PairedSession::Phase::DISCOVER &&
-           static_cast<uint32_t>(ticks.now()-lastPeerProgress)>2000000UL) {
-            if(!restartIdentity() || !phy.resetPtxFifos())fatal();
+            if(!phy.resetPtxFifos())fatal();
         }
-        reportPerformance();
-        reportRecoveryTransition();
     }
 }
 
