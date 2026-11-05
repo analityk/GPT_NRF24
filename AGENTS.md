@@ -141,3 +141,11 @@ Wcześniejsze opisy stop-and-wait i 10ms pollingu są HISTORYCZNE. **Aktualny fi
 ## Zapis dwóch profili — 2026-11-04
 
 Obecny, fizycznie pokazany profil to oficjalnie **PP (Ping-Pong)**. Nie zamieniać jego ciągłego DATA↔ACK Payload w nowy tryb bez osobnego wyboru profilu. Niezmieniony punkt przywrócenia: `checkpoint/pp-2026-11-04` @ `784fd83`. Właściciel zamówił drugi profil **BURST20** z kwantami 5ms w stałej superramce20ms; aktualnie są tylko portable `burst20_schedule.h` i `profile_select.h`, brak rzeczywistego Burst PHY/runner, co ma pozostać jawne. Docelowy strap: **A1/PC1 internal pullup HIGH=PP, GND=BURST20**, A0 nadal rolą A/B. Jedyny firmware ma mieć PP i BURST po wykonaniu pełnej implementacji; do tego czasu `main.cpp` pozostaje uruchamiający PP. 32 ramki32B plus raport w5ms są fizycznie niemożliwe przy1Mbps. Przed pomiarem posługiwać się wyłącznie górnymi granicami i wyraźnie oznaczać estimates. Szczegóły w `burst-20ms.md`. 
+
+## Aktywna kolejka UART RX na `testy` — 2026-11-05
+
+- W `PP_TRAFFIC_MODE_UART_BRIDGE` przerwanie RX USART i `UartReliableStream` współdzielą **jeden** `RetainedByteRing` (256 fizycznych bajtów, 255 użytecznych). Nie wolno wprowadzać ponownie osobnych kopii `slots_[4][24]` ani tymczasowego BODY.
+- Cursor `write` należy do ISR, `prepared` i `acknowledged` do protokołu; 8-bitowe różnice pozycji są atomowe na AVR. Cztery deskryptory (start/długość) dotyczą okna DATA. Po przyjęciu aplikacyjnego `RX_LAST` przesuwany jest `acknowledged`, **bez zerowania danych**.
+- Retransmisja odczytuje ten sam obszar pamięci, w tym po zawinięciu indeksu 255→0. Serializacja BODY czyta pierścień bez dodatkowej tablicy. Brak danych nie wstrzymuje 8-bajtowych ramek IDLE.
+- `pauseHostInput` ma histerezę: ≤48 B wolnych ustawia PAUSE, ≥96 B zwalnia PAUSE. RealTerm/CH340 nie respektuje tego automatycznie; nie umieszczać bajtów statusowych w binarnym strumieniu i nie deklarować bezstratności bez flow control przy arbitralnym przeciążeniu.
+- Przed akceptacją zmian uruchomić `tests/run_host_tests.sh`, oba warianty `tests/build_avr.sh` oraz sprawdzić `pp_uart_burst_retained_test`, `uart_unthrottled_ingress_test` (model **współdzielonego** RX), regresje rekey/replay i bilans SRAM.

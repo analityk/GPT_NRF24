@@ -78,7 +78,7 @@ Wcześniejsze `cps≈21720` dotyczyły pełnego generatora RF,
 **nie** pełnego dupleksu przez UART; bez porównania dwóch
 capture nie potwierdzają bezstratności.
 
-RX UART ma 127 B użytecznej pojemności, TX też 127 B. Nie ma
+Od nowej wersji `testy` RX UART ma **255 B użytecznej pojemności** w jednym pierścieniu ACK-retained; TX UART nadal ma 127 B. Dane RX pozostają zajęte do aplikacyjnego ACK, a retransmisja czyta ten sam pierścień. Nie ma
 sygnalizacji RTS/CTS. Gdy radio nie nadąża, link padnie albo
 komputer wyśle dane w nadmiernym burst, **RX UART może zgubić
 bajty przed przyjęciem do retransmitowanego okna**. Radiowe ACK
@@ -100,3 +100,9 @@ porównywarka plików poprawnie wykrywa celowo wprowadzony nadmiarowy
 bajt. UART BRIDGE: 12712 B Flash, 961 B statycznego SRAM; SYNTHETIC
 RADIO: 19214 B Flash, 1139 B SRAM. Kompilacja i mock nie zastępują
 pomiaru dwóch prawdziwych RF-Nano.
+
+## Nowszy wariant z jednym retained ring (2026-11-05)
+
+Testy hostowe firmware: [CI #42101240883](https://github.com/analityk/GPT_NRF24/actions/runs/42101240883), 34/34 PASS, dwa profile AVR PASS. Nowy test obciąża równocześnie oba kierunki porcjami 255 B, sprawdza zawinięcie wskaźników po następnej porcji, brak zmiany danych przed ACK, poprawność odbioru i ramki IDLE. Wersja firmware bridge: 12724 B Flash, 1001 B statycznego SRAM. To nie jest jeszcze wynik dwóch fizycznych modułów.
+
+Przy RealTerm `Delays=0,0` nadal istnieje możliwość wejściowego przepełnienia: status `pauseHostInput()` wskazuje je **dla przyszłego hosta**, ale nie zatrzymuje samoczynnie napływu z CH340. Dopiero dwa porównane pliki Capture i osobno liczniki `rx_buffer_full/rx_overrun` rozstrzygną, czy fizyczny pełny dupleks przy 115200 działa stabilnie.

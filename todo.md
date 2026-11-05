@@ -355,3 +355,12 @@
 - [ ] Zmierzyć `rx_buffer_full/rx_overrun` po równoczesnym wysłaniu 255-bajtowych linii bez przerw wewnątrz linii, oraz porównać binarne capture obu portów.
 - [ ] Potwierdzić osobny reset A i B, przekroczenie indeksu 255, długie retransmisje pod tłumieniem RF i brak danych IDLE przy aktywnym kanale.
 - [ ] Jeśli pełne 115200 8N1 z obu hostów nie mieści się w przepustowości RF, podłączyć fizyczny flow control do `pauseHostInput` albo użyć nadawcy respektującego dwa bajty statusowe.
+
+### Weryfikacja implementacji retained ring — 2026-11-05
+
+- [x] Zmodyfikowano oczekiwania dwóch starszych testów, które zakładały opróżnianie `Port::input` zamiast przechowywania danych w nowym wspólnym pierścieniu; przy tym zachowano weryfikację liczby niesłanych bajtów.
+- [x] Włączono poprawny nagłówek `RetainedByteRing` w adapterze mostu; obie kompilacje AVR PASS.
+- [x] Test `uart_unthrottled_ingress_test` używa bezpośrednio współdzielonego retained ring jak UART na sprzęcie, a nie dwóch buforów pośrednich: 19 B/wymianę bez strat, 30 B/wymianę z wykrytym przepełnieniem.
+- [x] Dodano `pp_uart_burst_retained_test`: jednoczesne 255 B A→B oraz B→A, następna porcja 255 B z zawinięciem indeksów, byte-for-byte, pełne ACK, aktywne IDLE po opróżnieniu.
+- [x] CI [#42101240883](https://github.com/analityk/GPT_NRF24/actions/runs/42101240883): **34/34 testy hostowe PASS**, oba firmware AVR PASS. Bridge: 12724 B Flash, 1001 B statycznego SRAM; Synthetic: 19550 B Flash, 1439 B SRAM.
+- [ ] Test dwóch fizycznych płytek: równoległy `Send File` bez opóźnień, capture w obu kierunkach i `verify`, następnie 255-bajtowe linie, resety A i B oraz tłumienie RF. W razie różnic odczytać `rx_buffer_full` i `rx_overrun` bez domieszki diagnostyki w UART.
