@@ -31,6 +31,21 @@
   **25/25 host PASS; AVR PASS** (GitHub Actions `testy` run #93;
   `.text=20430`, `.data=96`, `.bss=939`, SRAM=1035/2048 B).
   Pomiar na dwóch płytkach nadal przed nami.
+- [x] **Sonda zmierzona na dwóch RF-Nano przy 2 Mb/s:**
+  `cyc≈1567 µs`, `spi≈180 µs`, `ack≈299 µs`, `rf≈610 µs`,
+  `cpu≈430 µs`, około 15,3 kB/s, `sid=22818`, `ret=bad=0`.
+  Odczyty `mk≈208 µs`, `pr≈133 µs`, `bg≈176 µs`.
+  Wynik i ograniczenia interpretacji zapisano w `history.md`.
+- [x] **Pierwsza optymalizacja SPI na `testy`:** blokowe przesłanie
+  komendy i danych w `SpiMaster`, bez wywołania funkcji dla każdego
+  bajtu; limit czasu pozostał osobny dla każdego bajtu. Przenośny
+  `Nrf24` automatycznie używa nowej metody albo starego API adaptera.
+  Testy z mockiem obu ścieżek i awarii CSN, **25/25 host PASS**.
+- [ ] **Fizycznie zweryfikować blokowe SPI:** ten sam HEX na A i B,
+  `sid/up/ret/bad` i powrót po resecie B/A. Zebrać `A us` z dobrego
+  zasięgu oraz `A cps/B cps`, porównać z bazą:
+  `spi=180`, `ack=299`, `cyc=1567` µs, około 15,3 kB/s.
+  Samo przyspieszenie SPI nie może pogorszyć niezawodności transmisji.
 - [ ] **F7 i ręczne F12 na obu RF-Nano.** Sprawdzić w RealTerm:
   start B→A i A→B, reset samego B, reset samego A, reset obu i
   odtworzenie po osłabieniu RF. Porównać `cps`, `arc/max`, `ret/bad`,

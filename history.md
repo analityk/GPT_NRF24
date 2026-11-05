@@ -632,3 +632,39 @@ Przyszłe wpisy powinny zawierać datę, zakres faktycznie wykonanej zmiany, com
   **1035/2048 B statycznego SRAM**; +61 B SRAM i +2690 B kodu
   względem poprzedniego nieinstrumentowanego eksperymentu.
   Wynik kompilacji nie zastępuje próby fizycznej i pomiaru narzutu sondy.
+
+## 2026-11-05 — pierwszy fizyczny pomiar faz PP, następnie blokowe SPI na `testy`
+
+- Właściciel wgrał sondę Timer1 na **obie** RF-Nano przy 2 Mb/s.
+  Zrzuty RealTerm `obraz(20261105-010529).png` i
+  `obraz(20261105-010439).png` pokazują przy dobrym RF wspólny
+  `sid=22818`, `up=1`, `ret=bad=0` i około **15,3 kB/s** w obu
+  kierunkach. Średnia z około 600–640 pełnych wymian na raport:
+  `cyc≈1567 µs`, `spi≈180 µs`, `grd≈16 µs`, `ce≈28 µs`,
+  `rf≈610 µs`, `ack≈299 µs`, `cpu≈430 µs`, `mk≈208 µs`,
+  `pr≈133 µs`, `bg≈176 µs`. `bg` nakłada się na `rf`;
+  `cpu` nie jest miarą całkowitego czasu wykonywania instrukcji CPU.
+  24 B / 1567 µs daje około 15,3 kB/s: spójność pomiaru z CPS.
+- `spi+ack≈479 µs`, znacznie więcej od samego przesłania około 74 B
+  przy sprzętowym SPI 8 MHz. W poprzedniej implementacji każdy bajt
+  wymagał osobnego wywołania `SpiMaster::transfer()` i sterowania
+  16-bitowym licznikiem timeoutu. To uzasadnia eksperyment z
+  przyspieszeniem obsługi blokowej, **nie dowodzi jeszcze** rozmiaru
+  możliwego zysku.
+- W jednej serii chwilowo spadło `cps` i `gen` nawet do około 100 B/s
+  bez zmiany SID i bez widocznych `ret/bad/arc`; następnie strumień
+  wrócił do ~15,3 kB/s. Bez osobnego stanu generatora i przepływu
+  nie przypisujemy przyczyny radiu.
+- Po zgodzie właściciela dodano do adaptera `SpiMaster`
+  `transferBlock(command,tx,rx,count,status)`: pojedyncza kontrola
+  trybu master, jeden cykl wywołania funkcji i bezpośredni dostęp
+  do `SPDR`/`SPSR` w pętli całej transakcji. Zachowano osobny timeout
+  **każdego bajtu**, zawartość RX/STATUS, CSN na granicach transakcji
+  i starsze `transfer(byte)`. Przenośny `Nrf24` wybiera blokową metodę
+  automatycznie przez C++11, a dla istniejących adapterów bez niej
+  pozostaje ścieżka jednobajtowa. Nie ma ISR SPI, dodatkowego bufora
+  ani zmiany fizycznego PP, SID, WINDOW4 i 2 Mb/s.
+- `nrf24_mock_test` obejmuje teraz obie ścieżki oraz błąd transmisji
+  danych po komendzie i zwolnienie CSN. Lokalnie **25/25 host PASS**;
+  pomiar sprzętowy nowej wersji i ustalenie rzeczywistego zysku
+  z `spi/ack/cyc` pozostają do wykonania. `main` nietknięty.

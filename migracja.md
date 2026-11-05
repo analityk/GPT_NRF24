@@ -1,4 +1,20 @@
-**NAJNOWSZY PUNKT KONTYNUACJI: 2026-11-05 — sonda Timer1 na `testy`, oczekuje na pomiar dwóch ATmeg.**
+**NAJNOWSZY PUNKT KONTYNUACJI: 2026-11-05 — pomiar Timer1 potwierdzony, blokowe SPI na `testy` do weryfikacji AVR i RF-Nano.**
+Właściciel wgrał sondę na dwie RF-Nano: przy 2 Mb/s i SID=22818,
+`ret=bad=0` oraz około 15,3 kB/s wyniki Timer1 to
+`cyc≈1567`, `spi≈180`, `grd≈16`, `ce≈28`, `rf≈610`,
+`ack≈299`, `cpu≈430`, `mk≈208`, `pr≈133`, `bg≈176` µs.
+To **rzeczywisty pomiar starszej implementacji SPI**, nie nowej
+optymalizacji. Samo SPI zapisu i odczytu ACK pochłania około 479 µs.
+Po zgodzie właściciela na `testy` dodano `SpiMaster::transferBlock()`
+oraz kompilacyjny wybór tej metody w `Nrf24`; starszy jednobajtowy
+interfejs i mocki nie są łamane. Nowy transfer nie potrzebuje ISR,
+bufora ani dodatkowego protokołu, utrzymuje osobny timeout na bajt
+i sprzętowe 8 MHz. Host **25/25 PASS**. Następny krok: wynik AVR CI,
+następnie F7/ręczne F12 na obu płytkach i porównanie
+`spi/ack/cyc/cps` ze wskazaną bazą, również po resetach A/B.
+**Brak jeszcze zmierzonego zysku blokowego SPI; `main` bez zmian.**
+
+**Poprzedni punkt kontynuacji: 2026-11-05 — sonda Timer1 na `testy`, przed pierwszym pomiarem.**
 Właściciel potwierdził na RF-Nano nieblokujący PP: około 13,3 kB/s
 przy 1 Mb/s i po ręcznej zmianie około 16,1 kB/s przy 2 Mb/s,
 `ret=bad=0`, reset B powraca prawidłowo. To obserwacje **sprzed

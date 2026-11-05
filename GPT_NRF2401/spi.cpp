@@ -24,18 +24,37 @@ void SpiMaster::setSpeed(Speed speed) {
 }
 
 bool SpiMaster::transfer(uint8_t outgoing, uint8_t& incoming) {
+    return transferBlock(outgoing,0,0,0,&incoming);
+}
+
+bool SpiMaster::transferBlock(uint8_t command,const uint8_t* tx,
+                              uint8_t* rx,uint8_t count,
+                              uint8_t* statusByte) {
     if (!(SPCR & _BV(MSTR))) {
         ++timeouts_;
         return false;
     }
-    SPDR = outgoing;
-    uint16_t remaining = 20000U;
+    SPDR=command;
+    uint16_t remaining=SPI_MASTER_BYTE_TIMEOUT_POLLS;
     while (!(SPSR & _BV(SPIF))) {
-        if (--remaining == 0U) {
+        if (--remaining==0U) {
             ++timeouts_;
             return false;
         }
     }
-    incoming = SPDR; // SPIF cleared by reading SPSR then SPDR
+    const uint8_t commandStatus=SPDR;
+    if(statusByte)*statusByte=commandStatus;
+    for(uint8_t i=0;i<count;++i) {
+        SPDR=tx?tx[i]:SPI_MASTER_READ_FILL_BYTE;
+        remaining=SPI_MASTER_BYTE_TIMEOUT_POLLS;
+        while(!(SPSR & _BV(SPIF))) {
+            if(--remaining==0U) {
+                ++timeouts_;
+                return false;
+            }
+        }
+        const uint8_t received=SPDR;
+        if(rx)rx[i]=received;
+    }
     return true;
 }

@@ -5,9 +5,13 @@
 
 #define NRF24_RF_SETUP_1_MBPS 0x06U
 #define NRF24_RF_SETUP_2_MBPS 0x0EU
+#define NRF24_SPI_READ_FILL_BYTE 0xFFU
 
 // A testable nRF24L01+ SPI command/registry/FIFO layer.
 // Spi must implement begin() and bool transfer(uint8_t, uint8_t&).
+// Optional transferBlock(command,tx,rx,count,status) executes the entire
+// command/data sequence without per-byte calls. Legacy SPI adapters use
+// the byte API without a runtime or AVR-specific dependency.
 // Pin must implement set() (HIGH) and clear() (LOW).
 // No heap, no virtual dispatch, no clock waits and no MCU dependencies.
 // CE timing and TX/RX state transitions belong to the future MAC/controller.
@@ -220,22 +224,35 @@ private:
     // One CE-independent SPI transaction; releases CSN even on SPI failure.
     bool transaction(uint8_t command, const uint8_t* tx,
                      uint8_t* rx, uint8_t count, uint8_t* statusByte) {
-        uint8_t received=0;
+        if(statusByte)*statusByte=0;
         csn_.clear();
-        bool ok = spi_.transfer(command, received);
-        if (statusByte) *statusByte=received;
-        if (ok) {
-            for (uint8_t i=0; i<count; ++i) {
-                const uint8_t outgoing=tx ? tx[i] : 0xFFU;
-                if (!spi_.transfer(outgoing, received)) {
-                    ok=false;
-                    break;
-                }
-                if (rx) rx[i]=received;
-            }
-        }
+        const bool ok=exchangeSpi(spi_,command,tx,rx,count,statusByte,0);
         csn_.set();
         return ok;
+    }
+
+    template<class Device>
+    static auto exchangeSpi(Device& device,uint8_t command,
+                            const uint8_t* tx,uint8_t* rx,uint8_t count,
+                            uint8_t* statusByte,int)
+        -> decltype(device.transferBlock(command,tx,rx,count,statusByte)) {
+        return device.transferBlock(command,tx,rx,count,statusByte);
+    }
+
+    // C++11 compile-time fallback: preserve SPI mocks and older adapters.
+    template<class Device>
+    static bool exchangeSpi(Device& device,uint8_t command,
+                            const uint8_t* tx,uint8_t* rx,uint8_t count,
+                            uint8_t* statusByte,long) {
+        uint8_t received=0;
+        if(!device.transfer(command,received))return false;
+        if(statusByte)*statusByte=received;
+        for(uint8_t i=0;i<count;++i) {
+            const uint8_t outgoing=tx?tx[i]:NRF24_SPI_READ_FILL_BYTE;
+            if(!device.transfer(outgoing,received))return false;
+            if(rx)rx[i]=received;
+        }
+        return true;
     }
 };
 #endif

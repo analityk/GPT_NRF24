@@ -3,6 +3,9 @@
 #include <stdint.h>
 #include <string.h>
 
+#define NRF24_BLOCK_TEST_FRAME_WIDTH 32U
+#define NRF24_BLOCK_TEST_PATTERN_FACTOR 7U
+
 struct SpiMock {
     bool selected=false;
     bool fail=false;
@@ -66,6 +69,28 @@ struct SpiMock {
             else if (reg==0x10 && index<5) in=txAddress[index];
             else in=regs[reg];
         } else in=0;
+        return true;
+    }
+};
+
+// Exposes the same wire protocol through a command+block API. The Nrf24
+// template must select it at compile time while retaining the legacy
+// transfer(byte) interface for all existing SPI backends.
+struct BlockSpiMock : SpiMock {
+    unsigned blocks=0;
+    bool failAfterCommand=false;
+    bool transferBlock(uint8_t command,const uint8_t* tx,uint8_t* rx,
+                       uint8_t count,uint8_t* statusByte) {
+        ++blocks;
+        uint8_t received=0;
+        if(!SpiMock::transfer(command,received))return false;
+        if(statusByte)*statusByte=received;
+        for(uint8_t i=0;i<count;++i) {
+            if(failAfterCommand)return false;
+            if(!SpiMock::transfer(tx?tx[i]:NRF24_SPI_READ_FILL_BYTE,
+                                  received))return false;
+            if(rx)rx[i]=received;
+        }
         return true;
     }
 };
@@ -169,4 +194,36 @@ int main() {
     Nrf24<SpiMock,PinMock> failed(badSpi,bCe,bCsn);
     assert(failed.probeAndConfigure().result==Radio::Result::SPI_ERROR);
     assert(!badSpi.selected && bCsn.high);
+
+    // Fast-path API: command STATUS, TX and RX block contents are
+    // unchanged, and CSN is always released when a data byte fails.
+    BlockSpiMock block;
+    PinMock blockCe(block,false),blockCsn(block,true);
+    typedef Nrf24<BlockSpiMock,PinMock> BlockRadio;
+    BlockRadio blockRadio(block,blockCe,blockCsn);
+    assert(blockRadio.probeAndConfigure(NRF24_RF_SETUP_2_MBPS).result==
+           BlockRadio::Result::OK);
+    assert(block.blocks>0U);
+    assert(block.regs[Radio::RF_SETUP]==NRF24_RF_SETUP_2_MBPS);
+    uint8_t blockPacket[NRF24_BLOCK_TEST_FRAME_WIDTH]={};
+    uint8_t readPacket[NRF24_BLOCK_TEST_FRAME_WIDTH]={};
+    for(uint8_t i=0;i<NRF24_BLOCK_TEST_FRAME_WIDTH;++i)
+        blockPacket[i]=static_cast<uint8_t>(i*NRF24_BLOCK_TEST_PATTERN_FACTOR);
+    assert(blockRadio.writeDynamicPayload(blockPacket,
+                                         NRF24_BLOCK_TEST_FRAME_WIDTH));
+    assert(block.txPayloadCount==NRF24_BLOCK_TEST_FRAME_WIDTH);
+    assert(memcmp(block.txPayload,blockPacket,
+                  NRF24_BLOCK_TEST_FRAME_WIDTH)==0);
+    memcpy(block.rxPayload,blockPacket,NRF24_BLOCK_TEST_FRAME_WIDTH);
+    uint8_t blockWidth=0;
+    assert(blockRadio.readDynamicPayload(readPacket,blockWidth));
+    assert(blockWidth==NRF24_BLOCK_TEST_FRAME_WIDTH);
+    assert(memcmp(readPacket,blockPacket,NRF24_BLOCK_TEST_FRAME_WIDTH)==0);
+    uint8_t blockStatus=0;
+    assert(blockRadio.status(blockStatus));
+    assert(blockStatus==block.regs[Radio::STATUS]);
+    block.failAfterCommand=true;
+    assert(!blockRadio.writeDynamicPayload(blockPacket,
+                                          NRF24_BLOCK_TEST_FRAME_WIDTH));
+    assert(!block.selected && blockCsn.high);
 }
