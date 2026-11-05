@@ -787,3 +787,5 @@ Usunięto drugą kopię 24-bajtowego segmentu w
 `UartReliableStream::makeTraced`, zachowując cache do retransmisji.
 Jest to zmiana programowa wymagająca jeszcze testu na fizycznych
 urządzeniach. Granica wydajności ATmega328P nie została wykazana.
+
+**Weryfikacja CI tej zmiany:** GitHub Actions [#42058415426](https://github.com/analityk/GPT_NRF24/actions/runs/42058415426) PASS, 31 testów hostowych PASS oraz AVR-GCC PASS: `.text=19214`, `.data=96`, `.bss=1043`, statyczny SRAM **1139/2048 B**. Wydajność i odzyskiwanie połączenia na nowej wersji pozostają do testu sprzętowego.

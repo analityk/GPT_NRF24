@@ -15,6 +15,8 @@
   samodzielne resety A i B, raporty `ret/bad`, osłabienie RF;
   dopiero po próbie rozważyć dalsze optymalizacje.
 
+- [x] CI commita `0ec12ca`: 31/31 testów hostowych PASS, AVR-GCC PASS, `.text=19214`, `.data=96`, `.bss=1043`, SRAM **1139/2048 B** ([Actions #42058415426](https://github.com/analityk/GPT_NRF24/actions/runs/42058415426)).
+
 ## Szybka ścieżka SPI i odroczony ACK — 2026-11-05, `testy`
 
 - [x] Ustalono granicę sprzętową: z `W_TX_PAYLOAD` nie odczytuje się

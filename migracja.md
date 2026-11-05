@@ -381,3 +381,8 @@ powtórnego kopiowania. Zachowana semantyka protokołu i cache.
 Po F7/ręcznym F12 zmierzyć nowe `A cps`, `B cps` i `A hot` oraz
 osobne resety A/B. Porównaj ze sprzętowym punktem ~18,8kB/s,
 ale uwzględnij mniejszy narzut diagnostyki.
+
+CI kodu `0ec12ca`: 31/31 testów hostowych i AVR PASS
+([Actions #42058415426](https://github.com/analityk/GPT_NRF24/actions/runs/42058415426)),
+`.text=19214`, `.data=96`, `.bss=1043`, statycznie **1139/2048 B SRAM**.
+Nowych wartości `A hot` ani `cps` nie zmierzono jeszcze sprzętowo.
