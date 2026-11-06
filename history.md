@@ -862,3 +862,5 @@ liczników, nasycenia czasu, końca pauzy ACK, nowego okna oraz
 maksymalnej długości faktycznego formatera PASS; pełne 35 testów
 hostowych PASS. Lokalny AVR-GCC niedostępny; walidacja AVR w CI
 pozostaje wymagana. Nie wykonano testu fizycznego nowego wsadu.
+
+**Weryfikacja 9bff1be:** [CI #42144837039](https://github.com/analityk/GPT_NRF24/actions/runs/42144837039) PASS: 35 testów hostowych, porównywarka capture i trzy buildy AVR-GCC 14.2.0. Diagnostyczny bridge: text=19532, data=96, bss=1157, statyczny SRAM=1253 B (795 B przed stosem). Czysty bridge: text=12724, data=96, bss=905, SRAM=1001 B. Synthetic: text=19550, data=96, bss=1343, SRAM=1439 B. Rozmiary czystego bridge i synthetic bez zmian. To nie jest wynik Microchip Studio ani testu urządzeń; instrumentacja diagnostyczna ma koszt CPU i nie służy do końcowego odbioru osiągów.

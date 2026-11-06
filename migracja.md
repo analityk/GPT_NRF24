@@ -7,7 +7,8 @@ nie ma dowodu trwałego zakleszczenia. Źródło MAX_RT nierozstrzygnięte.
 Nowy monitor po ciszy pokazuje pierwsze k=0 MAX_RT, k=1 replay,
 k=2 bad, k=3 RX full wraz z czasem i stanem buforów; rozdzielczość
 około 10 ms, niezależne zegary A/B. Bez zmiany ISR/PHY/PP.
-Host 35/35 PASS, lokalnie brak AVR-GCC; sprawdzić CI przed F7/F12.
+CI #42144837039 dla 9bff1be PASS: 35 host, porównywarka i trzy AVR.
+SRAM diagnostic 1253 B, clean 1001 B, synthetic 1439 B (GCC 14.2.0).
 To narzędzie diagnostyczne, nie potwierdzona naprawa przepustowości.
 Następnie powtórzyć Delays=0,20 i 0,15, zachować komplet raportów.
 `main` nie dotykać. Starsze punkty poniżej są historią.

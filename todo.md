@@ -5,7 +5,8 @@
 - [x] Analiza SID 7556, kodu i LSS/MAP: `pp-duplex-analysis.md`.
 - [x] Chronologia pierwszych obserwacji błędów i pauz APP_ACK,
   przenośna logika z regresjami, bez instrumentowania ISR.
-- [ ] Potwierdzić trzy buildy AVR w CI i bilans SRAM.
+- [x] CI #42144837039 PASS: 35 host, porównywarka i trzy AVR.
+  SRAM: diagnostic 1253 B, clean 1001 B, synthetic 1439 B.
 - [ ] F7/F12 obu, komplet raportów przy 0,20 i 0,15, później 0,0;
   ustalić porządek zdarzeń na każdej płytce, stan okna i kredytu
   przy overflow. Kolejność w jednej 10ms próbce nierozstrzygnięta.
