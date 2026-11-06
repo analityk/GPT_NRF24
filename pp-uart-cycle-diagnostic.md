@@ -51,10 +51,10 @@ nie wartościami oczekiwanymi):
 
 ```text
 A uart in=... out=... full=... dor=... fe=... free=...
-A pp ack=... rx=... ret=... blk=... bad=... win=... cr=... sid=...
+A pp ack=... rx=... ret=... blk=... bad=... win=... cr=... hw=... mx=... sid=...
 A rf n=... cyc=... lo=... hi=...
 B uart in=... out=... full=... dor=... fe=... free=...
-B pp ack=... rx=... ret=... blk=... bad=... win=... cr=... sid=...
+B pp ack=... rx=... ret=... blk=... bad=... win=... cr=... af=... rf=... sid=...
 ```
 
 Znaczenie:
@@ -68,14 +68,23 @@ Znaczenie:
 - `pp ack` — bajty, które odbiorca po drugiej stronie potwierdził
   aplikacyjnie. `pp rx` — bajty zaakceptowane lokalnie z radia
   do bufora wyjściowego UART.
+- `hw` (A) — suma sprzętowych retransmisji nRF24 (ARC_CNT);
+  `mx` — liczba zdarzeń MAX_RT. To **inne liczniki** niż `ret`
+  (powtórzenia Go-Back-N w protokole PP).
+- `af` (B) — liczba prób dopisania ACK Payload do pełnego TX FIFO
+  odbiornika; `rf` — liczba odczytów RX FIFO stwierdzających FULL.
+  `af` i `rf` są licznikami obserwacji pełnych FIFO, nie liczbą
+  utraconych pakietów.
+  Duże `ret` przy niewielkim `hw` sugeruje opóźnione potwierdzenia,
+  kolejkę ACK lub wyzwalanie Go-Back-N bez błędów warstwy radiowej.
 - `ret` — retransmitowane ramki PP, `blk` — odrzucone przyjęcie
   pakietu z powodu pełnego UART TX, `bad` — błędy kolejności ramek,
   `win` — aktualnie niepotwierdzone ramki, `cr` — aktualny
   kredyt ogłoszony przez partnera, `sid` — sesja radiowa.
 - `A rf n/cyc/lo/hi` — liczba, średnia, minimum, maksimum
-  poprawnych pełnych cykli w mikrosekundach. `n=0` oznacza,
-  że próba nie dostarczyła wystarczającej liczby (co najmniej 32)
-  pełnych wymian 32 B↔32 B bez retransmisji.
+  poprawnych cykli z DATA w przynajmniej jednym kierunku. `n=0`
+  oznacza mniej niż 32 takie wymiany bez retransmisji sprzętowych;
+  długość payloadu może być różna od 32 B.
 
 ## Rozstrzygnięcie
 

@@ -373,3 +373,6 @@
 - [x] Dodano test portable ciszy, powtarzanych przerw 10ms, overflow16 i długości tekstu. Pierwsze CI [#42108719539](https://github.com/analityk/GPT_NRF24/actions/runs/42108719539): **35/35 testy hostowe PASS**, oba AVR PASS, BRIDGE statyczne SRAM 1107B, FLASH 15884B.
 - [ ] Wykonać 2×RealTerm bez zwory TX–RX, `Delays=0,20` i `0,10`, odczytać komplet pięciu linii diagnostyki, porównać A/B osobno.
 - [ ] Po zakończeniu pomiarów wyłączyć `PP_UART_DIAG_ENABLED` do powrotu do binarnego byte-exact capture i ocenić konieczność modyfikacji konkretnego wąskiego gardła.
+
+- [x] Rozdzielono retransmisje PP od sprzętowego ARC: `A pp hw/mx` i `B pp af/rf` są dopisywane do istniejącego raportu po ciszy. Nie zmieniono PHY, protokołu ani momentu emisji.
+- [ ] Próba `Delays=0,20` i `0,15`: porównać `A hw/mx` z `B ret` i `B af/rf`. Przed optymalizacją Go-Back-N ustalić, czy w ogóle istnieje rzeczywista strata radiowa.

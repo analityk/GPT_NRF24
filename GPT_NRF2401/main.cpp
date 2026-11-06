@@ -152,6 +152,10 @@ static PpUartDiagSnapshot uartDiagnosticSnapshot(){
 	snapshot.retries=stream.retransmits();
 	snapshot.blocked=stream.blocked();
 	snapshot.bad=stream.badFrames();
+	snapshot.hwArc=static_cast<uint16_t>(hardwareRetries);
+	snapshot.maxRt=static_cast<uint16_t>(maxRetries);
+	snapshot.ackFifoFull=ackFifoFull;
+	snapshot.rxFifoFull=phy.rxFifoFullSamples();
 	snapshot.sid=session.sid();
 	snapshot.outstanding=stream.outstanding();
 	snapshot.credit=linkState.peerCredit();
@@ -208,6 +212,17 @@ static void serviceUartDiagnostic(){
 		line.decimal(queuedDiagnostic.outstanding);
 		line.word(" cr=");
 		line.decimal(queuedDiagnostic.credit);
+		if(isLeader){
+			line.word(" hw=");
+			line.decimal(queuedDiagnostic.hwArc);
+			line.word(" mx=");
+			line.decimal(queuedDiagnostic.maxRt);
+		} else {
+			line.word(" af=");
+			line.decimal(queuedDiagnostic.ackFifoFull);
+			line.word(" rf=");
+			line.decimal(queuedDiagnostic.rxFifoFull);
+		}
 		line.word(" sid=");
 		line.decimal(queuedDiagnostic.sid);
 		line.word("\r\n");

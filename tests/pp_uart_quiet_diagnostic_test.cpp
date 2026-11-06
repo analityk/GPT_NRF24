@@ -12,6 +12,10 @@
 #define DIAG_TEST_SAMPLE_OVERFLOW_BYTES 7U
 #define DIAG_TEST_SAMPLE_RETRIES 4U
 #define DIAG_TEST_SAMPLE_BLOCKED 2U
+#define DIAG_TEST_SAMPLE_HW_ARC 9U
+#define DIAG_TEST_SAMPLE_MAX_RT 1U
+#define DIAG_TEST_SAMPLE_ACK_FULL 13U
+#define DIAG_TEST_SAMPLE_RX_FIFO_FULL 3U
 #define DIAG_TEST_SAMPLE_SID 0x5678U
 #define DIAG_TEST_SAMPLE_FREE 79U
 #define DIAG_TEST_SAMPLE_CREDIT 3U
@@ -34,6 +38,10 @@ static void testQuietGapAndProgress(){
 	s.rxFull=DIAG_TEST_SAMPLE_OVERFLOW_BYTES;
 	s.retries=DIAG_TEST_SAMPLE_RETRIES;
 	s.blocked=DIAG_TEST_SAMPLE_BLOCKED;
+	s.hwArc=DIAG_TEST_SAMPLE_HW_ARC;
+	s.maxRt=DIAG_TEST_SAMPLE_MAX_RT;
+	s.ackFifoFull=DIAG_TEST_SAMPLE_ACK_FULL;
+	s.rxFifoFull=DIAG_TEST_SAMPLE_RX_FIFO_FULL;
 	s.sid=DIAG_TEST_SAMPLE_SID;
 	s.freeInput=DIAG_TEST_SAMPLE_FREE;
 	s.credit=DIAG_TEST_SAMPLE_CREDIT;
@@ -51,6 +59,10 @@ static void testQuietGapAndProgress(){
 	assert(report.rxFull==DIAG_TEST_SAMPLE_OVERFLOW_BYTES);
 	assert(report.retries==DIAG_TEST_SAMPLE_RETRIES);
 	assert(report.blocked==DIAG_TEST_SAMPLE_BLOCKED);
+	assert(report.hwArc==DIAG_TEST_SAMPLE_HW_ARC);
+	assert(report.maxRt==DIAG_TEST_SAMPLE_MAX_RT);
+	assert(report.ackFifoFull==DIAG_TEST_SAMPLE_ACK_FULL);
+	assert(report.rxFifoFull==DIAG_TEST_SAMPLE_RX_FIFO_FULL);
 	assert(report.sid==DIAG_TEST_SAMPLE_SID);
 	assert(report.freeInput==DIAG_TEST_SAMPLE_FREE);
 	assert(report.credit==DIAG_TEST_SAMPLE_CREDIT);
@@ -89,15 +101,21 @@ static void testWrapAndHardwareOverflow(){
 	uint32_t now=DIAG_TEST_START_TICKS;
 	s.uartRx=DIAG_TEST_WRAP_FIRST;
 	s.rxOverrun=DIAG_TEST_WRAP_FIRST;
+	s.hwArc=DIAG_TEST_WRAP_FIRST;
+	s.ackFifoFull=DIAG_TEST_WRAP_FIRST;
 	assert(!watcher.observe(now,s,report));
 	s.uartRx=DIAG_TEST_WRAP_SECOND;
 	s.rxOverrun=DIAG_TEST_WRAP_SECOND;
+	s.hwArc=DIAG_TEST_WRAP_SECOND;
+	s.ackFifoFull=DIAG_TEST_WRAP_SECOND;
 	now+=DIAG_TEST_INTERVAL_TICKS;
 	assert(!watcher.observe(now,s,report));
 	now+=DIAG_TEST_SAMPLE_QUIET_TICKS;
 	assert(watcher.observe(now,s,report));
 	assert(report.uartRx==DIAG_TEST_WRAP_DELTA);
 	assert(report.rxOverrun==DIAG_TEST_WRAP_DELTA);
+	assert(report.hwArc==DIAG_TEST_WRAP_DELTA);
+	assert(report.ackFifoFull==DIAG_TEST_WRAP_DELTA);
 }
 
 static void testLineLength(){
@@ -110,6 +128,20 @@ static void testLineLength(){
 	line.decimal(DIAG_TEST_SAMPLE_RX_BYTES);
 	assert(line.length()!=0);
 	assert(line.length()<=PP_UART_DIAG_LINE_FREE_BYTES);
+	// Worst-case 16-bit decimal values from the actual A/B PP report.
+	PpStressLine status;
+	status.word("A pp ack=");status.decimal(UINT16_MAX);
+	status.word(" rx=");status.decimal(UINT16_MAX);
+	status.word(" ret=");status.decimal(UINT16_MAX);
+	status.word(" blk=");status.decimal(UINT16_MAX);
+	status.word(" bad=");status.decimal(UINT16_MAX);
+	status.word(" win=");status.decimal(UINT8_MAX);
+	status.word(" cr=");status.decimal(UINT8_MAX);
+	status.word(" hw=");status.decimal(UINT16_MAX);
+	status.word(" mx=");status.decimal(UINT16_MAX);
+	status.word(" sid=");status.decimal(UINT16_MAX);
+	status.word("\r\n");
+	assert(status.length()<=PP_UART_DIAG_LINE_FREE_BYTES);
 }
 
 int main(){

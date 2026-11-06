@@ -14,11 +14,13 @@
 struct PpUartDiagSnapshot {
 	uint16_t uartRx,uartTx,rxFull,rxOverrun,rxFraming;
 	uint16_t acknowledged,accepted,retries,blocked,bad;
+	uint16_t hwArc,maxRt,ackFifoFull,rxFifoFull;
 	uint16_t sid;
 	uint8_t outstanding,credit,freeInput;
 	PpUartDiagSnapshot():
 		uartRx(0),uartTx(0),rxFull(0),rxOverrun(0),rxFraming(0),
 		acknowledged(0),accepted(0),retries(0),blocked(0),bad(0),
+		hwArc(0),maxRt(0),ackFifoFull(0),rxFifoFull(0),
 		sid(0),outstanding(0),credit(0),freeInput(0){
 	}
 };
@@ -26,11 +28,13 @@ struct PpUartDiagSnapshot {
 struct PpUartDiagReport {
 	uint16_t uartRx,uartTx,rxFull,rxOverrun,rxFraming;
 	uint16_t acknowledged,accepted,retries,blocked,bad;
+	uint16_t hwArc,maxRt,ackFifoFull,rxFifoFull;
 	uint16_t sid;
 	uint8_t outstanding,credit,freeInput;
 	PpUartDiagReport():
 		uartRx(0),uartTx(0),rxFull(0),rxOverrun(0),rxFraming(0),
 		acknowledged(0),accepted(0),retries(0),blocked(0),bad(0),
+		hwArc(0),maxRt(0),ackFifoFull(0),rxFifoFull(0),
 		sid(0),outstanding(0),credit(0),freeInput(0){
 	}
 };
@@ -85,6 +89,12 @@ public:
 		report.blocked=static_cast<uint16_t>(
 			current.blocked-begin_.blocked);
 		report.bad=static_cast<uint16_t>(current.bad-begin_.bad);
+		report.hwArc=static_cast<uint16_t>(current.hwArc-begin_.hwArc);
+		report.maxRt=static_cast<uint16_t>(current.maxRt-begin_.maxRt);
+		report.ackFifoFull=static_cast<uint16_t>(
+			current.ackFifoFull-begin_.ackFifoFull);
+		report.rxFifoFull=static_cast<uint16_t>(
+			current.rxFifoFull-begin_.rxFifoFull);
 		report.sid=current.sid;
 		report.outstanding=current.outstanding;
 		report.credit=current.credit;
