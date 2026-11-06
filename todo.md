@@ -1,5 +1,24 @@
 # TODO — aktywny transport dwukierunkowy UART / ACK Payload
 
+## Priorytet 2026-11-06 — przyczyna MAX_RT i overflow B
+
+- [x] Analiza SID 7556, kodu i LSS/MAP: `pp-duplex-analysis.md`.
+- [x] Chronologia pierwszych obserwacji błędów i pauz APP_ACK,
+  przenośna logika z regresjami, bez instrumentowania ISR.
+- [ ] Potwierdzić trzy buildy AVR w CI i bilans SRAM.
+- [ ] F7/F12 obu, komplet raportów przy 0,20 i 0,15, później 0,0;
+  ustalić porządek zdarzeń na każdej płytce, stan okna i kredytu
+  przy overflow. Kolejność w jednej 10ms próbce nierozstrzygnięta.
+- [ ] Rozdzielić przyczynę sprzętowych MAX_RT: testy jednego kierunku
+  i obu, następnie pojedynczo zmieniany dystans/moc/kanał/SPI.
+- [ ] Dodać model wejścia UART według czasu, niezależny od tempa RF,
+  z rzeczywistą semantyką trzech pozycji ACK FIFO i powtórek ESB.
+- [ ] Usunąć statyczną pamięć skonstruowanych, wyłączonych sond
+  (190 B w dostarczonym MAP), zachowując osobne buildy diagnostyczne.
+- [ ] Cel pozostaje otwarty: 11520 B/s w obu kierunkach byte-for-byte,
+  latencja małych wiadomości oraz recovery na fizycznym sprzęcie.
+
+
 ## Test rzeczywistego pełnego dupleksu UART — 2026-11-05, `testy`
 
 - [x] Przełączono domyślne źródło/sink testowy na przezroczysty

@@ -109,3 +109,29 @@ lub restartu między próbami; pomiar dotyczy wydzielonego okna
 aktywności, nie czasu od uruchomienia mikrokontrolera.
 Wynik testów hostowych i kompilacji AVR nie zastępuje zrzutu
 z fizycznych płytek.
+
+## Chronologia i zatrzymanie APP_ACK — 2026-11-06
+
+Po dotychczasowych liniach pojawia się `A/B wait minfree=... ackpause_ms=...`
+i do czterech `A/B event k=... ms=... mx=... ret=... bad=... full=... win=... cr=... free=...`.
+
+- `k=0`: pierwszy zaobserwowany wzrost MAX_RT; `k=1`: replay PP;
+  `k=2`: bad/out-of-order; `k=3`: odrzucenie wejścia UART przez pełny ring.
+- `ms`: czas od pierwszej próbki aktywności danego okna pomiaru.
+  Zdarzenia są wypisywane w kolejności **kategorii**, nie czasu.
+  Porządek ocenia się po `ms`; jednakowy czas nie ustala przyczynowości.
+- Liczniki w linii zdarzenia są przyrostami od początku okna, a
+  `win/cr/free` stanem w tej próbce, nie po zakończeniu pliku.
+- `minfree`: minimum próbek co około 10 ms, może nie uchwycić zera
+  mimo `full>0`. `ackpause_ms`: najdłuższy zaobserwowany odstęp bez
+  postępu APP_ACK przy niepustym wejściu lub oknie; rozdzielczość
+  ograniczona próbkowaniem. Zdrowe ACK w każdej próbce mogą dać ~10 ms.
+- Czasy nasycają się przy 65535 ms. Brak zdarzenia oznacza brak jego
+  linii. Zdarzenia sprzed rozpoczęcia okna nie są do niego dopisywane.
+- A i B mają niezależny początek pomiaru: nie odejmować ich `ms`.
+- Tekst po ciszy nadal nie jest kanałem bezkolizyjnym dla danych:
+  należy poczekać na zakończenie wszystkich raportów przed nowym plikiem.
+  Do ciągłego binarnego ruchu wyłączyć diagnostykę.
+
+Pełna interpretacja zrzutu SID 7556 i granice wniosków:
+[pp-duplex-analysis.md](pp-duplex-analysis.md).

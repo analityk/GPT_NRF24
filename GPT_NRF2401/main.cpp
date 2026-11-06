@@ -116,9 +116,10 @@ static bool previousRfStartValid=false;
 static bool previousRfDataExchange=false;
 
 enum class UartDiagnosticPhase : uint8_t {
-	OBSERVE,UART_COUNTS,PROTOCOL_COUNTS,RF_CYCLE
+	OBSERVE,UART_COUNTS,PROTOCOL_COUNTS,RF_CYCLE,TRACE
 };
 static UartDiagnosticPhase uartDiagnosticPhase=UartDiagnosticPhase::OBSERVE;
+static uint8_t uartDiagnosticTraceIndex=0;
 
 // One timing region: PTX start-to-start after a successful radio exchange
 // carrying DATA in at least one direction (variable payload lengths).
@@ -226,7 +227,7 @@ static void serviceUartDiagnostic(){
 		line.word(" sid=");
 		line.decimal(queuedDiagnostic.sid);
 		line.word("\r\n");
-	} else {
+	} else if(uartDiagnosticPhase==UartDiagnosticPhase::RF_CYCLE){
 		PpShortProbeWindow::Snapshot cycle;
 		if(rfCycleProbe.sample(cycle)){
 			line.word("A rf n=");
@@ -241,6 +242,15 @@ static void serviceUartDiagnostic(){
 		} else {
 			line.word("A rf n=0 (no valid DATA exchange sample)\r\n");
 		}
+	} else {
+		while(!formatPpUartDiagTrace(line,isLeader,queuedDiagnostic.trace,
+			uartDiagnosticTraceIndex)){
+			++uartDiagnosticTraceIndex;
+			if(uartDiagnosticTraceIndex>PP_UART_DIAG_EVENT_COUNT){
+				uartDiagnosticPhase=UartDiagnosticPhase::OBSERVE;
+				return;
+			}
+		}
 	}
 	if(!line.emit(uart)){
 		return;
@@ -252,9 +262,15 @@ static void serviceUartDiagnostic(){
 	} else if(uartDiagnosticPhase==UartDiagnosticPhase::PROTOCOL_COUNTS &&
 		isLeader){
 		uartDiagnosticPhase=UartDiagnosticPhase::RF_CYCLE;
-	} else {
-		uartDiagnosticPhase=UartDiagnosticPhase::OBSERVE;
+	} else if(uartDiagnosticPhase!=UartDiagnosticPhase::TRACE){
+		uartDiagnosticPhase=UartDiagnosticPhase::TRACE;
+		uartDiagnosticTraceIndex=0;
 		rfCycleProbe.clear();
+	} else {
+		++uartDiagnosticTraceIndex;
+		if(uartDiagnosticTraceIndex>PP_UART_DIAG_EVENT_COUNT){
+			uartDiagnosticPhase=UartDiagnosticPhase::OBSERVE;
+		}
 	}
 }
 #else

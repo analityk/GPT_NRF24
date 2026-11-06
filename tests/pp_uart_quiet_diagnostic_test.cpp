@@ -144,9 +144,118 @@ static void testLineLength(){
 	assert(status.length()<=PP_UART_DIAG_LINE_FREE_BYTES);
 }
 
+#define DIAG_TRACE_BACKLOG_BYTES 80U
+#define DIAG_TRACE_WINDOW 4U
+#define DIAG_TRACE_CLOCK_WRAP_START (UINT32_MAX-DIAG_TEST_INTERVAL_TICKS)
+#define DIAG_TRACE_DELAY_INTERVALS 3U
+#define DIAG_TRACE_ALL_EVENTS_MASK ((1U<<PP_UART_DIAG_EVENT_COUNT)-1U)
+
+static void testFirstEventsAndAckPause(){
+	PpUartQuietDiagnostic watcher;
+	PpUartDiagSnapshot s;
+	PpUartDiagReport report;
+	uint32_t now=DIAG_TRACE_CLOCK_WRAP_START;
+	s.freeInput=PP_UART_DIAG_EMPTY_INPUT_FREE;
+	s.maxRt=DIAG_TEST_WRAP_FIRST;
+	assert(!watcher.observe(now,s,report));
+	now+=DIAG_TEST_INTERVAL_TICKS;
+	s.uartRx=DIAG_TRACE_BACKLOG_BYTES;
+	s.freeInput=PP_UART_DIAG_EMPTY_INPUT_FREE-DIAG_TRACE_BACKLOG_BYTES;
+	s.outstanding=DIAG_TRACE_WINDOW;
+	assert(!watcher.observe(now,s,report));
+	now+=DIAG_TEST_INTERVAL_TICKS;
+	s.maxRt=DIAG_TEST_WRAP_SECOND;
+	assert(!watcher.observe(now,s,report));
+	now+=DIAG_TEST_INTERVAL_TICKS;
+	s.retries=DIAG_TEST_SAMPLE_RETRIES;
+	s.bad=DIAG_TEST_SAMPLE_BLOCKED;
+	assert(!watcher.observe(now,s,report));
+	now+=DIAG_TEST_INTERVAL_TICKS;
+	s.rxFull=DIAG_TEST_SAMPLE_OVERFLOW_BYTES;
+	s.freeInput=0;
+	assert(!watcher.observe(now,s,report));
+	// The same MAX_RT category must not overwrite the first occurrence.
+	++s.maxRt;
+	// ACK progress ENDS the measured stall; it must not erase it.
+	s.acknowledged=s.uartRx;
+	s.freeInput=PP_UART_DIAG_EMPTY_INPUT_FREE;
+	s.outstanding=0;
+	assert(!watcher.observe(now,s,report));
+	now+=DIAG_TEST_SAMPLE_QUIET_TICKS;
+	assert(watcher.observe(now,s,report));
+	const PpUartDiagTrace& t=report.trace;
+	assert(t.seen==DIAG_TRACE_ALL_EVENTS_MASK);
+	assert(t.minFree==0);
+	assert(t.maxAckPauseMs==DIAG_TRACE_DELAY_INTERVALS*
+		DIAG_TEST_INTERVAL_TICKS/PP_UART_DIAG_TICKS_PER_MS);
+	const PpUartDiagEvent& mx=t.events[
+		static_cast<uint8_t>(PpUartDiagEventKind::MAX_RT)];
+	const PpUartDiagEvent& replay=t.events[
+		static_cast<uint8_t>(PpUartDiagEventKind::REPLAY)];
+	const PpUartDiagEvent& gap=t.events[
+		static_cast<uint8_t>(PpUartDiagEventKind::GAP)];
+	const PpUartDiagEvent& full=t.events[
+		static_cast<uint8_t>(PpUartDiagEventKind::RX_FULL)];
+	assert(mx.atMs<replay.atMs && replay.atMs==gap.atMs);
+	assert(gap.atMs<full.atMs);
+	assert(mx.maxRt==DIAG_TEST_WRAP_DELTA);
+	assert(mx.retries==0 && mx.rxFull==0);
+	assert(full.rxFull==DIAG_TEST_SAMPLE_OVERFLOW_BYTES);
+	assert(full.outstanding==DIAG_TRACE_WINDOW && full.freeInput==0);
+	// A subsequent healthy burst must not inherit old anomalies.
+	++s.uartRx;
+	++s.acknowledged;
+	now+=DIAG_TEST_INTERVAL_TICKS;
+	assert(!watcher.observe(now,s,report));
+	now+=DIAG_TEST_SAMPLE_QUIET_TICKS;
+	assert(watcher.observe(now,s,report));
+	assert(report.trace.seen==0 && report.trace.maxAckPauseMs==0);
+}
+
+static void testTraceSaturationAndFormatting(){
+	PpUartQuietDiagnostic watcher;
+	PpUartDiagSnapshot s;
+	PpUartDiagReport report;
+	uint32_t now=DIAG_TEST_START_TICKS;
+	s.freeInput=PP_UART_DIAG_EMPTY_INPUT_FREE;
+	assert(!watcher.observe(now,s,report));
+	++s.uartRx;
+	s.freeInput=0;
+	now+=DIAG_TEST_INTERVAL_TICKS;
+	assert(!watcher.observe(now,s,report));
+	// Long unresolved backlog: times saturate rather than wrapping.
+	now+=(static_cast<uint32_t>(UINT16_MAX)+1U)*PP_UART_DIAG_TICKS_PER_MS;
+	++s.maxRt;
+	assert(watcher.observe(now,s,report));
+	assert(report.trace.maxAckPauseMs==UINT16_MAX);
+	assert(report.trace.events[static_cast<uint8_t>(
+		PpUartDiagEventKind::MAX_RT)].atMs==UINT16_MAX);
+	PpUartDiagTrace trace;
+	trace.seen=DIAG_TRACE_ALL_EVENTS_MASK;
+	trace.minFree=UINT8_MAX;
+	trace.maxAckPauseMs=UINT16_MAX;
+	for(uint8_t i=0;i<PP_UART_DIAG_EVENT_COUNT;++i){
+		PpUartDiagEvent& e=trace.events[i];
+		e.atMs=e.maxRt=e.retries=e.bad=e.rxFull=UINT16_MAX;
+		e.outstanding=e.credit=e.freeInput=UINT8_MAX;
+	}
+	for(uint8_t i=0;i<=PP_UART_DIAG_EVENT_COUNT;++i){
+		PpStressLine line;
+		assert(formatPpUartDiagTrace(line,true,trace,i));
+		assert(line.length()<=PP_UART_DIAG_LINE_FREE_BYTES);
+	}
+	trace.seen=0;
+	PpStressLine absent;
+	assert(!formatPpUartDiagTrace(absent,false,trace,
+		PP_UART_DIAG_EVENT_COUNT));
+	assert(absent.length()==0);
+}
+
 int main(){
 	testQuietGapAndProgress();
 	testRepeatedLineGaps();
 	testWrapAndHardwareOverflow();
 	testLineLength();
+	testFirstEventsAndAckPause();
+	testTraceSaturationAndFormatting();
 }

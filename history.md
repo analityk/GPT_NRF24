@@ -841,3 +841,24 @@ Weryfikacja pierwszej wersji na GitHub Actions [#42108719539](https://github.com
 Na fizycznym 115200 8N1 przy `Delays=0,15` i obu kierunkach: A `uart in=16638 out=14694 full=0 dor=0`, `pp ack=16638 rx=14694 ret=0 bad=160`; B `uart in=14694 out=16638 full=1944 dor=0`, `pp ack=14694 rx=16638 ret=244 bad=0`. Zachodzi `14694+1944=16638`: utrata bajtów jest w RX UART B przed wejściem do PP. Jednocześnie `B ret=244` oznacza powtórzenia Go-Back-N, a nie 244 retransmisje radiowe ARC. Dokumentacja nRF24L01+ opisuje przypadki utraconych ACK Payload i retransmisji PTX, lecz nie udowodniono tej przyczyny dla tego testu.
 
 Do istniejącej diagnostyki po ciszy dopisano A `hw`=suma ARC_CNT i `mx`=MAX_RT oraz B `af`=odmowy zapisu ACK Payload do pełnego TX FIFO i `rf`=zastanie RX FIFO FULL. Liczniki raportowane jako różnice w obrębie jednej próby. Bez zmian algorytmu i timingu transmisji; dalszy wniosek wymaga sprzętowych odczytów.
+
+## 2026-11-06 — analiza SID 7556 i chronologia przeciążenia
+
+Przejrzano kod `testy` @ 35fd83b, MD oraz dostarczone LSS/MAP.
+Na nowym zrzucie A przyjęło i dostarczyło 16638 B, B 14706 B;
+B odrzuciło 1932 B już w RX ring (dor=fe=0). PP/liczniki UART
+są zgodne po obu stronach, okna opróżnione. A hw=1163, mx=272,
+B ret=231, A bad=152. Nie udowodniono przyczyny MAX_RT ani trwałego
+deadlocku. Stary czas 904 µs pomija wymiany z retry/MAX_RT i obejmuje
+tylko pierwsze 1024 kwalifikowane próbki. Szczegóły i hipotezy:
+`pp-duplex-analysis.md`; aktualny MAP: 1241 B SRAM przed stosem.
+
+Rozszerzono przenośny monitor ciszy o pierwsze obserwacje MAX_RT,
+replay, bad i RX full, z czasem względnym i stanem okna/kredytu/
+wejścia, oraz sampled minfree/maxAckPause. Brak nowych działań ISR
+lub zmian protokołu. Jest to instrumentacja diagnostyczna, nie
+potwierdzona poprawa transferu. Testy chronologii, wrap zegara i
+liczników, nasycenia czasu, końca pauzy ACK, nowego okna oraz
+maksymalnej długości faktycznego formatera PASS; pełne 35 testów
+hostowych PASS. Lokalny AVR-GCC niedostępny; walidacja AVR w CI
+pozostaje wymagana. Nie wykonano testu fizycznego nowego wsadu.

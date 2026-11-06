@@ -1,31 +1,10 @@
-> **UWAGA — `testy` ma teraz włączony jednorazowy pomiar po zakończeniu strumienia.**
-> Po około 0,8 s ciszy oba porty COM dopisują linie `A/B uart`,
-> `A/B pp` oraz `A rf`. To celowo uniemożliwia byte-exact capture.
-> Instrukcja: [pp-uart-cycle-diagnostic.md](pp-uart-cycle-diagnostic.md).
-> Wyłączenie: `-DPP_UART_DIAG_ENABLED=0` i ponowna kompilacja.
->
-> **Aktualna gałąź `testy` (2026-11-05):** domyślnie uruchamia test
-> binarnego mostu UART A↔B bez tekstowych raportów na COM.
-> Instrukcja jednoczesnego wysyłania i weryfikacji dwóch plików:
-> [pp-uart-full-duplex-test.md](pp-uart-full-duplex-test.md).
-> Poprzednie eksperymenty z generatorami `A cps`/`B cps` są dostępne
-> przez wybór trybu kompilacji. `main` nie został zmieniony.
->
-> **AKTUALNA GAŁĄŹ TESTOWA:** `experiment/pp-recovery-v2` dodaje
-> symetryczne ciepłe/zimne odzyskiwanie PP, lokalne bajty statusu
-> TX/RX i 5-sekundowy limit ciepłego wznowienia. **Instrukcja nowej
-> próby: [pp-recovery-v2.md](pp-recovery-v2.md).** `main` i checkpoint PP
-> nie są zmieniane. Testy hostowe nie zastępują próby na dwóch RF-Nano.
->
-> **WCZEŚNIEJSZA GAŁĄŹ TESTOWA:** `experiment/pp-echo-ramp-2026-11-04` zastępuje
-> UART bridge **testem granicznej szybkości PP**: A generuje stale bajty
-> `00..FF`, B odsyła je radiem, oba UARTy drukują co 1 s ASCII z CPS i
-> retransmisjami. Wersja z surowym echem UART pozostaje we wcześniejszym
-> commicie gałęzi. Nowy test rozpoczyna od maksymalnego oferowanego tempa.
-> **Instrukcja: [echo-ramp-test.md](echo-ramp-test.md).** Normalne PP i
-> poniższy opis mostu UART pozostają na niezmienionej gałęzi `main`.
->
-> **Protokoły:** aktualny i zachowany sprzętowo **PP (Ping-Pong)**; drugi profil **BURST20** jest na etapie projektu harmonogramu i testów hostowych, **jeszcze nie jest wykonywany na radiu**. [Specyfikacja BURST20](burst-20ms.md). PP checkpoint: [checkpoint/pp-2026-11-04](https://github.com/analityk/GPT_NRF24/tree/checkpoint/pp-2026-11-04).
+> **Stan `testy`, 2026-11-06:** PP, 2 Mb/s, SPI 8 MHz, UART 115200 8N1,
+> 8+24 B, WINDOW4, wspólny retained RX 255 B i UART TX 127 B.
+> Domyślnie diagnostyka po 0,8 s ciszy; do binarnego Capture wyłącz
+> `PP_UART_DIAG_ENABLED`. [Analiza bieżącego problemu](pp-duplex-analysis.md)
+> i [procedura pomiaru](pp-uart-cycle-diagnostic.md).
+> `main` jest wcześniejszym punktem odbioru sprzętowego; dalsza praca na `testy`.
+> Sekcje datowane poniżej opisują także historię i nie zastępują tego stanu.
 
 # GPT_NRF24 — UART ↔ nRF24L01+ ACK Payload ↔ UART
 
@@ -33,17 +12,17 @@
 
 ## Uruchomienie w Microchip Studio
 
-1. Sklonuj / zaktualizuj `main` i otwórz `GPT_NRF2401.atsln`.
+1. Sklonuj / zaktualizuj `testy` i otwórz `GPT_NRF2401.atsln`.
 2. **F7** kompiluje, **F12** ręcznie programuje. **Brak automatycznego flashowania Post-Build**.
 3. Wgraj ten sam HEX na obie RF-Nano. Na A ADC0/A0 do **GND** (PTX), na B ADC0/A0 do **dodatniego zasilania tej płytki** (PRX).
 4. Otwórz oba RealTerm na odpowiednich COM, **115200 8N1**, wyłącz **local echo** i nadmiarowe dopisywanie CR/LF przez aplikację terminalową (chyba że właśnie chcesz te bajty wysłać).
 5. Wyślij z A `ala ma kota`, sprawdź pojawienie się wyłącznie na B. Wyślij z B `12345`, sprawdź pojawienie się wyłącznie na A. Następnie wyślij dwie różne wiadomości równocześnie, również dłuższe niż 22 bajty.
 
-**UART przesyła wyłącznie dane użytkownika** — także `00`, `FF`, CR/LF. Nie zobaczysz w nowym wsadzie tekstu `PAIR CORE`, `ST=4` ani liczników; diagnostyka nie może zanieczyszczać binarnego strumienia. `SID` nadal automatycznie negocjowany jest wewnątrz firmware, lecz nie drukowany na COM.
+**W kompilacji `PP_UART_DIAG_ENABLED=0` UART przesyła wyłącznie dane użytkownika** — także `00`, `FF`, CR/LF. Nie zobaczysz w nowym wsadzie tekstu `PAIR CORE`, `ST=4` ani liczników; diagnostyka nie może zanieczyszczać binarnego strumienia. `SID` nadal automatycznie negocjowany jest wewnątrz firmware, lecz nie drukowany na COM.
 
 ## Aktualny stos i format
 
-- **PHY:** nRF24L01+, 1 Mb/s, CRC16, SPI 8 MHz; A stale PTX, B stale PRX, a B odsyła zwrotne dane w uprzednio przygotowanym **sprzętowym ACK Payload**.
+- **PHY:** nRF24L01+, 2 Mb/s, CRC16, SPI 8 MHz; A stale PTX, B stale PRX, a B odsyła zwrotne dane w uprzednio przygotowanym **sprzętowym ACK Payload**.
 - **Nagłówek rdzenia:** bez zmian: 8 bajtów (`TX_SEQ`, `RX_LAST`, `LOSS_AB/BA`, `ARC_LAST/RX_DROP`, `RX_CREDIT`, `TYPE_FLAGS`, `SESSION_ID16`).
 - **BODY:** do 24 bajtów pozostaje nieinterpretowane w PHY/MAC. **Całe BODY to 0–24 bajty oryginalnego UART.** `DATA_SEQ` i kumulacyjny `APP_ACK` zajmują już istniejące bajty `TX_SEQ` i `RX_LAST` nagłówka MAC; nie istnieje wtórny nagłówek transportowy w BODY.
 - **Niezawodność:** niezależne okna **4 segmentów × 24 B** na kierunek, kumulacyjne `ACK_SEQ`, retransmisja Go-back-N po 8 wymianach bez postępu potwierdzeń. Odbiornik przyjmuje wyłącznie kolejne segmenty przez atomowy `UART::writeAll`; brak ACK dla danych odrzuconych, duplikaty nie trafiają drugi raz do UART w tej samej sesji.
@@ -53,7 +32,7 @@
 
 ## Zachowanie i ograniczenia
 
-**Brak RTS/CTS.** USART RX ma pojemność 127 bajtów. Jeśli RealTerm bez ograniczeń poda plik szybciej, niż radio i odbiornik mogą odbierać, lub w czasie awarii łącza, ta kolejka może się przepełnić. Nie jest to sytuacja, którą radiowy ACK naprawi wstecznie. Pierwszy test: krótkie komunikaty; przy pliku w RealTerm włącz niewielkie opóźnienia i porównaj pełne pliki capture bajt po bajcie.
+**Brak RTS/CTS.** USART RX ma pojemność użytkową 255 bajtów, współdzieloną z oknem retransmisji. Jeśli RealTerm bez ograniczeń poda plik szybciej, niż radio i odbiornik mogą odbierać, lub w czasie awarii łącza, ta kolejka może się przepełnić. Nie jest to sytuacja, którą radiowy ACK naprawi wstecznie. Pierwszy test: krótkie komunikaty; przy pliku w RealTerm włącz niewielkie opóźnienia i porównaj pełne pliki capture bajt po bajcie.
 
 Okno czterech segmentów usuwa poprzednie ograniczenie do jednego DATA na kilka wymian. Przy 613 wymianach/s sufit arytmetyczny 24×613 ≈ **14,71 kB/s na kierunek** (24 B USER/frame) przekracza limit UART **11,52 kB/s/kierunek** przy 115200 8N1. To tylko *górna granica przy zachowaniu tempa RF* — nowe wykorzystanie CPU i zapełnione obie strony mogą ją obniżyć. **Wynik rzeczywistego bezstratnego UART end-to-end musi być zmierzony na obu płytkach.** Przy długim oferowanym obciążeniu ponad rzeczywistą przepustowość brak RTS/CTS nadal prowadzi do overflow RX.
 
@@ -78,7 +57,7 @@ Okno czterech segmentów usuwa poprzednie ograniczenie do jednego DATA na kilka 
 
 Szczegóły formatu i semantyki: [paired-core-v2.md](paired-core-v2.md). Historia fizycznych prób: [history.md](history.md). Bieżące zadania: [todo.md](todo.md).
 
-## Uwaga po pierwszym sprzętowym teście dwukierunkowego UART (2026-11-04)
+## Historia: pierwszy test dwukierunkowego UART (2026-11-04, nieaktualny stop-and-wait)
 
 Wysłanie pliku **w jednym kierunku działa**. Równoczesny intensywny transfer w obu kierunkach ujawnił **zgłaszane ubytki bajtów**; NIE zaliczono bezstratnego dwukierunkowego flood. USART ATmega jest pełnodupleksowy i asynchroniczny — problemem może być przeciążenie wejściowych kolejek 127 B, gdy transport stop-and-wait przesyła najwyżej 22 B/segment i czeka na aplikacyjne ACK. Przy referencyjnych ~613 wymian/s przybliżony limit stop-and-wait to ~6,7 kB/s/kierunek, niższy niż pełne 115200 8N1 (~11,52 kB/s); aktualnej rzeczywistej prędkości nie zmierzono.
 

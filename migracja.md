@@ -1,3 +1,17 @@
+**BIEŻĄCY PUNKT: 2026-11-06 — analiza dwukierunkowego UART na `testy`.**
+Baza 35fd83b, nowy zrzut SID 7556: 1932 B odrzucone na wejściu B,
+14706 B przyjęte przez B dostarczone do A; A dostarczyło 16638 B.
+A hw=1163/mx=272, B ret=231, A bad=152. Po próbie okna puste:
+nie ma dowodu trwałego zakleszczenia. Źródło MAX_RT nierozstrzygnięte.
+`pp-duplex-analysis.md` zawiera analizę kodu, LSS/MAP i granic pomiaru.
+Nowy monitor po ciszy pokazuje pierwsze k=0 MAX_RT, k=1 replay,
+k=2 bad, k=3 RX full wraz z czasem i stanem buforów; rozdzielczość
+około 10 ms, niezależne zegary A/B. Bez zmiany ISR/PHY/PP.
+Host 35/35 PASS, lokalnie brak AVR-GCC; sprawdzić CI przed F7/F12.
+To narzędzie diagnostyczne, nie potwierdzona naprawa przepustowości.
+Następnie powtórzyć Delays=0,20 i 0,15, zachować komplet raportów.
+`main` nie dotykać. Starsze punkty poniżej są historią.
+
 **NAJNOWSZY PUNKT KONTYNUACJI: 2026-11-05 — szybkie SPI i odroczony ACK na `testy`, AVR PASS, oczekuje test dwóch RF-Nano.**
 Właściciel dostarczył po optymalizacji GPIO wynik dwóch RF-Nano:
 `sid=44831`, `up=1`, `ret=bad=0`, **16 704 B/s**, `cyc≈1437`,
