@@ -1,3 +1,8 @@
+> **Aktualizacja 2026-11-06:** obecny PP UART↔UART jest już na `main`,
+> przeniesiony z `testy` @ `42e66cb` na polecenie właściciela.
+> Pełne 24 B BODY bez kontrolnego bajtu; obecne konsole i diagnostyka
+> po ciszy zachowane. Kolejne datowane opisy gałęzi są historyczne.
+
 > **Stan `testy`, 2026-11-06:** PP, 2 Mb/s, SPI 8 MHz, UART 115200 8N1,
 > 8+24 B, WINDOW4, wspólny retained RX 255 B i UART TX 127 B.
 > Domyślnie diagnostyka po 0,8 s ciszy; do binarnego Capture wyłącz

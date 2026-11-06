@@ -864,3 +864,8 @@ hostowych PASS. Lokalny AVR-GCC niedostępny; walidacja AVR w CI
 pozostaje wymagana. Nie wykonano testu fizycznego nowego wsadu.
 
 **Weryfikacja 9bff1be:** [CI #42144837039](https://github.com/analityk/GPT_NRF24/actions/runs/42144837039) PASS: 35 testów hostowych, porównywarka capture i trzy buildy AVR-GCC 14.2.0. Diagnostyczny bridge: text=19532, data=96, bss=1157, statyczny SRAM=1253 B (795 B przed stosem). Czysty bridge: text=12724, data=96, bss=905, SRAM=1001 B. Synthetic: text=19550, data=96, bss=1343, SRAM=1439 B. Rozmiary czystego bridge i synthetic bez zmian. To nie jest wynik Microchip Studio ani testu urządzeń; instrumentacja diagnostyczna ma koszt CPU i nie służy do końcowego odbioru osiągów.
+
+
+## Przeniesienie obecnego PP do main
+
+2026-11-06 — na wyraźne polecenie właściciela przeniesiono aktualny PP z `testy` @ `42e66cb` na `main` przez fast-forward z `71db860`. Firmware bez zmian: UART bridge, radio 2 Mb/s, WINDOW4, 24 B BODY bez bajtu kontrolnego, retained RX 255 B, obecne raporty po ciszy. Protokół kredytowy konsoli i nowa aplikacja Python nie zostały wdrożone. Właściciel polecił pozostawić konsole w obecnym działającym stanie. Testy tego kodu: 35 host, porównywarka i trzy AVR PASS w CI #42144837039. Przeniesienie nie stanowi nowego pomiaru bezstratnego 115200 full duplex.

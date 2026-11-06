@@ -1,3 +1,9 @@
+**NAJNOWSZA DECYZJA — obecny PP jest na `main`.**
+
+2026-11-06 — na wyraźne polecenie właściciela przeniesiono aktualny PP z `testy` @ `42e66cb` na `main` przez fast-forward z `71db860`. Firmware bez zmian: UART bridge, radio 2 Mb/s, WINDOW4, 24 B BODY bez bajtu kontrolnego, retained RX 255 B, obecne raporty po ciszy. Protokół kredytowy konsoli i nowa aplikacja Python nie zostały wdrożone. Właściciel polecił pozostawić konsole w obecnym działającym stanie. Testy tego kodu: 35 host, porównywarka i trzy AVR PASS w CI #42144837039. Przeniesienie nie stanowi nowego pomiaru bezstratnego 115200 full duplex.
+
+Dalsze eksperymenty na istniejącym `testy`; nie dodawać kredytów do BODY ani zmieniać konsol w ramach tej decyzji. Starsze punkty poniżej zachowują historię.
+
 **BIEŻĄCY PUNKT: 2026-11-06 — analiza dwukierunkowego UART na `testy`.**
 Baza 35fd83b, nowy zrzut SID 7556: 1932 B odrzucone na wejściu B,
 14706 B przyjęte przez B dostarczone do A; A dostarczyło 16638 B.

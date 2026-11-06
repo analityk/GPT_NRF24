@@ -1,3 +1,9 @@
+# Bieżąca decyzja właściciela — 2026-11-06
+
+- [x] Obecny PP z `testy` @ `42e66cb` przeniesiony na `main`, bez zmiany firmware.
+- [x] Zachowane 24 B BODY bez kontrolnego bajtu i obecne konsole.
+- [ ] Dalsze prace nad konsolą Python/kredytami wstrzymane; wymagają kolejnego polecenia. Poniższe testy pozostają otwarte, nie są warunkiem odraczającym zatwierdzone przeniesienie.
+
 # TODO — aktywny transport dwukierunkowy UART / ACK Payload
 
 ## Priorytet 2026-11-06 — przyczyna MAX_RT i overflow B

@@ -1,3 +1,9 @@
+# Aktualna decyzja o main — 2026-11-06
+
+2026-11-06 — na wyraźne polecenie właściciela przeniesiono aktualny PP z `testy` @ `42e66cb` na `main` przez fast-forward z `71db860`. Firmware bez zmian: UART bridge, radio 2 Mb/s, WINDOW4, 24 B BODY bez bajtu kontrolnego, retained RX 255 B, obecne raporty po ciszy. Protokół kredytowy konsoli i nowa aplikacja Python nie zostały wdrożone. Właściciel polecił pozostawić konsole w obecnym działającym stanie. Testy tego kodu: 35 host, porównywarka i trzy AVR PASS w CI #42144837039. Przeniesienie nie stanowi nowego pomiaru bezstratnego 115200 full duplex.
+
+Ta decyzja aktualizuje starszy opis punktu odbioru `main` poniżej. Dalsze eksperymenty prowadzić na istniejącym `testy`; kolejne przeniesienia do `main` nadal wymagają decyzji właściciela. Nie wdrażać proponowanego protokołu konsoli w ramach zakończonego przeniesienia.
+
 # AGENTS.md — zasady pracy nad GPT_NRF24
 
 ## Źródło prawdy i przejęcie projektu
