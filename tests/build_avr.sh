@@ -11,11 +11,9 @@ trap 'rm -rf "$OUTPUT"' EXIT HUP INT TERM
 
 build_variant() {
     label="$1"
-    mode="$2"
-    diagnostic="$3"
+    shift
     "$AVRCXX" -std=c++11 -Os -mmcu=atmega328p -DF_CPU=16000000UL \
-        "-DPP_TEST_TRAFFIC_MODE=$mode" \
-        "-DPP_UART_DIAG_ENABLED=$diagnostic" \
+        "$@" \
         -fno-exceptions -fno-rtti -ffunction-sections -fdata-sections \
         -Wl,--gc-sections -Wall -Wextra \
         GPT_NRF2401/*.cpp -o "$OUTPUT/$label.elf"
@@ -23,6 +21,7 @@ build_variant() {
     printf 'PASS AVR mode %s\n' "$label"
 }
 
-build_variant PP_UART_BRIDGE_DIAGNOSTIC PP_TRAFFIC_MODE_UART_BRIDGE 1
-build_variant PP_UART_BRIDGE_CLEAN PP_TRAFFIC_MODE_UART_BRIDGE 0
-build_variant PP_SYNTHETIC_RADIO PP_TRAFFIC_MODE_SYNTHETIC_RADIO 0
+build_variant PP_DEFAULT
+build_variant PP_UART_BRIDGE_DIAGNOSTIC -DPP_TEST_TRAFFIC_MODE=PP_TRAFFIC_MODE_UART_BRIDGE -DPP_UART_DIAG_ENABLED=1
+build_variant PP_UART_BRIDGE_CLEAN -DPP_TEST_TRAFFIC_MODE=PP_TRAFFIC_MODE_UART_BRIDGE -DPP_UART_DIAG_ENABLED=0
+build_variant PP_SYNTHETIC_RADIO -DPP_TEST_TRAFFIC_MODE=PP_TRAFFIC_MODE_SYNTHETIC_RADIO -DPP_UART_DIAG_ENABLED=0

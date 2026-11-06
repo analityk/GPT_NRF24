@@ -1,3 +1,14 @@
+## 2026-11-06 — przezroczysty UART domyślnie na main
+
+Na polecenie właściciela domyślne `PP_UART_DIAG_ENABLED=0`.
+Firmware nie dopisuje raportów po bajcie, serii danych ani po ciszy.
+To konfiguracja diagnostyki aplikacji, nie zmiana protokołu PP:
+BODY nadal mieści 24 B danych, bez bajtu kontrolnego.
+Diagnostyka tekstowa wymaga osobnej kompilacji z jawnym
+`PP_UART_DIAG_ENABLED=1`; nie jest częścią domyślnego mostu.
+Skrypt AVR kompiluje także domyślny firmware bez nadpisania konfiguracji.
+Test fizyczny nowego wsadu pozostaje do wykonania.
+
 # Aktualna decyzja o main — 2026-11-06
 
 2026-11-06 — na wyraźne polecenie właściciela przeniesiono aktualny PP z `testy` @ `42e66cb` na `main` przez fast-forward z `71db860`. Firmware bez zmian: UART bridge, radio 2 Mb/s, WINDOW4, 24 B BODY bez bajtu kontrolnego, retained RX 255 B, obecne raporty po ciszy. Protokół kredytowy konsoli i nowa aplikacja Python nie zostały wdrożone. Właściciel polecił pozostawić konsole w obecnym działającym stanie. Testy tego kodu: 35 host, porównywarka i trzy AVR PASS w CI #42144837039. Przeniesienie nie stanowi nowego pomiaru bezstratnego 115200 full duplex.

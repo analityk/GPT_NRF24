@@ -17,14 +17,10 @@
 #endif
 
 
-// The bridge diagnostic is temporary and intentionally appends ASCII
-// reports only after a quiet interval. Disable for byte-exact captures.
+// UART is a transparent data stream by default, including after idle.
+// Explicitly opt in to ASCII reports only for a diagnostic firmware build.
 #ifndef PP_UART_DIAG_ENABLED
-#if PP_TEST_TRAFFIC_MODE == PP_TRAFFIC_MODE_UART_BRIDGE
-#define PP_UART_DIAG_ENABLED 1
-#else
 #define PP_UART_DIAG_ENABLED 0
-#endif
 #endif
 
 #endif

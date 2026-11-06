@@ -1,3 +1,14 @@
+## 2026-11-06 — przezroczysty UART domyślnie na main
+
+Na polecenie właściciela domyślne `PP_UART_DIAG_ENABLED=0`.
+Firmware nie dopisuje raportów po bajcie, serii danych ani po ciszy.
+To konfiguracja diagnostyki aplikacji, nie zmiana protokołu PP:
+BODY nadal mieści 24 B danych, bez bajtu kontrolnego.
+Diagnostyka tekstowa wymaga osobnej kompilacji z jawnym
+`PP_UART_DIAG_ENABLED=1`; nie jest częścią domyślnego mostu.
+Skrypt AVR kompiluje także domyślny firmware bez nadpisania konfiguracji.
+Test fizyczny nowego wsadu pozostaje do wykonania.
+
 # Bieżąca decyzja właściciela — 2026-11-06
 
 - [x] Obecny PP z `testy` @ `42e66cb` przeniesiony na `main`, bez zmiany firmware.

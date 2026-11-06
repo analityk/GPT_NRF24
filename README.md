@@ -1,7 +1,7 @@
 > **Aktualizacja 2026-11-06:** obecny PP UART↔UART jest już na `main`,
 > przeniesiony z `testy` @ `42e66cb` na polecenie właściciela.
-> Pełne 24 B BODY bez kontrolnego bajtu; obecne konsole i diagnostyka
-> po ciszy zachowane. Kolejne datowane opisy gałęzi są historyczne.
+> Pełne 24 B BODY bez kontrolnego bajtu. Domyślnie UART przesyła wyłącznie
+> dane użytkownika (`PP_UART_DIAG_ENABLED=0`), bez raportów po ciszy. Kolejne datowane opisy gałęzi są historyczne.
 
 > **Stan `testy`, 2026-11-06:** PP, 2 Mb/s, SPI 8 MHz, UART 115200 8N1,
 > 8+24 B, WINDOW4, wspólny retained RX 255 B i UART TX 127 B.
@@ -17,13 +17,13 @@
 
 ## Uruchomienie w Microchip Studio
 
-1. Sklonuj / zaktualizuj `testy` i otwórz `GPT_NRF2401.atsln`.
+1. Sklonuj / zaktualizuj `main` i otwórz `GPT_NRF2401.atsln`.
 2. **F7** kompiluje, **F12** ręcznie programuje. **Brak automatycznego flashowania Post-Build**.
 3. Wgraj ten sam HEX na obie RF-Nano. Na A ADC0/A0 do **GND** (PTX), na B ADC0/A0 do **dodatniego zasilania tej płytki** (PRX).
 4. Otwórz oba RealTerm na odpowiednich COM, **115200 8N1**, wyłącz **local echo** i nadmiarowe dopisywanie CR/LF przez aplikację terminalową (chyba że właśnie chcesz te bajty wysłać).
 5. Wyślij z A `ala ma kota`, sprawdź pojawienie się wyłącznie na B. Wyślij z B `12345`, sprawdź pojawienie się wyłącznie na A. Następnie wyślij dwie różne wiadomości równocześnie, również dłuższe niż 22 bajty.
 
-**W kompilacji `PP_UART_DIAG_ENABLED=0` UART przesyła wyłącznie dane użytkownika** — także `00`, `FF`, CR/LF. Nie zobaczysz w nowym wsadzie tekstu `PAIR CORE`, `ST=4` ani liczników; diagnostyka nie może zanieczyszczać binarnego strumienia. `SID` nadal automatycznie negocjowany jest wewnątrz firmware, lecz nie drukowany na COM.
+**W domyślnej kompilacji (`PP_UART_DIAG_ENABLED=0`) UART przesyła wyłącznie dane użytkownika** — także `00`, `FF`, CR/LF. Nie zobaczysz w nowym wsadzie tekstu `PAIR CORE`, `ST=4` ani liczników; diagnostyka nie może zanieczyszczać binarnego strumienia. `SID` nadal automatycznie negocjowany jest wewnątrz firmware, lecz nie drukowany na COM.
 
 ## Aktualny stos i format
 
