@@ -1,3 +1,4 @@
+#include "../GPT_NRF2401/foreground_ports.h"
 #include "../GPT_NRF2401/gpio.cpp"
 #include "../GPT_NRF2401/nrf24.h"
 
@@ -9,10 +10,10 @@
 #define GPIO_TEST_OTHER_PORT_BIT 0x80U
 #define GPIO_TEST_OTHER_DDR_BIT 0x20U
 
-static_assert(!std::is_default_constructible<GPIO>::value,
-	"GPIO requires explicitly configured registers");
+static_assert(
+	!std::is_default_constructible<GPIO>::value, "GPIO requires explicitly configured registers");
 
-static void testOutputLatch(){
+static void testOutputLatch() {
 	volatile uint8_t port = GPIO_TEST_OTHER_PORT_BIT;
 	volatile uint8_t ddr = GPIO_TEST_OTHER_DDR_BIT;
 	volatile uint8_t input = 0;
@@ -39,7 +40,7 @@ static void testOutputLatch(){
 	assert(ddr == (GPIO_TEST_OTHER_DDR_BIT | GPIO_TEST_BIT));
 }
 
-static void testInputModes(){
+static void testInputModes() {
 	volatile uint8_t port = GPIO_TEST_OTHER_PORT_BIT;
 	volatile uint8_t ddr = GPIO_TEST_OTHER_DDR_BIT | GPIO_TEST_BIT;
 	volatile uint8_t input = 0;
@@ -66,49 +67,83 @@ static void testInputModes(){
 }
 
 struct TestSpi {
+  public:
+	operator SpiPort() {
+		SpiPort port = {};
+		port.context = this;
+		port.beginFn = [](void* context) -> void {
+			(void)context;
+			static_cast<TestSpi*>(context)->begin();
+		};
+		return port;
+	}
+
 	bool initialized = false;
 
-	void begin(){
+	void begin() {
 		initialized = true;
 	}
 };
 
 struct TestRadioPin {
+  public:
+	operator PinPort() {
+		PinPort port = {};
+		port.context = this;
+		port.setFn = [](void* context) -> void {
+			(void)context;
+			static_cast<TestRadioPin*>(context)->set();
+		};
+		port.clearFn = [](void* context) -> void {
+			(void)context;
+			static_cast<TestRadioPin*>(context)->clear();
+		};
+		port.outputHighFn = [](void* context) -> void {
+			(void)context;
+			static_cast<TestRadioPin*>(context)->outputHigh();
+		};
+		port.outputLowFn = [](void* context) -> void {
+			(void)context;
+			static_cast<TestRadioPin*>(context)->outputLow();
+		};
+		return port;
+	}
+
 	bool configured = false;
 	bool high = false;
 
-	void outputHigh(){
+	void outputHigh() {
 		configured = true;
 		high = true;
 	}
 
-	void outputLow(){
+	void outputLow() {
 		configured = true;
 		high = false;
 	}
 
-	void set(){
+	void set() {
 		assert(configured);
 		high = true;
 	}
 
-	void clear(){
+	void clear() {
 		assert(configured);
 		high = false;
 	}
 };
 
-static void testRadioPinInitialization(){
+static void testRadioPinInitialization() {
 	TestSpi spi;
 	TestRadioPin ce, csn;
-	Nrf24<TestSpi, TestRadioPin> radio(spi, ce, csn);
+	Nrf24 radio(spi, ce, csn);
 	radio.begin();
 	assert(spi.initialized);
 	assert(ce.configured && !ce.high);
 	assert(csn.configured && csn.high);
 }
 
-int main(){
+int main() {
 	testOutputLatch();
 	testInputModes();
 	testRadioPinInitialization();

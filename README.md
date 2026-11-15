@@ -1,3 +1,10 @@
+> **test_c_like — 2026-11-15:** przebudowa bez szablonów, globalne ISR bez
+> wywołań funkcji, implementacje w `.cpp`. Domyślnie przezroczysty UART.
+> [Opis kodu, testów i kosztu ISR](c-like-refactor.md). Po przełączeniu na
+> tę gałąź wykonaj **Rebuild Solution**, potem ręczne F12 obu płytek.
+> Odbiór nowego firmware na fizycznym sprzęcie pozostaje otwarty.
+> Poniższe datowane informacje dotyczą wcześniejszych gałęzi.
+
 > **Aktualizacja 2026-11-06:** obecny PP UART↔UART jest już na `main`,
 > przeniesiony z `testy` @ `42e66cb` na polecenie właściciela.
 > Pełne 24 B BODY bez kontrolnego bajtu. Domyślnie UART przesyła wyłącznie

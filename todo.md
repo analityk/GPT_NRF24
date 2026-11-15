@@ -1,3 +1,15 @@
+# 2026-11-15 — test_c_like
+
+- [x] Wszystkie szablony usunięte; deklaracje `.h`, implementacje `.cpp`.
+- [x] Globalne ISR, bez callbacków i wywołań metod; testy rzeczywistych funkcji ISR.
+- [x] 36 testów hostowych i UBSan, binarna porównywarka, pięć wariantów AVR PASS.
+- [x] Sprawdzenie assemblera oraz kompletności projektu Microchip Studio.
+- [x] Wyłączone sondy nie rezerwują obiektów w SRAM.
+- [ ] Rebuild/F12 obu urządzeń, oba kierunki binarnie i osobne resety A/B.
+- [ ] Zmierzyć goodput i opóźnienie małych pakietów; krótszy ISR sam nie jest pomiarem łącza.
+
+Szczegóły: [c-like-refactor.md](c-like-refactor.md). Starsza kolejka poniżej.
+
 ## 2026-11-06 — przezroczysty UART domyślnie na main
 
 Na polecenie właściciela domyślne `PP_UART_DIAG_ENABLED=0`.

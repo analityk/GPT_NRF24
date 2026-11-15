@@ -1,3 +1,8 @@
+> Aktualizacja 2026-11-15: implementacja na `test_c_like` jest bez szablonów,
+> z globalnymi ISR i podziałem deklaracji/implementacji. Cel transportu
+> pozostaje ten sam. Aktualny opis: [c-like-refactor.md](c-like-refactor.md).
+> Starsze nazwy z parametrami szablonów poniżej są historyczne.
+
 # Cel GPT_NRF24 — dwuwęzłowy szybki rdzeń z opcjonalnymi usługami
 
 Dwie RF-Nano z tym samym firmware komunikują się poprzez nRF24L01+ w układzie A/PTX DATA i B/PRX ACK Payload. Warstwy PHY, łącza i negocjacji sesji nie interpretują 24-bajtowego BODY. Priorytet: szybkie wymiany z pełną diagnostyką i poprawną rekonwergencją po resetach, bez dynamicznej alokacji, na ATmega328P 2 KB SRAM.

@@ -1,3 +1,4 @@
+#include "../GPT_NRF2401/foreground_ports.h"
 #include "../GPT_NRF2401/pp_uart_quiet_diagnostic.h"
 #include "../GPT_NRF2401/pp_short_probe.h"
 #include "../GPT_NRF2401/pp_stress_telemetry.h"
@@ -26,99 +27,97 @@
 #define DIAG_TEST_WRAP_SECOND 6U
 #define DIAG_TEST_WRAP_DELTA 12U
 
-static void testQuietGapAndProgress(){
+static void testQuietGapAndProgress() {
 	PpUartQuietDiagnostic watcher;
 	PpUartDiagSnapshot s;
 	PpUartDiagReport report;
-	uint32_t now=DIAG_TEST_START_TICKS;
-	assert(!watcher.observe(now,s,report));
-	s.uartRx=DIAG_TEST_SAMPLE_RX_BYTES;
-	s.acknowledged=DIAG_TEST_SAMPLE_ACK_BYTES;
-	s.accepted=DIAG_TEST_SAMPLE_ACCEPTED_BYTES;
-	s.rxFull=DIAG_TEST_SAMPLE_OVERFLOW_BYTES;
-	s.retries=DIAG_TEST_SAMPLE_RETRIES;
-	s.blocked=DIAG_TEST_SAMPLE_BLOCKED;
-	s.hwArc=DIAG_TEST_SAMPLE_HW_ARC;
-	s.maxRt=DIAG_TEST_SAMPLE_MAX_RT;
-	s.ackFifoFull=DIAG_TEST_SAMPLE_ACK_FULL;
-	s.rxFifoFull=DIAG_TEST_SAMPLE_RX_FIFO_FULL;
-	s.sid=DIAG_TEST_SAMPLE_SID;
-	s.freeInput=DIAG_TEST_SAMPLE_FREE;
-	s.credit=DIAG_TEST_SAMPLE_CREDIT;
-	now+=DIAG_TEST_INTERVAL_TICKS;
-	assert(!watcher.observe(now,s,report));
+	uint32_t now = DIAG_TEST_START_TICKS;
+	assert(!watcher.observe(now, s, report));
+	s.uartRx = DIAG_TEST_SAMPLE_RX_BYTES;
+	s.acknowledged = DIAG_TEST_SAMPLE_ACK_BYTES;
+	s.accepted = DIAG_TEST_SAMPLE_ACCEPTED_BYTES;
+	s.rxFull = DIAG_TEST_SAMPLE_OVERFLOW_BYTES;
+	s.retries = DIAG_TEST_SAMPLE_RETRIES;
+	s.blocked = DIAG_TEST_SAMPLE_BLOCKED;
+	s.hwArc = DIAG_TEST_SAMPLE_HW_ARC;
+	s.maxRt = DIAG_TEST_SAMPLE_MAX_RT;
+	s.ackFifoFull = DIAG_TEST_SAMPLE_ACK_FULL;
+	s.rxFifoFull = DIAG_TEST_SAMPLE_RX_FIFO_FULL;
+	s.sid = DIAG_TEST_SAMPLE_SID;
+	s.freeInput = DIAG_TEST_SAMPLE_FREE;
+	s.credit = DIAG_TEST_SAMPLE_CREDIT;
+	now += DIAG_TEST_INTERVAL_TICKS;
+	assert(!watcher.observe(now, s, report));
 	// A 10ms CR/LF gap must never emit telemetry into the next UART burst.
-	now+=DIAG_TEST_INTERVAL_TICKS;
-	assert(!watcher.observe(now,s,report));
+	now += DIAG_TEST_INTERVAL_TICKS;
+	assert(!watcher.observe(now, s, report));
 	// The interval is counted since the LAST progress, not the start.
-	now+=DIAG_TEST_SAMPLE_QUIET_TICKS-DIAG_TEST_INTERVAL_TICKS;
-	assert(watcher.observe(now,s,report));
-	assert(report.uartRx==DIAG_TEST_SAMPLE_RX_BYTES);
-	assert(report.acknowledged==DIAG_TEST_SAMPLE_ACK_BYTES);
-	assert(report.accepted==DIAG_TEST_SAMPLE_ACCEPTED_BYTES);
-	assert(report.rxFull==DIAG_TEST_SAMPLE_OVERFLOW_BYTES);
-	assert(report.retries==DIAG_TEST_SAMPLE_RETRIES);
-	assert(report.blocked==DIAG_TEST_SAMPLE_BLOCKED);
-	assert(report.hwArc==DIAG_TEST_SAMPLE_HW_ARC);
-	assert(report.maxRt==DIAG_TEST_SAMPLE_MAX_RT);
-	assert(report.ackFifoFull==DIAG_TEST_SAMPLE_ACK_FULL);
-	assert(report.rxFifoFull==DIAG_TEST_SAMPLE_RX_FIFO_FULL);
-	assert(report.sid==DIAG_TEST_SAMPLE_SID);
-	assert(report.freeInput==DIAG_TEST_SAMPLE_FREE);
-	assert(report.credit==DIAG_TEST_SAMPLE_CREDIT);
-	assert(!watcher.observe(now+DIAG_TEST_SAMPLE_QUIET_TICKS,s,report));
-	s.accepted=static_cast<uint16_t>(s.accepted+1U);
-	now+=DIAG_TEST_SAMPLE_QUIET_TICKS;
-	assert(!watcher.observe(now,s,report));
-	now+=DIAG_TEST_SAMPLE_QUIET_TICKS;
-	assert(watcher.observe(now,s,report));
-	assert(report.accepted==1U);
-	assert(report.uartRx==0U);
+	now += DIAG_TEST_SAMPLE_QUIET_TICKS - DIAG_TEST_INTERVAL_TICKS;
+	assert(watcher.observe(now, s, report));
+	assert(report.uartRx == DIAG_TEST_SAMPLE_RX_BYTES);
+	assert(report.acknowledged == DIAG_TEST_SAMPLE_ACK_BYTES);
+	assert(report.accepted == DIAG_TEST_SAMPLE_ACCEPTED_BYTES);
+	assert(report.rxFull == DIAG_TEST_SAMPLE_OVERFLOW_BYTES);
+	assert(report.retries == DIAG_TEST_SAMPLE_RETRIES);
+	assert(report.blocked == DIAG_TEST_SAMPLE_BLOCKED);
+	assert(report.hwArc == DIAG_TEST_SAMPLE_HW_ARC);
+	assert(report.maxRt == DIAG_TEST_SAMPLE_MAX_RT);
+	assert(report.ackFifoFull == DIAG_TEST_SAMPLE_ACK_FULL);
+	assert(report.rxFifoFull == DIAG_TEST_SAMPLE_RX_FIFO_FULL);
+	assert(report.sid == DIAG_TEST_SAMPLE_SID);
+	assert(report.freeInput == DIAG_TEST_SAMPLE_FREE);
+	assert(report.credit == DIAG_TEST_SAMPLE_CREDIT);
+	assert(!watcher.observe(now + DIAG_TEST_SAMPLE_QUIET_TICKS, s, report));
+	s.accepted = static_cast<uint16_t>(s.accepted + 1U);
+	now += DIAG_TEST_SAMPLE_QUIET_TICKS;
+	assert(!watcher.observe(now, s, report));
+	now += DIAG_TEST_SAMPLE_QUIET_TICKS;
+	assert(watcher.observe(now, s, report));
+	assert(report.accepted == 1U);
+	assert(report.uartRx == 0U);
 }
 
-static void testRepeatedLineGaps(){
+static void testRepeatedLineGaps() {
 	PpUartQuietDiagnostic watcher;
 	PpUartDiagSnapshot sample;
 	PpUartDiagReport report;
-	uint32_t now=DIAG_TEST_START_TICKS;
-	assert(!watcher.observe(now,sample,report));
-	for(uint16_t line=0;line<DIAG_TEST_REPEATED_LINES;++line){
-		sample.uartRx=static_cast<uint16_t>(
-			sample.uartRx+DIAG_TEST_BYTES_PER_LINE);
-		now+=DIAG_TEST_LINE_GAP_TICKS;
-		assert(!watcher.observe(now,sample,report));
+	uint32_t now = DIAG_TEST_START_TICKS;
+	assert(!watcher.observe(now, sample, report));
+	for (uint16_t line = 0; line < DIAG_TEST_REPEATED_LINES; ++line) {
+		sample.uartRx = static_cast<uint16_t>(sample.uartRx + DIAG_TEST_BYTES_PER_LINE);
+		now += DIAG_TEST_LINE_GAP_TICKS;
+		assert(!watcher.observe(now, sample, report));
 	}
-	now+=DIAG_TEST_SAMPLE_QUIET_TICKS;
-	assert(watcher.observe(now,sample,report));
-	assert(report.uartRx==
-		DIAG_TEST_REPEATED_LINES*DIAG_TEST_BYTES_PER_LINE);
+	now += DIAG_TEST_SAMPLE_QUIET_TICKS;
+	assert(watcher.observe(now, sample, report));
+	assert(report.uartRx == DIAG_TEST_REPEATED_LINES * DIAG_TEST_BYTES_PER_LINE);
 }
 
-static void testWrapAndHardwareOverflow(){
+static void testWrapAndHardwareOverflow() {
 	PpUartQuietDiagnostic watcher;
 	PpUartDiagSnapshot s;
 	PpUartDiagReport report;
-	uint32_t now=DIAG_TEST_START_TICKS;
-	s.uartRx=DIAG_TEST_WRAP_FIRST;
-	s.rxOverrun=DIAG_TEST_WRAP_FIRST;
-	s.hwArc=DIAG_TEST_WRAP_FIRST;
-	s.ackFifoFull=DIAG_TEST_WRAP_FIRST;
-	assert(!watcher.observe(now,s,report));
-	s.uartRx=DIAG_TEST_WRAP_SECOND;
-	s.rxOverrun=DIAG_TEST_WRAP_SECOND;
-	s.hwArc=DIAG_TEST_WRAP_SECOND;
-	s.ackFifoFull=DIAG_TEST_WRAP_SECOND;
-	now+=DIAG_TEST_INTERVAL_TICKS;
-	assert(!watcher.observe(now,s,report));
-	now+=DIAG_TEST_SAMPLE_QUIET_TICKS;
-	assert(watcher.observe(now,s,report));
-	assert(report.uartRx==DIAG_TEST_WRAP_DELTA);
-	assert(report.rxOverrun==DIAG_TEST_WRAP_DELTA);
-	assert(report.hwArc==DIAG_TEST_WRAP_DELTA);
-	assert(report.ackFifoFull==DIAG_TEST_WRAP_DELTA);
+	uint32_t now = DIAG_TEST_START_TICKS;
+	s.uartRx = DIAG_TEST_WRAP_FIRST;
+	s.rxOverrun = DIAG_TEST_WRAP_FIRST;
+	s.hwArc = DIAG_TEST_WRAP_FIRST;
+	s.ackFifoFull = DIAG_TEST_WRAP_FIRST;
+	assert(!watcher.observe(now, s, report));
+	s.uartRx = DIAG_TEST_WRAP_SECOND;
+	s.rxOverrun = DIAG_TEST_WRAP_SECOND;
+	s.hwArc = DIAG_TEST_WRAP_SECOND;
+	s.ackFifoFull = DIAG_TEST_WRAP_SECOND;
+	now += DIAG_TEST_INTERVAL_TICKS;
+	assert(!watcher.observe(now, s, report));
+	now += DIAG_TEST_SAMPLE_QUIET_TICKS;
+	assert(watcher.observe(now, s, report));
+	assert(report.uartRx == DIAG_TEST_WRAP_DELTA);
+	assert(report.rxOverrun == DIAG_TEST_WRAP_DELTA);
+	assert(report.hwArc == DIAG_TEST_WRAP_DELTA);
+	assert(report.ackFifoFull == DIAG_TEST_WRAP_DELTA);
 }
 
-static void testLineLength(){
+static void testLineLength() {
 	// The standard line builder exposes exact size for excluding its
 	// diagnostic UART characters from the physical TX byte counter.
 	PpStressLine line;
@@ -126,132 +125,137 @@ static void testLineLength(){
 	line.decimal(DIAG_TEST_SAMPLE_ACK_BYTES);
 	line.word(" cyc=");
 	line.decimal(DIAG_TEST_SAMPLE_RX_BYTES);
-	assert(line.length()!=0);
-	assert(line.length()<=PP_UART_DIAG_LINE_FREE_BYTES);
+	assert(line.length() != 0);
+	assert(line.length() <= PP_UART_DIAG_LINE_FREE_BYTES);
 	// Worst-case 16-bit decimal values from the actual A/B PP report.
 	PpStressLine status;
-	status.word("A pp ack=");status.decimal(UINT16_MAX);
-	status.word(" rx=");status.decimal(UINT16_MAX);
-	status.word(" ret=");status.decimal(UINT16_MAX);
-	status.word(" blk=");status.decimal(UINT16_MAX);
-	status.word(" bad=");status.decimal(UINT16_MAX);
-	status.word(" win=");status.decimal(UINT8_MAX);
-	status.word(" cr=");status.decimal(UINT8_MAX);
-	status.word(" hw=");status.decimal(UINT16_MAX);
-	status.word(" mx=");status.decimal(UINT16_MAX);
-	status.word(" sid=");status.decimal(UINT16_MAX);
+	status.word("A pp ack=");
+	status.decimal(UINT16_MAX);
+	status.word(" rx=");
+	status.decimal(UINT16_MAX);
+	status.word(" ret=");
+	status.decimal(UINT16_MAX);
+	status.word(" blk=");
+	status.decimal(UINT16_MAX);
+	status.word(" bad=");
+	status.decimal(UINT16_MAX);
+	status.word(" win=");
+	status.decimal(UINT8_MAX);
+	status.word(" cr=");
+	status.decimal(UINT8_MAX);
+	status.word(" hw=");
+	status.decimal(UINT16_MAX);
+	status.word(" mx=");
+	status.decimal(UINT16_MAX);
+	status.word(" sid=");
+	status.decimal(UINT16_MAX);
 	status.word("\r\n");
-	assert(status.length()<=PP_UART_DIAG_LINE_FREE_BYTES);
+	assert(status.length() <= PP_UART_DIAG_LINE_FREE_BYTES);
 }
 
 #define DIAG_TRACE_BACKLOG_BYTES 80U
 #define DIAG_TRACE_WINDOW 4U
-#define DIAG_TRACE_CLOCK_WRAP_START (UINT32_MAX-DIAG_TEST_INTERVAL_TICKS)
+#define DIAG_TRACE_CLOCK_WRAP_START (UINT32_MAX - DIAG_TEST_INTERVAL_TICKS)
 #define DIAG_TRACE_DELAY_INTERVALS 3U
-#define DIAG_TRACE_ALL_EVENTS_MASK ((1U<<PP_UART_DIAG_EVENT_COUNT)-1U)
+#define DIAG_TRACE_ALL_EVENTS_MASK ((1U << PP_UART_DIAG_EVENT_COUNT) - 1U)
 
-static void testFirstEventsAndAckPause(){
+static void testFirstEventsAndAckPause() {
 	PpUartQuietDiagnostic watcher;
 	PpUartDiagSnapshot s;
 	PpUartDiagReport report;
-	uint32_t now=DIAG_TRACE_CLOCK_WRAP_START;
-	s.freeInput=PP_UART_DIAG_EMPTY_INPUT_FREE;
-	s.maxRt=DIAG_TEST_WRAP_FIRST;
-	assert(!watcher.observe(now,s,report));
-	now+=DIAG_TEST_INTERVAL_TICKS;
-	s.uartRx=DIAG_TRACE_BACKLOG_BYTES;
-	s.freeInput=PP_UART_DIAG_EMPTY_INPUT_FREE-DIAG_TRACE_BACKLOG_BYTES;
-	s.outstanding=DIAG_TRACE_WINDOW;
-	assert(!watcher.observe(now,s,report));
-	now+=DIAG_TEST_INTERVAL_TICKS;
-	s.maxRt=DIAG_TEST_WRAP_SECOND;
-	assert(!watcher.observe(now,s,report));
-	now+=DIAG_TEST_INTERVAL_TICKS;
-	s.retries=DIAG_TEST_SAMPLE_RETRIES;
-	s.bad=DIAG_TEST_SAMPLE_BLOCKED;
-	assert(!watcher.observe(now,s,report));
-	now+=DIAG_TEST_INTERVAL_TICKS;
-	s.rxFull=DIAG_TEST_SAMPLE_OVERFLOW_BYTES;
-	s.freeInput=0;
-	assert(!watcher.observe(now,s,report));
+	uint32_t now = DIAG_TRACE_CLOCK_WRAP_START;
+	s.freeInput = PP_UART_DIAG_EMPTY_INPUT_FREE;
+	s.maxRt = DIAG_TEST_WRAP_FIRST;
+	assert(!watcher.observe(now, s, report));
+	now += DIAG_TEST_INTERVAL_TICKS;
+	s.uartRx = DIAG_TRACE_BACKLOG_BYTES;
+	s.freeInput = PP_UART_DIAG_EMPTY_INPUT_FREE - DIAG_TRACE_BACKLOG_BYTES;
+	s.outstanding = DIAG_TRACE_WINDOW;
+	assert(!watcher.observe(now, s, report));
+	now += DIAG_TEST_INTERVAL_TICKS;
+	s.maxRt = DIAG_TEST_WRAP_SECOND;
+	assert(!watcher.observe(now, s, report));
+	now += DIAG_TEST_INTERVAL_TICKS;
+	s.retries = DIAG_TEST_SAMPLE_RETRIES;
+	s.bad = DIAG_TEST_SAMPLE_BLOCKED;
+	assert(!watcher.observe(now, s, report));
+	now += DIAG_TEST_INTERVAL_TICKS;
+	s.rxFull = DIAG_TEST_SAMPLE_OVERFLOW_BYTES;
+	s.freeInput = 0;
+	assert(!watcher.observe(now, s, report));
 	// The same MAX_RT category must not overwrite the first occurrence.
 	++s.maxRt;
 	// ACK progress ENDS the measured stall; it must not erase it.
-	s.acknowledged=s.uartRx;
-	s.freeInput=PP_UART_DIAG_EMPTY_INPUT_FREE;
-	s.outstanding=0;
-	assert(!watcher.observe(now,s,report));
-	now+=DIAG_TEST_SAMPLE_QUIET_TICKS;
-	assert(watcher.observe(now,s,report));
-	const PpUartDiagTrace& t=report.trace;
-	assert(t.seen==DIAG_TRACE_ALL_EVENTS_MASK);
-	assert(t.minFree==0);
-	assert(t.maxAckPauseMs==DIAG_TRACE_DELAY_INTERVALS*
-		DIAG_TEST_INTERVAL_TICKS/PP_UART_DIAG_TICKS_PER_MS);
-	const PpUartDiagEvent& mx=t.events[
-		static_cast<uint8_t>(PpUartDiagEventKind::MAX_RT)];
-	const PpUartDiagEvent& replay=t.events[
-		static_cast<uint8_t>(PpUartDiagEventKind::REPLAY)];
-	const PpUartDiagEvent& gap=t.events[
-		static_cast<uint8_t>(PpUartDiagEventKind::GAP)];
-	const PpUartDiagEvent& full=t.events[
-		static_cast<uint8_t>(PpUartDiagEventKind::RX_FULL)];
-	assert(mx.atMs<replay.atMs && replay.atMs==gap.atMs);
-	assert(gap.atMs<full.atMs);
-	assert(mx.maxRt==DIAG_TEST_WRAP_DELTA);
-	assert(mx.retries==0 && mx.rxFull==0);
-	assert(full.rxFull==DIAG_TEST_SAMPLE_OVERFLOW_BYTES);
-	assert(full.outstanding==DIAG_TRACE_WINDOW && full.freeInput==0);
+	s.acknowledged = s.uartRx;
+	s.freeInput = PP_UART_DIAG_EMPTY_INPUT_FREE;
+	s.outstanding = 0;
+	assert(!watcher.observe(now, s, report));
+	now += DIAG_TEST_SAMPLE_QUIET_TICKS;
+	assert(watcher.observe(now, s, report));
+	const PpUartDiagTrace& t = report.trace;
+	assert(t.seen == DIAG_TRACE_ALL_EVENTS_MASK);
+	assert(t.minFree == 0);
+	assert(t.maxAckPauseMs ==
+		   DIAG_TRACE_DELAY_INTERVALS * DIAG_TEST_INTERVAL_TICKS / PP_UART_DIAG_TICKS_PER_MS);
+	const PpUartDiagEvent& mx = t.events[static_cast<uint8_t>(PpUartDiagEventKind::MAX_RT)];
+	const PpUartDiagEvent& replay = t.events[static_cast<uint8_t>(PpUartDiagEventKind::REPLAY)];
+	const PpUartDiagEvent& gap = t.events[static_cast<uint8_t>(PpUartDiagEventKind::GAP)];
+	const PpUartDiagEvent& full = t.events[static_cast<uint8_t>(PpUartDiagEventKind::RX_FULL)];
+	assert(mx.atMs < replay.atMs && replay.atMs == gap.atMs);
+	assert(gap.atMs < full.atMs);
+	assert(mx.maxRt == DIAG_TEST_WRAP_DELTA);
+	assert(mx.retries == 0 && mx.rxFull == 0);
+	assert(full.rxFull == DIAG_TEST_SAMPLE_OVERFLOW_BYTES);
+	assert(full.outstanding == DIAG_TRACE_WINDOW && full.freeInput == 0);
 	// A subsequent healthy burst must not inherit old anomalies.
 	++s.uartRx;
 	++s.acknowledged;
-	now+=DIAG_TEST_INTERVAL_TICKS;
-	assert(!watcher.observe(now,s,report));
-	now+=DIAG_TEST_SAMPLE_QUIET_TICKS;
-	assert(watcher.observe(now,s,report));
-	assert(report.trace.seen==0 && report.trace.maxAckPauseMs==0);
+	now += DIAG_TEST_INTERVAL_TICKS;
+	assert(!watcher.observe(now, s, report));
+	now += DIAG_TEST_SAMPLE_QUIET_TICKS;
+	assert(watcher.observe(now, s, report));
+	assert(report.trace.seen == 0 && report.trace.maxAckPauseMs == 0);
 }
 
-static void testTraceSaturationAndFormatting(){
+static void testTraceSaturationAndFormatting() {
 	PpUartQuietDiagnostic watcher;
 	PpUartDiagSnapshot s;
 	PpUartDiagReport report;
-	uint32_t now=DIAG_TEST_START_TICKS;
-	s.freeInput=PP_UART_DIAG_EMPTY_INPUT_FREE;
-	assert(!watcher.observe(now,s,report));
+	uint32_t now = DIAG_TEST_START_TICKS;
+	s.freeInput = PP_UART_DIAG_EMPTY_INPUT_FREE;
+	assert(!watcher.observe(now, s, report));
 	++s.uartRx;
-	s.freeInput=0;
-	now+=DIAG_TEST_INTERVAL_TICKS;
-	assert(!watcher.observe(now,s,report));
+	s.freeInput = 0;
+	now += DIAG_TEST_INTERVAL_TICKS;
+	assert(!watcher.observe(now, s, report));
 	// Long unresolved backlog: times saturate rather than wrapping.
-	now+=(static_cast<uint32_t>(UINT16_MAX)+1U)*PP_UART_DIAG_TICKS_PER_MS;
+	now += (static_cast<uint32_t>(UINT16_MAX) + 1U) * PP_UART_DIAG_TICKS_PER_MS;
 	++s.maxRt;
-	assert(watcher.observe(now,s,report));
-	assert(report.trace.maxAckPauseMs==UINT16_MAX);
-	assert(report.trace.events[static_cast<uint8_t>(
-		PpUartDiagEventKind::MAX_RT)].atMs==UINT16_MAX);
+	assert(watcher.observe(now, s, report));
+	assert(report.trace.maxAckPauseMs == UINT16_MAX);
+	assert(
+		report.trace.events[static_cast<uint8_t>(PpUartDiagEventKind::MAX_RT)].atMs == UINT16_MAX);
 	PpUartDiagTrace trace;
-	trace.seen=DIAG_TRACE_ALL_EVENTS_MASK;
-	trace.minFree=UINT8_MAX;
-	trace.maxAckPauseMs=UINT16_MAX;
-	for(uint8_t i=0;i<PP_UART_DIAG_EVENT_COUNT;++i){
-		PpUartDiagEvent& e=trace.events[i];
-		e.atMs=e.maxRt=e.retries=e.bad=e.rxFull=UINT16_MAX;
-		e.outstanding=e.credit=e.freeInput=UINT8_MAX;
+	trace.seen = DIAG_TRACE_ALL_EVENTS_MASK;
+	trace.minFree = UINT8_MAX;
+	trace.maxAckPauseMs = UINT16_MAX;
+	for (uint8_t i = 0; i < PP_UART_DIAG_EVENT_COUNT; ++i) {
+		PpUartDiagEvent& e = trace.events[i];
+		e.atMs = e.maxRt = e.retries = e.bad = e.rxFull = UINT16_MAX;
+		e.outstanding = e.credit = e.freeInput = UINT8_MAX;
 	}
-	for(uint8_t i=0;i<=PP_UART_DIAG_EVENT_COUNT;++i){
+	for (uint8_t i = 0; i <= PP_UART_DIAG_EVENT_COUNT; ++i) {
 		PpStressLine line;
-		assert(formatPpUartDiagTrace(line,true,trace,i));
-		assert(line.length()<=PP_UART_DIAG_LINE_FREE_BYTES);
+		assert(formatPpUartDiagTrace(line, true, trace, i));
+		assert(line.length() <= PP_UART_DIAG_LINE_FREE_BYTES);
 	}
-	trace.seen=0;
+	trace.seen = 0;
 	PpStressLine absent;
-	assert(!formatPpUartDiagTrace(absent,false,trace,
-		PP_UART_DIAG_EVENT_COUNT));
-	assert(absent.length()==0);
+	assert(!formatPpUartDiagTrace(absent, false, trace, PP_UART_DIAG_EVENT_COUNT));
+	assert(absent.length() == 0);
 }
 
-int main(){
+int main() {
 	testQuietGapAndProgress();
 	testRepeatedLineGaps();
 	testWrapAndHardwareOverflow();

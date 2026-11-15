@@ -1,3 +1,16 @@
+# 2026-11-15 — aktywna przebudowa test_c_like
+
+Na wyraźne polecenie właściciela utworzono `test_c_like` z `main` @ `e0580e2`.
+Obowiązuje zakaz szablonów w całym firmware, implementacja w `.cpp`,
+globalne ISR z globalnym stanem sprzętu, bez wywołań funkcji z ISR.
+Nie przenosić tego kodu na `main` bez osobnej decyzji właściciela.
+Opis architektury, zakres zmian, wyniki i procedura: [c-like-refactor.md](c-like-refactor.md).
+36 testów hostowych PASS (także UBSan), porównywarka PASS, pięć buildów AVR PASS.
+Domyślny SRAM 822 B; ISR RX/TX/Timer1: 8/5/3 PUSH zamiast 15/15/15.
+Brak testu nowych wsadów na fizycznych RF-Nano. PP 8+24, WINDOW4 i brak
+tekstu diagnostycznego w domyślnym UART zachowane. `main` i `testy` bez zmian.
+Starsze punkty poniżej opisują historię i nie zmieniają bieżącej gałęzi pracy.
+
 ## 2026-11-06 — przezroczysty UART domyślnie na main
 
 Na polecenie właściciela domyślne `PP_UART_DIAG_ENABLED=0`.

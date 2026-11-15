@@ -2,15 +2,15 @@
 #define GPIO_H__
 
 #include <stdint.h>
+#include "foreground_ports.h"
 
 // The caller supplies a real hardware port. Invalid register addresses are
 // configuration errors, not conditions to test on every pin transition.
 class GPIO {
-public:
+  public:
 	GPIO() = delete;
 	GPIO(volatile uint8_t* port, uint8_t pin);
-	GPIO(volatile uint8_t* port, volatile uint8_t* ddr,
-		volatile uint8_t* input, uint8_t pin);
+	GPIO(volatile uint8_t* port, volatile uint8_t* ddr, volatile uint8_t* input, uint8_t pin);
 
 	// Configure output once, loading the requested level BEFORE enabling DDR.
 	void outputHigh();
@@ -29,7 +29,7 @@ public:
 	// Sample the input register without changing the pin configuration.
 	uint8_t read() const;
 
-private:
+  private:
 	volatile uint8_t *port_, *ddr_, *input_;
 	uint8_t mask_;
 };

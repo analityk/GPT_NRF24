@@ -5,7 +5,7 @@
 // An EEPROM-backed persistent session discriminator, once per power-up.
 // Another epoch is written only if the 16-bit session-attempt count expires.
 class BootEpoch {
-public:
-    static bool advance(uint32_t& out);
+  public:
+	static bool advance(uint32_t& out);
 };
 #endif

@@ -1,7 +1,7 @@
 name: Paired ACK Payload core — C++11 and ATmega328P
 on:
   push:
-    branches: [main, testy, 'experiment/**']
+    branches: [main, testy, test_c_like, 'experiment/**']
   pull_request:
   workflow_dispatch:
 jobs:
@@ -23,3 +23,11 @@ jobs:
           sudo apt-get install -y -qq gcc-avr avr-libc binutils-avr
       - name: Cross-compile the active paired firmware
         run: sh tests/build_avr.sh
+        env:
+          AVR_OUTPUT_DIR: ${{ runner.temp }}/gpt-avr
+      - name: Save linked firmware and disassembly
+        uses: actions/upload-artifact@v4
+        with:
+          name: avr-firmware
+          path: ${{ runner.temp }}/gpt-avr
+          if-no-files-found: error

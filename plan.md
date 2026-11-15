@@ -1,3 +1,8 @@
+> Aktualizacja 2026-11-15: implementacja na `test_c_like` jest bez szablonów,
+> z globalnymi ISR i podziałem deklaracji/implementacji. Cel transportu
+> pozostaje ten sam. Aktualny opis: [c-like-refactor.md](c-like-refactor.md).
+> Starsze nazwy z parametrami szablonów poniżej są historyczne.
+
 # Plan prac — rdzeń 8+24 B z ACK Payload i dwukierunkowy UART
 
 ## Granice warstw

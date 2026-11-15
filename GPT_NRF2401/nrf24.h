@@ -1,282 +1,97 @@
 #ifndef GPT_NRF24_RADIO_H
 #define GPT_NRF24_RADIO_H
+#include "hardware_bindings.h"
 
 #include <stdint.h>
+#include "foreground_ports.h"
 
 #define NRF24_RF_SETUP_1_MBPS 0x06U
 #define NRF24_RF_SETUP_2_MBPS 0x0EU
 #define NRF24_SPI_READ_FILL_BYTE 0xFFU
 
-// A testable nRF24L01+ SPI command/registry/FIFO layer.
-// Spi must implement begin() and bool transfer(uint8_t, uint8_t&).
-// Optional transferBlock(command,tx,rx,count,status) executes the entire
-// command/data sequence without per-byte calls. Legacy SPI adapters use
-// the byte API without a runtime or AVR-specific dependency.
-// Pin must implement set() (HIGH) and clear() (LOW).
-// No heap, no virtual dispatch, no clock waits and no MCU dependencies.
-// CE timing and TX/RX state transitions belong to the future MAC/controller.
-template <typename Spi, typename Pin>
+// Register and FIFO driver. Hardware bindings select concrete SPI/GPIO
+// on AVR and explicit fake interfaces in host tests. No template dispatch.
+// Timing and radio role transitions belong to NrfAckPayloadPhy.
 class Nrf24 {
-public:
-    enum Register : uint8_t {
-        CONFIG=0x00, EN_AA=0x01, EN_RXADDR=0x02, SETUP_AW=0x03,
-        SETUP_RETR=0x04, RF_CH=0x05, RF_SETUP=0x06, STATUS=0x07,
-        OBSERVE_TX=0x08, RX_ADDR_P0=0x0A, TX_ADDR=0x10,
-        RX_PW_P0=0x11, FIFO_STATUS=0x17, DYNPD=0x1C, FEATURE=0x1D
-    };
-    enum class Result : uint8_t { OK=0, SPI_ERROR=1, NO_RADIO=2, VERIFY_ERROR=3 };
-    struct Probe {
-        Result result;
-        uint8_t reg;        // register at which failure occurred, if applicable
-        uint8_t expected;
-        uint8_t observed;
-        uint8_t status;
-        uint8_t channel;
-        uint8_t config;
-        uint8_t rfSetup;
-        uint8_t fifoStatus;
-        Probe() : result(Result::SPI_ERROR), reg(0), expected(0), observed(0),
-                  status(0), channel(0), config(0), rfSetup(0), fifoStatus(0) {}
-    };
+  public:
+	enum Register : uint8_t {
+		CONFIG = 0x00,
+		EN_AA = 0x01,
+		EN_RXADDR = 0x02,
+		SETUP_AW = 0x03,
+		SETUP_RETR = 0x04,
+		RF_CH = 0x05,
+		RF_SETUP = 0x06,
+		STATUS = 0x07,
+		OBSERVE_TX = 0x08,
+		RX_ADDR_P0 = 0x0A,
+		TX_ADDR = 0x10,
+		RX_PW_P0 = 0x11,
+		FIFO_STATUS = 0x17,
+		DYNPD = 0x1C,
+		FEATURE = 0x1D
+	};
+	enum class Result : uint8_t { OK = 0, SPI_ERROR = 1, NO_RADIO = 2, VERIFY_ERROR = 3 };
 
-    Nrf24(Spi& spi, Pin& ce, Pin& csn) : spi_(spi), ce_(ce), csn_(csn) {}
+	struct Probe {
+		Result result;
+		uint8_t reg; // register at which failure occurred, if applicable
+		uint8_t expected;
+		uint8_t observed;
+		uint8_t status;
+		uint8_t channel;
+		uint8_t config;
+		uint8_t rfSetup;
+		uint8_t fifoStatus;
+		Probe();
+	};
 
-    void begin(){
-		// Prepare GPIO output direction once. Older Pin adapters still use
-		// set()/clear(), without an extra requirement on portable mocks.
-		prepareLow(ce_, 0);  // standby/power-down before SPI setup
-		prepareHigh(csn_, 0); // deselect chip
-		spi_.begin();
-	}
+	Nrf24(SpiHandle spi, PinHandle ce, PinHandle csn);
 
-    // Hardware CE belongs to this radio instance; PHY owns its transitions.
-    void ceHigh() { ce_.set(); }
-    void ceLow() { ce_.clear(); }
+	void begin();
 
-    bool status(uint8_t& value) { return transaction(0xFF, 0, 0, 0, &value); }
-    bool readRegister(uint8_t reg, uint8_t& value) {
-        if (reg > 0x1F) return false;
-        return transaction(reg, 0, &value, 1, 0);
-    }
-    bool writeRegister(uint8_t reg, uint8_t value) {
-        if (reg > 0x1D || (reg >= 0x18 && reg <= 0x1B)) return false;
-        return transaction(static_cast<uint8_t>(0x20U | reg), &value, 0, 1, 0);
-    }
-    bool readRegisters(uint8_t reg, uint8_t* dst, uint8_t count) {
-        if (reg > 0x1F || !dst || count == 0 || count > 5) return false;
-        return transaction(reg, 0, dst, count, 0);
-    }
-    bool writeRegisters(uint8_t reg, const uint8_t* src, uint8_t count) {
-        if (reg > 0x1D || (reg >= 0x18 && reg <= 0x1B) || !src || count == 0 || count > 5) return false;
-        return transaction(static_cast<uint8_t>(0x20U | reg), src, 0, count, 0);
-    }
-    bool flushRx() { return transaction(0xE2, 0, 0, 0, 0); }
-    bool flushTx() { return transaction(0xE1, 0, 0, 0, 0); }
-    bool clearIrq(uint8_t flags) {
-        return writeRegister(STATUS, static_cast<uint8_t>(flags & 0x70U));
-    }
-    // Enhanced ShockBurst ACK payload + dynamic payload support.
-    // Some devices lock FEATURE until ACTIVATE 0x73; probe before toggling,
-    // never blindly toggle a device where FEATURE already works.
-    bool enableAckPayload(uint8_t retries=0x23) {
-        uint8_t feature=0;
-        if (!writeRegister(FEATURE,0x06) ||
-            !readRegister(FEATURE,feature)) return false;
-        if (feature!=0x06) {
-            const uint8_t activate=0x73;
-            if (!transaction(0x50,&activate,0,1,0) ||
-                !writeRegister(FEATURE,0x06) ||
-                !readRegister(FEATURE,feature) || feature!=0x06)
-                return false;
-        }
-        uint8_t dynamic=0;
-        uint8_t retryRead=0;
-        if (!writeRegister(DYNPD,0x01) ||
-            !readRegister(DYNPD,dynamic) || dynamic!=0x01 ||
-            !writeRegister(SETUP_RETR,retries) ||
-            !readRegister(SETUP_RETR,retryRead) || retryRead!=retries)
-            return false;
-        return clearIrq(0x70) && flushRx() && flushTx();
-    }
+	// Hardware CE belongs to this radio instance; PHY owns its transitions.
+	void ceHigh();
+	void ceLow();
 
-    bool readPayloadWidth(uint8_t& width) {
-        return transaction(0x60,0,&width,1,0);
-    }
+	bool status(uint8_t& value);
+	bool readRegister(uint8_t reg, uint8_t& value);
+	bool writeRegister(uint8_t reg, uint8_t value);
+	bool readRegisters(uint8_t reg, uint8_t* dst, uint8_t count);
+	bool writeRegisters(uint8_t reg, const uint8_t* src, uint8_t count);
+	bool flushRx();
+	bool flushTx();
+	bool clearIrq(uint8_t flags);
+	// Enhanced ShockBurst ACK payload + dynamic payload support.
+	// Some devices lock FEATURE until ACTIVATE 0x73; probe before toggling,
+	// never blindly toggle a device where FEATURE already works.
+	bool enableAckPayload(uint8_t retries = 0x23);
 
-    // Dynamic payload width must be read from the chip's RX FIFO. A corrupt
-    // value is recovered by flushing RX, as required by the data sheet.
-    bool readDynamicPayload(uint8_t* dst,uint8_t& width) {
-        if (!dst || !readPayloadWidth(width)) return false;
-        if (width==0 || width>32) {
-            (void)flushRx();
-            return false;
-        }
-        return transaction(0x61,0,dst,width,0);
-    }
+	bool readPayloadWidth(uint8_t& width);
 
-    // W_TX_PAYLOAD with a variable 1..32B payload. DPL must already be
-    // enabled on the selected pipe. No fixed-width padding is transmitted.
-    bool writeDynamicPayload(const uint8_t* bytes,uint8_t count) {
-        return bytes && count>=1 && count<=32 &&
-               transaction(0xA0,bytes,0,count,0);
-    }
+	// Dynamic payload width must be read from the chip's RX FIFO. A corrupt
+	// value is recovered by flushing RX, as required by the data sheet.
+	bool readDynamicPayload(uint8_t* dst, uint8_t& width);
 
-    bool writeAckPayload(uint8_t pipe,const uint8_t* bytes,uint8_t count) {
-        if (pipe>5 || !bytes || count==0 || count>32) return false;
-        return transaction(static_cast<uint8_t>(0xA8U|pipe),
-                           bytes,0,count,0);
-    }
+	// W_TX_PAYLOAD with a variable 1..32B payload. DPL must already be
+	// enabled on the selected pipe. No fixed-width padding is transmitted.
+	bool writeDynamicPayload(const uint8_t* bytes, uint8_t count);
 
-    // Safe bring-up: register read/write/restore test, then deterministic
-    // RF settings, leaving PWR_UP=0 and CE LOW. No RF transmission occurs.
-    Probe probeAndConfigure(uint8_t rfSetup=NRF24_RF_SETUP_1_MBPS) {
-        Probe p;
-        begin();
-        if (!status(p.status)) return failure(p, Result::SPI_ERROR, STATUS);
-        if (!readRegister(RF_CH, p.channel)) return failure(p, Result::SPI_ERROR, RF_CH);
-        if (p.status == 0xFFU || p.channel > 125U)
-            return failure(p, Result::NO_RADIO, RF_CH);
+	bool writeAckPayload(uint8_t pipe, const uint8_t* bytes, uint8_t count);
 
-        const uint8_t oldChannel = p.channel;
-        const uint8_t patterns[] = { 0x2A, 0x55 };
-        for (uint8_t i=0; i<2; ++i) {
-            if (!writeRegister(RF_CH, patterns[i])) {
-                (void)writeRegister(RF_CH, oldChannel);
-                return failure(p, Result::SPI_ERROR, RF_CH);
-            }
-            uint8_t received=0;
-            if (!readRegister(RF_CH, received)) {
-                (void)writeRegister(RF_CH, oldChannel);
-                return failure(p, Result::SPI_ERROR, RF_CH);
-            }
-            if (received != patterns[i]) {
-                (void)writeRegister(RF_CH, oldChannel);
-                p.expected = patterns[i];
-                p.observed = received;
-                return failure(p, Result::VERIFY_ERROR, RF_CH);
-            }
-        }
-        if (!writeRegister(RF_CH, oldChannel))
-            return failure(p, Result::SPI_ERROR, RF_CH);
+	// Safe bring-up: register read/write/restore test, then deterministic
+	// RF settings, leaving PWR_UP=0 and CE LOW. No RF transmission occurs.
+	Probe probeAndConfigure(uint8_t rfSetup = NRF24_RF_SETUP_1_MBPS);
 
-        // CRC16, radio powered down, initial width 32 B, 5 B addressing,
-        // selectable 1/2 Mbps via explicit RF_SETUP value,
-        // auto ACK on pipe0 only; chosen channel 76 (2476 MHz).
-        const uint8_t pairs[][2] = {
-            { CONFIG, 0x0C }, { EN_AA, 0x01 }, { EN_RXADDR, 0x01 },
-            { SETUP_AW, 0x03 }, { SETUP_RETR, 0x3F }, { RF_CH, 76 },
-            { RF_SETUP, rfSetup }, { RX_PW_P0, 32 }, { DYNPD, 0 },
-            { FEATURE, 0 }
-        };
-        const uint8_t pairCount = static_cast<uint8_t>(sizeof(pairs) / sizeof(pairs[0]));
-        for (uint8_t i=0; i<pairCount; ++i) {
-            const uint8_t reg = pairs[i][0];
-            const uint8_t expected = pairs[i][1];
-            if (!writeRegister(reg, expected))
-                return failure(p, Result::SPI_ERROR, reg);
-            uint8_t observed=0;
-            if (!readRegister(reg, observed))
-                return failure(p, Result::SPI_ERROR, reg);
-            if (observed != expected) {
-                p.expected = expected;
-                p.observed = observed;
-                return failure(p, Result::VERIFY_ERROR, reg);
-            }
-        }
+  private:
+	SpiHandle spi_;
+	PinHandle ce_;
+	PinHandle csn_;
 
-        // Shared test radio address; session-specific routing is future work.
-        const uint8_t address[5] = { 0xD2, 0xF0, 0xF0, 0xF0, 0xA1 };
-        const uint8_t addrRegs[2] = { RX_ADDR_P0, TX_ADDR };
-        for (uint8_t a=0; a<2; ++a) {
-            const uint8_t reg = addrRegs[a];
-            if (!writeRegisters(reg, address, 5))
-                return failure(p, Result::SPI_ERROR, reg);
-            uint8_t readBack[5] = {};
-            if (!readRegisters(reg, readBack, 5))
-                return failure(p, Result::SPI_ERROR, reg);
-            for (uint8_t i=0; i<5; ++i) {
-                if (readBack[i] != address[i]) {
-                    p.reg=reg; p.expected=address[i]; p.observed=readBack[i];
-                    return failure(p, Result::VERIFY_ERROR, reg);
-                }
-            }
-        }
+	static Probe failure(Probe& p, Result result, uint8_t reg);
 
-        if (!clearIrq(0x70) || !flushRx() || !flushTx())
-            return failure(p, Result::SPI_ERROR, STATUS);
-        if (!status(p.status) || !readRegister(CONFIG,p.config) ||
-            !readRegister(RF_CH,p.channel) || !readRegister(RF_SETUP,p.rfSetup) ||
-            !readRegister(FIFO_STATUS,p.fifoStatus))
-            return failure(p, Result::SPI_ERROR, STATUS);
-        p.result = Result::OK;
-        return p;
-    }
-
-private:
-    Spi& spi_;
-    Pin& ce_;
-    Pin& csn_;
-
-	template<class P>
-	static auto prepareLow(P& pin, int)
-		-> decltype(pin.outputLow(), void()){
-		pin.outputLow();
-	}
-
-	template<class P>
-	static void prepareLow(P& pin, long){
-		pin.clear();
-	}
-
-	template<class P>
-	static auto prepareHigh(P& pin, int)
-		-> decltype(pin.outputHigh(), void()){
-		pin.outputHigh();
-	}
-
-	template<class P>
-	static void prepareHigh(P& pin, long){
-		pin.set();
-	}
-
-    static Probe failure(Probe& p, Result result, uint8_t reg) {
-        p.result=result;
-        p.reg=reg;
-        return p;
-    }
-
-    // One CE-independent SPI transaction; releases CSN even on SPI failure.
-    bool transaction(uint8_t command, const uint8_t* tx,
-                     uint8_t* rx, uint8_t count, uint8_t* statusByte) {
-        if(statusByte)*statusByte=0;
-        csn_.clear();
-        const bool ok=exchangeSpi(spi_,command,tx,rx,count,statusByte,0);
-        csn_.set();
-        return ok;
-    }
-
-    template<class Device>
-    static auto exchangeSpi(Device& device,uint8_t command,
-                            const uint8_t* tx,uint8_t* rx,uint8_t count,
-                            uint8_t* statusByte,int)
-        -> decltype(device.transferBlock(command,tx,rx,count,statusByte)) {
-        return device.transferBlock(command,tx,rx,count,statusByte);
-    }
-
-    // C++11 compile-time fallback: preserve SPI mocks and older adapters.
-    template<class Device>
-    static bool exchangeSpi(Device& device,uint8_t command,
-                            const uint8_t* tx,uint8_t* rx,uint8_t count,
-                            uint8_t* statusByte,long) {
-        uint8_t received=0;
-        if(!device.transfer(command,received))return false;
-        if(statusByte)*statusByte=received;
-        for(uint8_t i=0;i<count;++i) {
-            const uint8_t outgoing=tx?tx[i]:NRF24_SPI_READ_FILL_BYTE;
-            if(!device.transfer(outgoing,received))return false;
-            if(rx)rx[i]=received;
-        }
-        return true;
-    }
+	// One CE-independent SPI transaction; releases CSN even on SPI failure.
+	bool transaction(
+		uint8_t command, const uint8_t* tx, uint8_t* rx, uint8_t count, uint8_t* statusByte);
 };
 #endif

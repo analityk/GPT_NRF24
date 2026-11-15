@@ -11,11 +11,10 @@
 #define PP_TEST_TRAFFIC_MODE PP_TRAFFIC_MODE_UART_BRIDGE
 #endif
 
-#if PP_TEST_TRAFFIC_MODE != PP_TRAFFIC_MODE_SYNTHETIC_RADIO && \
+#if PP_TEST_TRAFFIC_MODE != PP_TRAFFIC_MODE_SYNTHETIC_RADIO &&                                     \
 	PP_TEST_TRAFFIC_MODE != PP_TRAFFIC_MODE_UART_BRIDGE
 #error "Unsupported PP_TEST_TRAFFIC_MODE"
 #endif
-
 
 // UART is a transparent data stream by default, including after idle.
 // Explicitly opt in to ASCII reports only for a diagnostic firmware build.

@@ -110,7 +110,8 @@
   <avrgcccpp.compiler.optimization.level>Optimize for size (-Os)</avrgcccpp.compiler.optimization.level>
   <avrgcccpp.compiler.optimization.AllocateBytesNeededForEnum>True</avrgcccpp.compiler.optimization.AllocateBytesNeededForEnum>
   <avrgcccpp.compiler.warnings.AllWarnings>True</avrgcccpp.compiler.warnings.AllWarnings>
-  <avrgcccpp.compiler.miscellaneous.OtherFlags>-std=c++11</avrgcccpp.compiler.miscellaneous.OtherFlags>
+  <avrgcccpp.compiler.miscellaneous.OtherFlags>-std=c++11 -ffunction-sections -fdata-sections -fno-exceptions -fno-rtti</avrgcccpp.compiler.miscellaneous.OtherFlags>
+        <avrgcccpp.linker.optimization.GarbageCollectUnusedSections>True</avrgcccpp.linker.optimization.GarbageCollectUnusedSections>
   <avrgcccpp.compiler.miscellaneous.Verbose>True</avrgcccpp.compiler.miscellaneous.Verbose>
   <avrgcccpp.linker.libraries.Libraries>
     <ListValues>
@@ -170,7 +171,8 @@
         <avrgcccpp.compiler.optimization.AllocateBytesNeededForEnum>True</avrgcccpp.compiler.optimization.AllocateBytesNeededForEnum>
         <avrgcccpp.compiler.optimization.DebugLevel>Default (-g2)</avrgcccpp.compiler.optimization.DebugLevel>
         <avrgcccpp.compiler.warnings.AllWarnings>True</avrgcccpp.compiler.warnings.AllWarnings>
-        <avrgcccpp.compiler.miscellaneous.OtherFlags>-std=c++11</avrgcccpp.compiler.miscellaneous.OtherFlags>
+        <avrgcccpp.compiler.miscellaneous.OtherFlags>-std=c++11 -ffunction-sections -fdata-sections -fno-exceptions -fno-rtti</avrgcccpp.compiler.miscellaneous.OtherFlags>
+        <avrgcccpp.linker.optimization.GarbageCollectUnusedSections>True</avrgcccpp.linker.optimization.GarbageCollectUnusedSections>
         <avrgcccpp.linker.libraries.Libraries>
           <ListValues>
             <Value>libm</Value>
@@ -186,6 +188,130 @@
     </ToolchainSettings>
   </PropertyGroup>
   <ItemGroup>
+    <Compile Include="avr_delay.cpp">
+      <SubType>compile</SubType>
+    </Compile>
+    <Compile Include="burst20_report.cpp">
+      <SubType>compile</SubType>
+    </Compile>
+    <Compile Include="burst20_schedule.cpp">
+      <SubType>compile</SubType>
+    </Compile>
+    <Compile Include="byte_ring.cpp">
+      <SubType>compile</SubType>
+    </Compile>
+    <Compile Include="epoch_journal.cpp">
+      <SubType>compile</SubType>
+    </Compile>
+    <Compile Include="foreground_ports.cpp">
+      <SubType>compile</SubType>
+    </Compile>
+    <None Include="foreground_ports.h">
+      <SubType>compile</SubType>
+    </None>
+    <None Include="hardware_bindings.h">
+      <SubType>compile</SubType>
+    </None>
+    <Compile Include="host_flow_status.cpp">
+      <SubType>compile</SubType>
+    </Compile>
+    <None Include="host_flow_status.h">
+      <SubType>compile</SubType>
+    </None>
+    <Compile Include="nrf24.cpp">
+      <SubType>compile</SubType>
+    </Compile>
+    <Compile Include="nrf24_ack_phy.cpp">
+      <SubType>compile</SubType>
+    </Compile>
+    <Compile Include="paired_frame.cpp">
+      <SubType>compile</SubType>
+    </Compile>
+    <Compile Include="paired_link.cpp">
+      <SubType>compile</SubType>
+    </Compile>
+    <Compile Include="paired_session.cpp">
+      <SubType>compile</SubType>
+    </Compile>
+    <Compile Include="pp_application.cpp">
+      <SubType>compile</SubType>
+    </Compile>
+    <None Include="pp_application.h">
+      <SubType>compile</SubType>
+    </None>
+    <None Include="pp_application_internal.h">
+      <SubType>compile</SubType>
+    </None>
+    <Compile Include="pp_console_diagnostics.cpp">
+      <SubType>compile</SubType>
+    </Compile>
+    <Compile Include="pp_cycle_timing.cpp">
+      <SubType>compile</SubType>
+    </Compile>
+    <None Include="pp_cycle_timing.h">
+      <SubType>compile</SubType>
+    </None>
+    <Compile Include="pp_echo_ramp_port.cpp">
+      <SubType>compile</SubType>
+    </Compile>
+    <Compile Include="pp_recovery_control.cpp">
+      <SubType>compile</SubType>
+    </Compile>
+    <None Include="pp_recovery_control.h">
+      <SubType>compile</SubType>
+    </None>
+    <Compile Include="pp_reply_mailbox.cpp">
+      <SubType>compile</SubType>
+    </Compile>
+    <None Include="pp_reply_mailbox.h">
+      <SubType>compile</SubType>
+    </None>
+    <Compile Include="pp_runner.cpp">
+      <SubType>compile</SubType>
+    </Compile>
+    <Compile Include="pp_short_probe.cpp">
+      <SubType>compile</SubType>
+    </Compile>
+    <None Include="pp_short_probe.h">
+      <SubType>compile</SubType>
+    </None>
+    <Compile Include="pp_stress_telemetry.cpp">
+      <SubType>compile</SubType>
+    </Compile>
+    <None Include="pp_test_traffic_mode.h">
+      <SubType>compile</SubType>
+    </None>
+    <Compile Include="pp_uart_bridge_port.cpp">
+      <SubType>compile</SubType>
+    </Compile>
+    <None Include="pp_uart_bridge_port.h">
+      <SubType>compile</SubType>
+    </None>
+    <Compile Include="pp_uart_quiet_diagnostic.cpp">
+      <SubType>compile</SubType>
+    </Compile>
+    <None Include="pp_uart_quiet_diagnostic.h">
+      <SubType>compile</SubType>
+    </None>
+    <Compile Include="profile_select.cpp">
+      <SubType>compile</SubType>
+    </Compile>
+    <Compile Include="reliable_input_source.cpp">
+      <SubType>compile</SubType>
+    </Compile>
+    <None Include="reliable_input_source.h">
+      <SubType>compile</SubType>
+    </None>
+    <Compile Include="retained_byte_ring.cpp">
+      <SubType>compile</SubType>
+    </Compile>
+    <None Include="retained_byte_ring.h">
+      <SubType>compile</SubType>
+    </None>
+    <Compile Include="uart_reliable_stream.cpp">
+      <SubType>compile</SubType>
+    </Compile>
+
     <Compile Include="boot_epoch.cpp">
       <SubType>compile</SubType>
     </Compile>
