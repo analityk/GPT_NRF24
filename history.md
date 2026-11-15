@@ -895,3 +895,7 @@ Domyślny SRAM 822 B; ISR RX/TX/Timer1: 8/5/3 PUSH zamiast 15/15/15.
 Brak testu nowych wsadów na fizycznych RF-Nano. PP 8+24, WINDOW4 i brak
 tekstu diagnostycznego w domyślnym UART zachowane. `main` i `testy` bez zmian.
 Starsze punkty poniżej opisują historię i nie zmieniają bieżącej gałęzi pracy.
+
+## Potwierdzenie GitHub Actions — 2026-11-15
+
+Kod `4ee267b` przeszedł [CI #43709544800](https://github.com/analityk/GPT_NRF24/actions/runs/43709544800): 36 testów hostowych, porównywarka, pięć wariantów AVR i kontrola ISR PASS. Artefakt `avr-firmware` zawiera ELF/MAP/LSS. Wyniki rozmiarów i PUSH w CI są zgodne z pomiarem lokalnym powyżej; odbiór sprzętowy pozostaje otwarty.

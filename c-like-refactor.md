@@ -107,3 +107,7 @@ krótkie wiadomości, pełne obciążenie, reset osobno A/B. Nadal PP 2 Mb/s,
 WINDOW4, 24 B BODY bez bajtu kontrolnego, UART 115200 8N1. Domyślnie brak
 raportów po bajcie i po ciszy (`PP_UART_DIAG_ENABLED=0`). Bez RTS/CTS
 nieograniczony napływ UART może nadal przepełnić wejście.
+
+## Potwierdzenie GitHub Actions — 2026-11-15
+
+Kod `4ee267b` przeszedł [CI #43709544800](https://github.com/analityk/GPT_NRF24/actions/runs/43709544800): 36 testów hostowych, porównywarka, pięć wariantów AVR i kontrola ISR PASS. Artefakt `avr-firmware` zawiera ELF/MAP/LSS. Wyniki rozmiarów i PUSH w CI są zgodne z pomiarem lokalnym powyżej; odbiór sprzętowy pozostaje otwarty.
